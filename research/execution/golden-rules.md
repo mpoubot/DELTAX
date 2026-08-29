@@ -300,3 +300,48 @@ realized volatility, so it omits the implied-minus-realized variance premium
 that is the premium seller's theoretical edge (would help). It charges no
 commissions or slippage (would hurt). Net effect unresolved — which is why the
 floor was set at 1.15 rather than at the bare breakeven.
+
+## E15 — Model the exit before condemning the strategy
+
+> A strategy's expectancy is a property of entry **and exit** together. Testing
+> entry logic against a hold-to-expiry exit measures a strategy nobody runs.
+
+**Evidence.** The condor was measured as negative expectancy and the natural
+conclusion was that the structure did not work. But that test held every
+position to expiry, while E5 has always required exiting at 50% of credit. With
+the exit modelled - close on day 7 of 14 if neither short strike was touched -
+every configuration flips positive:
+
+| | hold to expiry | exit day 7 @ 50% |
+|---|---|---|
+| SPY δ0.20 | +0.076 | **+0.109** |
+| QQQ δ0.20 | +0.041 | **+0.107** |
+| IWM δ0.20 | +0.030 | **+0.075** |
+| SPY δ0.15 | +0.008 | +0.065 |
+| QQQ δ0.15 | −0.002 | +0.048 |
+| IWM δ0.15 | −0.021 | +0.025 |
+
+Win rate rises from ~56% to ~67-77%. The improvement is consistent across six
+independent configurations, which is what distinguishes it from noise.
+
+**Why it works.** Exiting early halves the exposure window. Most of the tail
+risk in a 14-day condor sits in the second week, when gamma rises and a move
+that was comfortably outside the strikes can reach them. Taking half the credit
+for a quarter of the risk-time is the trade.
+
+**What this did NOT come from.** Four directional ideas were tested and all
+failed: the VWAP regime filter, the EMA/MACD/RelVol signal family, the 20-day
+high breakout, and the breakout filtered for a clear uptrend — the last of
+which was *worse* than the unfiltered version, the classic signature of
+over-filtering. The gain came from the exit, not from finding a better entry.
+
+**Consequence.** Target delta narrowed to 0.20-0.22, the range the backtest
+supports. The day-7 / 50% exit is promoted from a stated rule to a modelled and
+measured one.
+
+**Caveats.** The exit model approximates "reached 50% of credit" as "neither
+short strike touched by day 7", since option prices are unavailable
+historically. Weekly entries on 14-day holds overlap, so the samples are
+serially correlated and the effective n is below 300. Strikes are placed on
+realized rather than implied volatility, omitting the variance risk premium
+(would help); no costs are charged (would hurt).

@@ -21,7 +21,12 @@ from deltax.gates import evaluate, MIN_DTE, MAX_DTE, MIN_OPEN_INTEREST
 BENCHMARKS = ["SPY", "QQQ", "IWM"]
 
 # Elsa's dynamic-threshold table, ported: more weak benchmarks -> further OTM.
-TARGET_DELTA_BY_WEAK = {0: 0.30, 1: 0.27, 2: 0.24, 3: 0.20}
+# Backtested 2026-08-29: 0.20 delta with a day-7 / 50%-credit exit is the best
+# tested configuration (E = +0.075 to +0.109 across SPY/QQQ/IWM). 0.15 is
+# materially weaker, 0.30 was negative on the hold-to-expiry test. The regime
+# filter no longer picks direction (E11) so this varies the strike distance
+# only, within the band the backtest supports.
+TARGET_DELTA_BY_WEAK = {0: 0.22, 1: 0.21, 2: 0.20, 3: 0.20}
 DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
 
 # How to price a spread when evaluating it. We EVALUATE at one price and
