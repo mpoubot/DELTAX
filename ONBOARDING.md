@@ -129,9 +129,31 @@ the `gh` MSI, then the Alpaca CLI release binary.
 
 ```bash
 gh auth login          # same prompts as A2
-gh repo clone OWNER/DELTAX
+gh repo clone pautax007/DELTAX
 cd DELTAX
 ```
+
+### "I need the SSH keys" — no, you don't (and nobody sends keys)
+
+Two separate facts:
+
+1. **You don't need SSH at all.** `gh auth login` with HTTPS (the steps above)
+   authenticates cloning, pulling and pushing. If a clone fails, the cause is
+   an unaccepted invite or a not-logged-in `gh` — check `gh auth status` —
+   never a missing key.
+2. **SSH keys are never shared or sent.** If you prefer SSH anyway, you
+   generate your own keypair on your own machine and upload only the *public*
+   half to your *own* GitHub account:
+
+```bash
+ssh-keygen -t ed25519 -C "you@example.com"     # Enter to accept defaults
+gh ssh-key add ~/.ssh/id_ed25519.pub --title "elsa-laptop"
+git clone git@github.com:pautax007/DELTAX.git
+```
+
+The private key (`~/.ssh/id_ed25519`, no `.pub`) stays on your machine
+forever. Anyone who asks you to email a private key — or offers to send you
+one — is describing a security incident, not a setup step.
 
 ## B4. Get your OWN Alpaca paper account
 
