@@ -200,3 +200,59 @@ Read from the environment, never hardcoded. Verified working against AVGO's CIK.
 the next one *will* be. It establishes cadence; a confirmed forward date still
 comes from the company's IR page. Under E10 that inference is **empirical**, not
 structural.
+
+
+---
+
+## Earnings dates — solved via SEC 8-K Item 2.02
+
+`deltax/earnings.py`. Item 2.02 ("Results of Operations and Financial
+Condition") is the filing a company makes when it releases earnings, so the
+filing dates are an authoritative record of when earnings *happened*. Free,
+public, no vendor, no licence.
+
+**Fact vs inference (E10).** Past dates are the filing record — structural.
+The *next* date is inferred from observed cadence — empirical. So the gate
+consumes a **window**, never a point estimate, and any overlap with a
+contract's life is a blackout. Being wrong that way costs a skipped trade;
+being wrong the other way costs an earnings gap through an open position.
+
+### Live result, expiry 2026-09-18
+
+| Blocked | Why |
+|---|---|
+| AVGO | window 2026-08-25 .. 2026-09-09 |
+| COST | window 2026-08-13 .. 2026-09-29 |
+| TSLA | window 2026-08-07 .. 2026-10-06 |
+| PDD | foreign private issuer — see below |
+
+**Clear:** AAPL, MSFT, NVDA, AMZN, META, GOOGL, NFLX, AMD, JPM
+
+AVGO is the vindication: the 350/340 spread that passed all twelve gates this
+morning has an earnings release inside its life. Three independent signals now
+agree — the news headline, IV at 52–54%, and the filing cadence.
+
+### Two failure modes found and fixed
+
+**Silent rate-limit failure.** SEC throttles. A batch run over thirteen symbols
+returned empty for some, and `earnings_history` reported that as "no filings"
+— indistinguishable from a genuine absence. Now throttled to 150 ms between
+requests, and a failed fetch raises `SECFetchError` rather than returning `[]`.
+*Parsing is not liveness; an empty result is not a negative answer.*
+
+**Foreign private issuers.** PDD files **6-K and 20-F**, never 8-K, so Item
+2.02 does not exist for it. This is structural, not a data gap — the method
+simply does not apply to ADRs, and a different source is required. Detected
+automatically and reported as the reason rather than as missing history.
+
+### What this does not provide
+
+- **Transcripts** — not available from any free authoritative source, and
+  licensed where they exist.
+- **Analyst estimates / consensus** — enterprise data (IBES and equivalents).
+  Not obtainable in this timeframe.
+
+Neither is needed. The gate's job is to **avoid** earnings, not to forecast
+them — and forecasting from news already failed validation once (TSLA
+playbook, p=0.44). Predicting an earnings reaction would be a fresh empirical
+claim requiring the full validation bar.
