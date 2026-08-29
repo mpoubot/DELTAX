@@ -26,7 +26,33 @@ DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
 # The chain endpoint pages from the lowest strike, so an unbounded request
 # returns deep-ITM contracts with unpopulated greeks. Always bound around spot.
 STRIKE_BAND = {"put": (0.80, 1.02), "call": (0.98, 1.20)}
-DEFAULT_WIDTH = {"SPY": 5.0, "QQQ": 5.0, "IWM": 2.0}
+# Width scaled to price, rounded to common strike increments.
+DEFAULT_WIDTH = {
+    "SPY": 5.0, "QQQ": 5.0, "IWM": 2.0, "DIA": 5.0, "EEM": 1.0, "TLT": 1.0,
+    # sector sleeves
+    "XLE": 1.0, "XOP": 2.5,                        # energy
+    "XLK": 2.5, "SMH": 5.0, "SOXX": 5.0,           # technology / semis
+    "XLF": 1.0, "KRE": 1.0,                        # financials
+    "XLI": 2.5,                                    # industrials
+    "XLV": 2.5, "XLY": 2.0, "XLP": 1.0,            # health / discretionary / staples
+    "XLU": 1.0, "XLB": 1.0,                        # utilities / materials
+}
+
+# Income-book candidates beyond the three regime benchmarks. All ETFs, so no
+# earnings risk, and all verified to carry strikes clearing the OI floor in the
+# 7-21 DTE band. Nine names for three concurrent slots - deliberately
+# oversubscribed so a thin day still has candidates, not so wide that we are
+# ranking for the sake of it.
+# Sector sleeves span the market rather than betting on one theme. Every name
+# here was verified to carry >=5 strikes clearing the OI floor inside the
+# 7-21 DTE band.
+#
+# E10 note: adding these is OPERATIONAL - it widens what we *can* trade. The
+# claim that Energy or Tech will outperform is EMPIRICAL and unvalidated, so it
+# does not select direction. Direction still comes from the regime filter.
+SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
+                  "XLI", "XLV", "XLY", "XLP", "XLU", "XLB"]
+INCOME_UNIVERSE = BENCHMARKS + ["DIA", "EEM", "TLT"] + SECTOR_SLEEVES
 
 
 @dataclass

@@ -24,7 +24,9 @@ from deltax.gates import MIN_DTE, MAX_DTE, MIN_OPEN_INTEREST
 
 # Income core benchmarks + satellite single names.
 WATCHLIST = [
-    "SPY", "QQQ", "IWM",
+    "SPY", "QQQ", "IWM", "DIA", "EEM", "TLT",
+    "XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
+    "XLI", "XLV", "XLY", "XLP", "XLU", "XLB",
     "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL",
     "TSLA", "AVGO", "COST", "NFLX", "AMD", "JPM", "PDD",
 ]
@@ -61,8 +63,16 @@ def snapshot_symbol(feed, symbol: str, today: date) -> SymbolDay:
     lte = str(today.fromordinal(today.toordinal() + MAX_DTE))
     expiries, liquid = [], 0
     try:
+        # Bound strikes around spot. The contracts endpoint pages from the
+        # LOWEST strike, so an unbounded request on a high-priced underlying
+        # returns only deep-ITM contracts - SMH read as "thin" with 0 liquid
+        # strikes when it actually has 27.
+        kw = {}
+        if last:
+            kw = {"strike_gte": round(last * 0.80, 2),
+                  "strike_lte": round(last * 1.02, 2)}
         cs = feed.option_contracts(symbol, option_type="put", expiry_gte=gte,
-                                   expiry_lte=lte, limit=500)
+                                   expiry_lte=lte, limit=500, **kw)
         seen = {}
         for c in cs:
             seen.setdefault(c["expiration_date"], 0)
