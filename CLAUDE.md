@@ -15,7 +15,8 @@ before that timestamp, it waits until after.
 |---|---|
 | `HACKATHON-RULES.md` | Binding competition constraints + open red flags |
 | `STRATEGY.md` | Why the agent is built the way it is; the design response to the short-window P&L problem |
-| `research/options/golden-rules.md` | Cross-source rules from the video corpus, with the expectancy gate |
+| `research/options/golden-rules.md` | Options rules from the video corpus, with the expectancy gate |
+| `research/stocks/golden-rules.md` | **Alyrise** — Elsa's stock engine spec. Authoritative for stocks; never apply to options |
 | `TEAM.md` | Team logistics, prize split, time zones |
 
 ---
@@ -38,6 +39,9 @@ before that timestamp, it waits until after.
    appears nowhere in history. Keep it that way. Verify before any push.
 6. **Never commit raw video captions** or third-party PDFs. The research notes are
    our own distillation; raw source material stays out of the public repo.
+7. **Keep the engines separate.** Alyrise (stocks) and our options engine share a
+   risk/execution/ledger layer but never share strategy rules or capital pools.
+   Elsa's spec is explicit: do not merge stock rules with options rules.
 
 ---
 

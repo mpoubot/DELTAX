@@ -1,6 +1,16 @@
-# Process corpus (originally "stocks") — video notes
+# Stocks bucket
 
-**Synthesis:** [`golden-rules.md`](golden-rules.md)
+## Authoritative strategy
+
+**[`golden-rules.md`](golden-rules.md) — Alyrise, by Ilze Rosicka (Elsa).**
+The stock engine spec. Stocks only; it explicitly must not be merged with crypto
+or options rules.
+
+## Reference only
+
+[`video-derived-rules.md`](video-derived-rules.md) — superseded for stocks. Its
+risk/process layer (S0–S6) informed `deltax/gates.py`, which serves the **options**
+engine. Notes on the four source videos below.
 
 | # | Video | Source | Length | Trades | Quality |
 |---|---|---|---|---|---|
