@@ -5,16 +5,22 @@ trains the agent.
 
 ## Scope
 
-**Options only.** The hackathon requires that all strategies incorporate options
-trading (see `../HACKATHON-RULES.md`), so the corpus is scoped to match.
+The hackathon requires that all strategies **incorporate** options trading — not
+that they consist solely of options (see `../HACKATHON-RULES.md`). Both buckets
+contribute.
 
-| Bucket | Status | Synthesis |
-|---|---|---|
-| [Options](options/00-index.md) | ✅ 6 videos, 5 viewpoints — complete | [options/golden-rules.md](options/golden-rules.md) |
+| Bucket | Status | Contributes | Synthesis |
+|---|---|---|---|
+| [Options](options/00-index.md) | ✅ 6 videos, 5 viewpoints | Instrument knowledge, structure selection, IV behaviour | [options/golden-rules.md](options/golden-rules.md) |
+| [Process](stocks/00-index.md) | ✅ 4 videos, 4 viewpoints | Risk, sizing, expectancy, validation, underlying selection | [stocks/golden-rules.md](stocks/golden-rules.md) |
 
-*A stocks bucket (4 videos) was built and then removed on 2026-08-29 — the
-instrument didn't qualify under the hackathon rules. Its one durable contribution,
-the expectancy gate, was folded into the options rules before removal.*
+**How they fit together.** The options bucket knows *what* to trade and had a
+fatal gap: five sources selected on win rate and none measured the tail. The
+process bucket supplies exactly what was missing — the expectancy gate, sizing
+from defined risk, and the validation ladder — from three independent sources in
+three different asset classes. Its instrument layer (pips, lots, CFD leverage,
+crypto perpetuals) is excluded; its process layer is implemented in
+`deltax/gates.py`.
 
 ## Method
 
