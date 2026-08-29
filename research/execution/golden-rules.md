@@ -37,16 +37,24 @@ trade-the-open folklore gets people filled badly at 9:31.
 
 ## E3 — Payoff gates must be structure-aware
 
-> Credit structures: **credit ≥ 30% of width**. Debit structures: **reward:risk
-> ≥ 2.5:1**. One floor applied to both silently refuses an entire structure
-> class.
+> Credit structures: **credit/width ≥ 0.9 × short delta**. Debit structures:
+> **reward:risk ≥ 2:1**. One floor applied to both silently refuses an entire
+> structure class — and a *flat* floor on credit structures refuses most of the
+> delta band.
 
 Discovered as a live bug: our original 2:1 gate would have refused *every* OTM
-credit spread on Monday — a credit spread's payoff IS its probability, so it
-can never show 2:1. Generalization: **before going live, run every structure
-the agent will trade through the gates and confirm at least one realistic
-candidate of each class can pass.** A gate that can never pass is a ban you
-didn't mean to write.
+credit spread — a credit spread's payoff IS its probability, so it can never
+show 2:1. The replacement flat 30%-of-width floor then failed the same way for
+a subtler reason: measured on live chains, credit/width runs ≈ 0.75–0.8 × short
+delta, so any fixed floor selective at 35Δ silently bans every trade at 20Δ —
+exactly where the regime logic pushes when markets weaken. The floor had to
+become **delta-relative** to ask the economically meaningful question: is this
+premium fair for the probability of loss being taken?
+
+Generalization: **before going live, run every structure the agent will trade
+through the gates and confirm at least one realistic candidate of each class
+can pass.** A gate that can never pass is a ban you didn't mean to write —
+and it can hide behind a number that looks reasonable.
 
 ## E4 — Triggers nominate; gates decide
 
@@ -110,3 +118,38 @@ Afternoon window is for topping up, not for initiating the day's core.
 Guards E1/E2 from scope creep: the moment a timing rule starts *predicting*
 instead of *protecting fills*, it must requalify as a signal through
 backtest + pre-registration.
+
+## E10 — Classify before encoding
+
+> Every candidate rule declares itself **structural**, **empirical**, or
+> **operational** before it can enter the agent. Structural needs one
+> verification. Empirical needs the full validation bar. Operational needs
+> neither. An unclassified rule cannot ship.
+
+| Class | Meaning | Standard of proof |
+|---|---|---|
+| **Structural** | True by construction — a property of how the market is built | Verify once |
+| **Empirical** | A pattern that may be signal or noise | OOS PF > 1.10, >50% folds positive, E > 0, no post-holdout tuning |
+| **Operational** | Execution hygiene | Neither — but it must never be cited as edge (E9) |
+
+**Why this rule exists.** A single live session inspecting one option chain
+produced, in the same hour: two structural facts worth encoding permanently, one
+genuine bug in our own gates, and two empirical claims that would have been
+data-mined nonsense if promoted. All five *felt* equally like findings. Without
+an explicit class, the empirical ones get encoded on the strength of having been
+observed — which is precisely the failure that the entire video corpus
+demonstrates and that killed the TSLA playbook.
+
+**Worked example (AVGO, 2026-08-29):**
+
+| Observation | Class | Action |
+|---|---|---|
+| Open interest clusters at round strikes (9,180 at $330 vs **14** at $332) | Structural | Encode |
+| Bid/ask width tracks OI (0.7% at the liquid strike vs 16.9% at the thin one) | Structural | Encode |
+| Earnings gate reported "safe" when it meant "unknown" | Bug | Fix |
+| IV at 52–54% implies an approaching earnings event | Empirical | Queue for testing |
+| A 30.7% credit at 0.307 delta is fair value | Empirical | Queue for testing |
+
+Note that "bug" is a fourth outcome and the most valuable one that session
+produced. Inspecting live data is excellent for finding what is *broken* and
+what is *structurally true*; it cannot establish what is *profitable*.

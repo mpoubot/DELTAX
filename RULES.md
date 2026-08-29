@@ -136,7 +136,8 @@ E1 enter where the book is deep · E2 most active ≠ best to enter ·
 E3 payoff gates must be structure-aware · E4 **triggers nominate, gates decide** ·
 E5 exits placed at entry · E6 branches decided before they arrive ·
 E7 raise risk only where the floor stays arithmetic · E8 sell premium in the
-morning · E9 **time-of-day is hygiene, never signal**
+morning · E9 **time-of-day is hygiene, never signal** ·
+E10 **classify before encoding** (structural / empirical / operational)
 
 ## Validation bar (AURA, adopted corpus-wide)
 
