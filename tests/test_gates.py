@@ -101,5 +101,27 @@ for g in d.gates:
     if not g.passed:
         print(f"       · {g.gate}: {g.detail}")
 
+
+print("\n── structure-aware payoff gate ──")
+from deltax.gates import gate_credit_fraction
+# SPY put credit spread: $5 wide, $1.60 credit -> max loss/ct $340, max profit $160
+d = evaluate(
+    symbol="SPY", equity=EQUITY, structure="credit", width=5.0,
+    max_loss_per_contract=340.0, max_profit_per_contract=160.0,
+    credit=1.60, expiry=GOOD_EXPIRY, today=TODAY,
+    open_interest=12_000,
+)
+check("OTM credit spread now TRADES", d.decision == Decision.TRADE, d.failed_gate or "")
+check("credit_fraction gate ran", any(g.gate == "credit_fraction" for g in d.gates))
+check("reward_risk gate NOT applied to credit", not any(g.gate == "reward_risk" for g in d.gates))
+# thin credit rejected: $5 wide, $0.90 credit = 18% of width
+d = evaluate(
+    symbol="SPY", equity=EQUITY, structure="credit", width=5.0,
+    max_loss_per_contract=410.0, max_profit_per_contract=90.0,
+    credit=0.90, expiry=GOOD_EXPIRY, today=TODAY, open_interest=12_000,
+)
+check("thin credit (18% of width) refused", d.decision == Decision.REFUSE and d.failed_gate == "credit_fraction")
+check("standalone: 30% floor boundary", gate_credit_fraction(1.50, 5.0).passed and not gate_credit_fraction(1.49, 5.0).passed)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

@@ -26,6 +26,7 @@ MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
 MAX_SIZE_TO_OI_RATIO  = 0.05   # never take more than 5% of a strike's open interest
 MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the trade
+MIN_CREDIT_FRACTION   = 0.30   # credit structures: credit must be >= 30% of spread width
 
 
 class Decision:
@@ -145,8 +146,26 @@ def gate_dte(expiry: date, today: date) -> GateResult:
     )
 
 
+def gate_credit_fraction(credit: float, width: float) -> GateResult:
+    """Credit structures: credit collected must be a fair share of the width.
+
+    An OTM credit spread can never pass a 2:1 reward:risk test - its payoff IS
+    the probability. The quality control instead: credit >= 30% of the spread
+    width, so the premium actually compensates the risk taken.
+    """
+    if width <= 0:
+        return GateResult("credit_fraction", False, "width must be positive")
+    frac = credit / width
+    ok = frac >= MIN_CREDIT_FRACTION
+    return GateResult(
+        "credit_fraction", ok,
+        f"credit/width {frac:.2f} vs floor {MIN_CREDIT_FRACTION}",
+        round(frac, 2), MIN_CREDIT_FRACTION,
+    )
+
+
 def gate_reward_risk(max_profit: float, max_loss: float) -> GateResult:
-    """Reward:risk must be at least 2:1, defined before entry."""
+    """Debit structures: reward:risk must be at least 2:1, defined before entry."""
     if max_loss <= 0:
         return GateResult("reward_risk", False, "max_loss must be positive")
     rr = max_profit / max_loss
@@ -253,6 +272,8 @@ def evaluate(
     today: date,
     open_interest: Optional[int],
     open_portfolio_max_loss: float = 0.0,
+    structure: str = "debit",
+    width: Optional[float] = None,
     earnings_date: Optional[date] = None,
     halted: bool = False,
     corporate_action: Optional[str] = None,
@@ -276,10 +297,16 @@ def evaluate(
         gate_no_earnings_before_expiry(earnings_date, expiry),
         gate_liquidity(open_interest, contracts),
         gate_credit(credit),
-        gate_reward_risk(max_profit_per_contract, max_loss_per_contract),
         gate_position_size(total_max_loss, equity),
         gate_portfolio_risk(total_max_loss, open_portfolio_max_loss, equity),
     ]
+    # Structure-aware payoff gate: a 2:1 floor would refuse every OTM credit
+    # spread (its payoff is its probability), so credit structures are judged
+    # on credit/width instead.
+    if structure == "credit":
+        gates.append(gate_credit_fraction(credit, width if width is not None else 0.0))
+    else:
+        gates.append(gate_reward_risk(max_profit_per_contract, max_loss_per_contract))
 
     if None not in (avg_win, avg_loss, win_rate):
         gates.append(gate_expectancy(avg_win, avg_loss, win_rate))
