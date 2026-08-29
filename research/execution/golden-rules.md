@@ -189,3 +189,41 @@ claim we have not tested and are not disputing.
 **Consequence.** The filter is demoted from direction selection to context. The
 income book defaults to **iron condors** — both sides gated and sized
 independently — until a directional signal clears the bar.
+
+## E12 — Idle capital goes to the strategy that needs no edge
+
+> When a directional signal fails to clear the validation bar, the capital
+> earmarked for it does **not** get deployed on the unproven signal anyway,
+> and does **not** sit idle by default. It moves to the strategy that does not
+> require a directional edge.
+
+**Evidence.** Matin's Equity Lab signal family was tested over 32,148 daily
+bars across 12 names, entry at next open, measured against the unconditional
+base rate for the same universe:
+
+| RelVol | Horizon | n | Edge vs base | t |
+|---|---|---|---|---|
+| **1.0** (his original) | 5 / 10 / 15 | 326 | −0.271 / 0.000 / −0.875 | −0.79 / 0.00 / −1.39 |
+| 1.5 (our tightened) | 10 | 111 | +1.409 | +2.14 |
+| 2.0 | 10 | 58 | +2.213 | +2.41 |
+
+Walk-forward TRAIN 2016–22 / TEST 2023–26 at 10 days: the sign **held out of
+sample** (t = +1.42 and +1.95 in TEST) but nothing reached |t| > 1.96 in either
+period alone, against a Bonferroni floor of 2.77 for the nine combinations
+examined. Out-of-sample n was 27 and 18.
+
+**Not proven, not refuted.** Two things follow, and the second is the rule:
+
+1. His original RelVol ≥ 1 threshold shows no edge at all. Our tightening to
+   1.5 is what produced the positive result — which is specification search,
+   and choosing 2.0 now *because it looked best in TEST* would be post-holdout
+   tuning.
+2. Building a debit-spread book on an unvalidated directional signal means
+   paying bid/ask for an edge we have not demonstrated. Defined risk caps the
+   loss; it does not make the expectancy positive.
+
+**Consequence.** The 40% satellite allocation is redeployed to additional
+income-core positions — credit structures need no directional edge, we have 19
+qualified underlyings for what was 3 slots, and E11 already defaults them to
+direction-neutral condors. The signal returns to the backtest queue for a
+proper walk-forward with adequate sample, post-hackathon.
