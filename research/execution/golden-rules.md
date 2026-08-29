@@ -258,3 +258,45 @@ rejected as broken input rather than as unattractive trades. It is classified
 `PRICING_MODE` is set to `haircut` (mid, conceding 25% of the crossed spread)
 on reasoning rather than measurement, and is explicitly flagged for
 recalibration once live quotes exist.
+
+## E14 — Test the payoff, not the instrument
+
+> When historical prices for an instrument are unavailable, test the **payoff
+> structure** against real outcomes instead. A defined-risk position settles on
+> two things: the premium taken and where the underlying finishes. Only the
+> second needs history — the first can be bounded by the gate that governs it.
+
+**The problem.** Options are OPRA-only, and Alpaca serves no historical option
+quotes. Our gates price every spread from bid/ask, so a literal replay is
+impossible. That blocked the entire strategy from validation.
+
+**The way through.** A credit spread held to expiry pays exactly
+`credit − breach loss`, and `gate_credit_fraction` already constrains the
+credit to a floor. So assume the credit is *exactly that floor* — the worst
+premium the agent would ever accept — and settle the payoff against ten years
+of real underlying closes, which are freely available. Any real fill collects
+at least the floor, so the result is a conservative lower bound.
+
+**What it found.** At the floor then in force (0.90 × delta) the iron condor is
+negative expectancy on every underlying and every delta tested:
+
+| | δ 0.15 | δ 0.20 | δ 0.30 |
+|---|---|---|---|
+| SPY | −0.117 | −0.116 | −0.166 |
+| QQQ | −0.125 | −0.141 | −0.184 |
+| IWM | −0.133 | −0.138 | −0.098 |
+
+Breakeven sits at roughly **1.03–1.20 × delta**, remarkably consistent across
+nine independent cases — a spread of only ~4 percentage points of width. That
+consistency argues for a structural relationship rather than noise.
+
+**Consequence.** `CREDIT_DELTA_MULTIPLE` raised **0.90 → 1.15**. This makes the
+gate *stricter* and will pass fewer trades, which is the correct direction when
+the alternative is knowingly trading a negative-expectancy structure.
+
+**Caveats, in both directions.** The model holds to expiry, so it omits the
+50%-of-credit early exit that E5 mandates (would help). It places strikes by
+realized volatility, so it omits the implied-minus-realized variance premium
+that is the premium seller's theoretical edge (would help). It charges no
+commissions or slippage (would hurt). Net effect unresolved — which is why the
+floor was set at 1.15 rather than at the bare breakeven.

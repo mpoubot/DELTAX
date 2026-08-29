@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from deltax.gates import (
     evaluate, size_from_risk, Decision,
-    PER_POSITION_RISK_PCT, PORTFOLIO_RISK_PCT,
+    PER_POSITION_RISK_PCT, PORTFOLIO_RISK_PCT, CREDIT_DELTA_MULTIPLE,
     gate_expectancy, gate_dte, gate_liquidity, gate_reward_risk,
     gate_portfolio_risk, gate_defined_risk, gate_no_earnings_before_expiry,
 )
@@ -108,7 +108,7 @@ from deltax.gates import gate_credit_fraction
 d = evaluate(
     symbol="SPY", equity=EQUITY, structure="credit", width=5.0,
     max_loss_per_contract=340.0, max_profit_per_contract=160.0,
-    credit=1.60, expiry=GOOD_EXPIRY, today=TODAY,
+    credit=1.85, expiry=GOOD_EXPIRY, today=TODAY,
     open_interest=12_000, short_delta=0.30,
 )
 check("OTM credit spread now TRADES", d.decision == Decision.TRADE, d.failed_gate or "")
@@ -122,12 +122,14 @@ d = evaluate(
     short_delta=0.30,
 )
 check("credit below 0.9 x delta refused", d.decision == Decision.REFUSE and d.failed_gate == "credit_fraction")
-check("delta-relative floor: 0.20 delta needs 18% of width",
-      gate_credit_fraction(0.95, 5.0, 0.20).passed and not gate_credit_fraction(0.85, 5.0, 0.20).passed)
-check("delta-relative floor: 0.35 delta needs 31.5% of width",
-      gate_credit_fraction(1.60, 5.0, 0.35).passed and not gate_credit_fraction(1.50, 5.0, 0.35).passed)
+check("delta-relative floor: 0.20 delta needs 23% of width",
+      gate_credit_fraction(1.20, 5.0, 0.20).passed and not gate_credit_fraction(1.10, 5.0, 0.20).passed)
+check("delta-relative floor: 0.35 delta needs 40.25% of width",
+      gate_credit_fraction(2.05, 5.0, 0.35).passed and not gate_credit_fraction(1.95, 5.0, 0.35).passed)
+check("floor is backtested breakeven, not a guess",
+      abs(CREDIT_DELTA_MULTIPLE - 1.15) < 1e-9)
 check("sign of delta is irrelevant (puts are negative)",
-      gate_credit_fraction(0.95, 5.0, -0.20).passed)
+      gate_credit_fraction(1.20, 5.0, -0.20).passed)
 check("no delta -> flat fallback floor 0.20",
       gate_credit_fraction(1.05, 5.0).passed and not gate_credit_fraction(0.95, 5.0).passed)
 

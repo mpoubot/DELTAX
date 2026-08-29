@@ -26,7 +26,14 @@ MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
 MAX_SIZE_TO_OI_RATIO  = 0.05   # never take more than 5% of a strike's open interest
 MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the trade
-CREDIT_DELTA_MULTIPLE = 0.90   # credit structures: credit/width >= 0.9 x short delta
+# Raised 0.90 -> 1.15 on 2026-08-29 after backtesting ten years of real
+# outcomes: at 0.90 the structure is NEGATIVE expectancy on every underlying
+# and every delta tested (E = -0.098 to -0.184). Breakeven sits at roughly
+# 1.03-1.20 x delta depending on the case; 1.15 clears it with a margin.
+# See backtest/condor_expectancy.py. This makes the gate STRICTER - fewer
+# trades pass, which is the correct direction when the alternative is
+# knowingly trading a negative-expectancy structure.
+CREDIT_DELTA_MULTIPLE = 1.15   # credit structures: credit/width >= 1.15 x short delta
 MIN_CREDIT_FRACTION   = 0.20   # fallback floor when short delta is unavailable
 MAX_SPREAD_PCT        = 0.15   # worst leg's bid/ask spread as a fraction of its mid
 MAX_QUOTE_AGE_HOURS   = 1.0    # stale quotes cannot be priced or calibrated against
