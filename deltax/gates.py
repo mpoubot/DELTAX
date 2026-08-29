@@ -27,6 +27,7 @@ MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
 MAX_SIZE_TO_OI_RATIO  = 0.05   # never take more than 5% of a strike's open interest
 MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the trade
 MIN_CREDIT_FRACTION   = 0.30   # credit structures: credit must be >= 30% of spread width
+MAX_SPREAD_PCT        = 0.15   # worst leg's bid/ask spread as a fraction of its mid
 
 
 class Decision:
@@ -143,6 +144,23 @@ def gate_dte(expiry: date, today: date) -> GateResult:
         "dte", ok,
         f"{dte} DTE (band {MIN_DTE}-{MAX_DTE})",
         dte, None,
+    )
+
+
+def gate_spread_quality(worst_leg_spread_pct: Optional[float]) -> GateResult:
+    """Bid/ask width on the worst leg, as a fraction of that leg's mid.
+
+    Wide quotes are a direct tax on entry and, worse, on exit - a spread you
+    cannot close at a fair price is not really defined-risk in practice. Closes
+    the bid/ask criterion AURA specified but our first gate set omitted.
+    """
+    if worst_leg_spread_pct is None:
+        return GateResult("spread_quality", False, "quote missing on at least one leg")
+    ok = worst_leg_spread_pct <= MAX_SPREAD_PCT
+    return GateResult(
+        "spread_quality", ok,
+        f"worst leg spread {worst_leg_spread_pct:.1%} vs max {MAX_SPREAD_PCT:.0%}",
+        round(worst_leg_spread_pct, 4), MAX_SPREAD_PCT,
     )
 
 
@@ -274,6 +292,7 @@ def evaluate(
     open_portfolio_max_loss: float = 0.0,
     structure: str = "debit",
     width: Optional[float] = None,
+    worst_leg_spread_pct: Optional[float] = None,
     earnings_date: Optional[date] = None,
     halted: bool = False,
     corporate_action: Optional[str] = None,
@@ -300,6 +319,8 @@ def evaluate(
         gate_position_size(total_max_loss, equity),
         gate_portfolio_risk(total_max_loss, open_portfolio_max_loss, equity),
     ]
+    if worst_leg_spread_pct is not None:
+        gates.append(gate_spread_quality(worst_leg_spread_pct))
     # Structure-aware payoff gate: a 2:1 floor would refuse every OTM credit
     # spread (its payoff is its probability), so credit structures are judged
     # on credit/width instead.

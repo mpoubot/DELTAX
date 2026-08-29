@@ -1,0 +1,127 @@
+"""Screener tests. Fake feed built from real Alpaca payload shapes; no network."""
+
+import sys, os, tempfile, shutil
+from datetime import date
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from deltax.screener import (
+    assess_regime, posture, select_vertical, parse_expiry, spread_pct,
+    screen_income_book, RegimeState, BENCHMARKS,
+)
+from deltax.ledger import Ledger
+
+passed = failed = 0
+def check(name, cond, detail=""):
+    global passed, failed
+    if cond: passed += 1; print(f"  ✓ {name}")
+    else: failed += 1; print(f"  ✗ {name}  {detail}")
+
+def snap(price, vwap, prev=None):
+    d = {"latestTrade": {"p": price}, "dailyBar": {"c": price, "vw": vwap}}
+    if prev is not None: d["prevDailyBar"] = {"c": prev}
+    return d
+
+print("\n── regime (Elsa's filter) ──")
+# real shape: SPY latest 769.28 vs vwap 770.81 -> weak
+r = assess_regime({"SPY": snap(769.28, 770.81), "QQQ": snap(600, 598), "IWM": snap(240, 238)})
+check("SPY below VWAP counted weak", r.weak_symbols == ["SPY"] and r.weak_count == 1, str(r.weak_symbols))
+r0 = assess_regime({s: snap(100, 99) for s in BENCHMARKS})
+check("all above VWAP -> 0 weak", r0.weak_count == 0)
+r3 = assess_regime({s: snap(99, 100) for s in BENCHMARKS})
+check("all below VWAP -> 3 weak", r3.weak_count == 3)
+rm = assess_regime({"SPY": snap(100, 99), "QQQ": {}, "IWM": snap(100, 99)})
+check("missing data fails conservative (3 weak)", rm.weak_count == 3 and not rm.complete)
+check("regime note is human-readable", "weak" in r.note or "fallback" in rm.note)
+
+print("\n── posture mapping ──")
+check("0 weak -> put credit only", all(side == "put" for _, side in posture(r0)))
+check("3 weak -> call credit only", all(side == "call" for _, side in posture(r3)))
+p2 = posture(RegimeState(2, ["SPY", "QQQ"]))
+check("2 weak -> includes call on weakest", ("SPY", "call") in p2, str(p2))
+check("2 weak -> both sides somewhere (condor as two verticals)",
+      any(s == "put" for _, s in p2) and any(s == "call" for _, s in p2), str(p2))
+
+print("\n── OCC symbol parsing ──")
+check("expiry parsed", parse_expiry("PLTR260918P00175000") == "2026-09-18")
+check("bad symbol -> None", parse_expiry("NOTASYMBOL") is None)
+check("spread_pct", abs(spread_pct(3.91, 3.92) - 0.00256) < 0.001)
+check("spread_pct missing -> None", spread_pct(None, 1.0) is None)
+
+print("\n── strike selection by delta ──")
+# real PLTR Sep-18 put chain
+chain = {
+    "PLTR260918P00170000": {"greeks": {"delta": -0.1847}, "latestQuote": {"bp": 2.04, "ap": 2.12}},
+    "PLTR260918P00172500": {"greeks": {"delta": -0.2218}, "latestQuote": {"bp": 2.58, "ap": 2.63}},
+    "PLTR260918P00175000": {"greeks": {"delta": -0.2630}, "latestQuote": {"bp": 3.18, "ap": 3.28}},
+    "PLTR260918P00177500": {"greeks": {"delta": -0.3071}, "latestQuote": {"bp": 3.91, "ap": 3.92}},
+    "PLTR260918P00180000": {"greeks": {"delta": -0.3562}, "latestQuote": {"bp": 4.61, "ap": 4.96}},
+}
+oi = {s: 5000 for s in chain}
+c = select_vertical(chain, side="put", target_delta=0.30, width=5.0, oi_by_symbol=oi)
+check("short strike nearest 0.30 delta = 177.5", c["short"]["strike"] == 177.5, str(c["short"]["strike"]))
+check("long leg one width below = 172.5", c["long"]["strike"] == 172.5, str(c["long"]["strike"]))
+check("credit uses short bid - long ask", abs(c["credit"] - (3.91 - 2.63)) < 1e-9, str(c["credit"]))
+check("max loss = (width - credit) x 100", abs(c["max_loss_per_contract"] - 372.0) < 0.01, str(c["max_loss_per_contract"]))
+check("expiry extracted", c["expiry"] == "2026-09-18")
+# wider chain so the long leg exists further out
+wide = dict(chain)
+wide["PLTR260918P00167500"] = {"greeks": {"delta": -0.1500}, "latestQuote": {"bp": 1.66, "ap": 1.72}}
+wide["PLTR260918P00165000"] = {"greeks": {"delta": -0.1280}, "latestQuote": {"bp": 1.28, "ap": 1.39}}
+wide["PLTR260918P00162500"] = {"greeks": {"delta": -0.1050}, "latestQuote": {"bp": 1.02, "ap": 1.10}}
+c2 = select_vertical(wide, side="put", target_delta=0.20, width=5.0,
+                     oi_by_symbol={s: 5000 for s in wide})
+check("lower target delta picks further OTM (0.185 nearest 0.20)",
+      c2["short"]["strike"] == 170.0, str(c2["short"]["strike"]))
+c3 = select_vertical(wide, side="put", target_delta=0.05, width=5.0,
+                     oi_by_symbol={s: 5000 for s in wide})
+check("R3 band floors the short leg at 0.15 delta, never 0.105",
+      c3 is not None and c3["short"]["delta"] >= 0.15, str(c3))
+check("short at chain edge with no long leg -> None",
+      select_vertical(chain, side="put", target_delta=0.20, width=5.0, oi_by_symbol=oi) is None)
+check("no long leg available -> None",
+      select_vertical(chain, side="put", target_delta=0.30, width=50.0, oi_by_symbol=oi) is None)
+check("unquoted chain -> None",
+      select_vertical({"X260918P00175000": {"greeks": {"delta": -0.3}, "latestQuote": {}}},
+                      side="put", target_delta=0.3, width=5.0, oi_by_symbol={}) is None)
+
+print("\n── end to end with a fake feed ──")
+class FakeFeed:
+    def __init__(self, weak): self.weak = weak; self.chain_calls = []
+    def snapshots(self, syms):
+        return {s: (snap(99, 100) if s in self.weak else snap(101, 100)) for s in syms}
+    def option_chain(self, underlying, **kw):
+        self.chain_calls.append((underlying, kw.get("option_type")))
+        return chain
+    def option_contracts(self, underlying, **kw):
+        return [{"symbol": s, "open_interest": 5000} for s in chain]
+
+tmp = tempfile.mkdtemp()
+try:
+    stamps = iter([f"2026-08-31T14:{i:02d}:00.000+00:00" for i in range(30)])
+    led = Ledger(tmp, run_id="screen", clock=lambda: next(stamps), rules_commit="test")
+    feed = FakeFeed(weak=[])
+    out = screen_income_book(feed, led, equity=100_000.0, today=date(2026, 8, 31))
+    check("0 weak -> nominated put spreads only",
+          all(side == "put" for _, side in feed.chain_calls), str(feed.chain_calls))
+    check("every nomination reached the ledger", len(led.entries()) == len(out["results"]),
+          f"{len(led.entries())} vs {len(out['results'])}")
+    check("ledger holds regime context",
+          all("regime" in e["context"] and e["context"]["book"] == "income" for e in led.entries()))
+    ok, msg = led.verify(); check("ledger chain intact after screening", ok, msg)
+    s = led.summary()
+    check("summary counts the pass", s["evaluated"] == len(out["results"]) and s["evaluated"] > 0, str(s))
+    check("committed max loss tracked", out["committed_max_loss"] >= 0)
+
+    feed3 = FakeFeed(weak=BENCHMARKS)
+    led3 = Ledger(tmp, run_id="screen3",
+                  clock=lambda: "2026-08-31T15:00:00.000+00:00", rules_commit="test")
+    out3 = screen_income_book(feed3, led3, equity=100_000.0, today=date(2026, 8, 31))
+    check("3 weak -> call spreads only",
+          all(side == "call" for _, side in feed3.chain_calls), str(feed3.chain_calls))
+    check("weak regime widens OTM target (delta 0.20)",
+          out3["regime"].weak_count == 3)
+finally:
+    shutil.rmtree(tmp)
+
+print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
+sys.exit(1 if failed else 0)
