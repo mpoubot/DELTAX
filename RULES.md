@@ -171,3 +171,24 @@ sell priority stop → trailing → target → max-hold. Not running this week (
    Monday conditions. Re-run the dry run Monday pre-open before trusting it.
 5. **Satellite screener + backtest harness** still to build; the harness supplies
    the predicted expectancy the pre-registration commits to.
+
+---
+
+## Data limits discovered (2026-08-29)
+
+Three hard constraints on what can be tested, found by hitting them:
+
+| Limit | Consequence |
+|---|---|
+| **No historical option quotes.** Alpaca serves historical bars and trades; `latest-quotes` is current-state only | A faithful replay of this strategy on past data is **impossible** — `credit`, `spread_quality` and `quote_sanity` all require bid/ask |
+| **Market-data tier refuses any request reaching the current session** (`403: subscription does not permit querying recent SIP data`) | Historical queries must end on the prior session |
+| **Weekend quotes are structurally broken** | See E13. Thresholds cannot be calibrated outside a live session |
+
+**What this means for backtesting.** The option leg cannot be replayed. The
+*underlying* leg can, and has been — 2,679 sessions for the regime filter,
+32,148 bars for the signal family. Both directional claims were tested there
+and neither survived, which is why the strategy is now direction-neutral.
+
+Substituting bar closes or trade prints for quotes would disable three gates
+and produce a credit nobody could have transacted at. That is not a
+lower-quality backtest; it is a measurement of nothing.
