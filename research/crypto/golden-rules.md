@@ -38,3 +38,26 @@
 - **Compliance check before any live MEXC work:** counterparty risk and US
   regulatory access to offshore perpetuals — a decision for the team, not a
   backtest.
+
+## Session timing in crypto (note for post-hackathon)
+
+The equity session clock (open auction → lunch lull → close volatility) is NYSE
+microstructure and **does not transfer** — crypto trades 24/7 with no auction,
+no lunch, no close. Crypto has its own clock, and Matin's MEXC engine should
+encode *these* instead:
+
+- **Liquidity still follows the sun.** Volume and depth concentrate in the
+  EU/US overlap (~13:00–20:00 UTC); books are thinnest in early Asian hours.
+- **Weekends are the danger zone.** Thin books, outsized slippage, and many of
+  the violent gap-like moves. An always-on engine needs weekend-specific size
+  limits or a stand-down — "24/7 market" does not mean "24/7 equal quality."
+- **Perp funding timestamps** (typically every 8h — 00:00/08:00/16:00 UTC)
+  create micro-patterns around the funding events. Directly relevant to the
+  frozen candidate: his own dossier flags that funding may erase the thin edge,
+  so entries relative to funding time belong in the falsification battery.
+- **US macro releases move crypto in real time** (CPI, FOMC, jobs) — the macro
+  calendar applies even though the equity session doesn't.
+
+One inversion worth noting: if crypto exposure ever enters the *hackathon*
+account, it's via **IBIT options** — which trade equity options hours, so the
+equity session rules apply in full to that route.
