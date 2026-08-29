@@ -61,3 +61,15 @@ encode *these* instead:
 One inversion worth noting: if crypto exposure ever enters the *hackathon*
 account, it's via **IBIT options** — which trade equity options hours, so the
 equity session rules apply in full to that route.
+
+## News feed — registered, awaiting the crypto engine
+
+`coindesk` is wired in `deltax/rss.py` under the `crypto` bucket with
+`active=False`. Nothing to change but that flag when the crypto engine comes
+online — the ingestion, parsing and metadata-only storage are already built and
+tested.
+
+Note what it does *not* solve: CoinDesk carries no ticker tagging and no
+earnings or halt data, so it informs none of the gates the options agent runs
+today. It becomes useful when there are crypto positions for it to be news
+*about*.
