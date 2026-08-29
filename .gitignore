@@ -1,0 +1,24 @@
+# ── SECRETS — never commit ──────────────────────────────────
+.env
+.env.*
+*.env
+!.env.example
+secrets/
+*.pem
+*.key
+
+# ── Research working files (raw captions are third-party content) ──
+scratchpad/
+*.json3
+*_clean.txt
+*.vtt
+*.srt
+
+# ── Runtime output ──
+logs/
+*.log
+decisions/*.jsonl
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
