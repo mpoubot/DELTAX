@@ -176,7 +176,19 @@ alongside the work you're already doing.
 | Repo | Owner | Role |
 |---|---|---|
 | `pautax007/DELTAX` | Pautax | **Submission repo.** Research corpus, gates, docs. Private now → public before the Fri 11:00 deadline |
-| `mpoubot/CAURAv0.5.2` | Matin | His AURA engine. Cloned locally at `../CAURAv0.5.2`. **Empty as of 2026-08-29** — pull when he pushes |
+| `mpoubot/CAURAv0.5.2` | Matin | His AURA engine. Cloned at `../CAURAv0.5.2`. **Empty as of 2026-08-29** — pull when he pushes |
+| `mpoubot/aura-autonomous-trading-agent` | Matin | Named as a hackathon agent repo. Cloned at `../aura-autonomous-trading-agent`. **README-only as of 2026-08-29** |
+
+⚠️ **Open team decision — one submission repo, currently two candidates.**
+The second repo's README says it is "for the Alpaca AI Trading Agents
+Hackathon", which overlaps DELTAX's role. The hackathon accepts a single
+public GitHub link. Decide together before Monday: either (a) DELTAX is the
+submission and Matin's repos feed it via merges with attribution, or (b) the
+team consolidates into one of his. Fact for the decision: DELTAX currently
+holds the research corpus, the tested gate module and the timestamped commit
+history the pre-registration strategy depends on; both of Matin's repos are
+empty shells today. Whatever is chosen, everything merges into ONE repo well
+before Friday — a split submission fails on Presentation.
 
 **Policy — one submission repo.** The hackathon takes a single public GitHub
 link, and DELTAX's commit history carries our pre-registration timestamps, so
