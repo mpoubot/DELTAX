@@ -26,7 +26,8 @@ MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
 MAX_SIZE_TO_OI_RATIO  = 0.05   # never take more than 5% of a strike's open interest
 MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the trade
-MIN_CREDIT_FRACTION   = 0.30   # credit structures: credit must be >= 30% of spread width
+CREDIT_DELTA_MULTIPLE = 0.90   # credit structures: credit/width >= 0.9 x short delta
+MIN_CREDIT_FRACTION   = 0.20   # fallback floor when short delta is unavailable
 MAX_SPREAD_PCT        = 0.15   # worst leg's bid/ask spread as a fraction of its mid
 
 
@@ -164,21 +165,36 @@ def gate_spread_quality(worst_leg_spread_pct: Optional[float]) -> GateResult:
     )
 
 
-def gate_credit_fraction(credit: float, width: float) -> GateResult:
-    """Credit structures: credit collected must be a fair share of the width.
+def gate_credit_fraction(credit: float, width: float,
+                         short_delta: Optional[float] = None) -> GateResult:
+    """Credit structures: is the premium fair for the risk actually taken?
 
     An OTM credit spread can never pass a 2:1 reward:risk test - its payoff IS
-    the probability. The quality control instead: credit >= 30% of the spread
-    width, so the premium actually compensates the risk taken.
+    its probability - so credit structures are judged on credit/width instead.
+
+    The floor is DELTA-RELATIVE: credit/width >= 0.9 x short delta. Short delta
+    approximates the probability of finishing in the money, so this asks the
+    economically meaningful question rather than applying one fixed number
+    across the whole 15-35 delta band. A flat floor cannot work: measured on
+    live chains, credit/width runs roughly 0.75-0.8 x delta, so any fixed floor
+    high enough to be selective at 35 delta silently bans every trade at 20.
+
+    Falls back to a flat floor only when delta is unavailable.
     """
     if width <= 0:
         return GateResult("credit_fraction", False, "width must be positive")
     frac = credit / width
-    ok = frac >= MIN_CREDIT_FRACTION
+    if short_delta is None:
+        floor = MIN_CREDIT_FRACTION
+        basis = f"flat floor {floor:.2f} (no delta)"
+    else:
+        floor = CREDIT_DELTA_MULTIPLE * abs(short_delta)
+        basis = f"{CREDIT_DELTA_MULTIPLE} x delta {abs(short_delta):.3f} = {floor:.3f}"
+    ok = frac >= floor
     return GateResult(
         "credit_fraction", ok,
-        f"credit/width {frac:.2f} vs floor {MIN_CREDIT_FRACTION}",
-        round(frac, 2), MIN_CREDIT_FRACTION,
+        f"credit/width {frac:.3f} vs {basis}",
+        round(frac, 4), round(floor, 4),
     )
 
 
@@ -292,6 +308,7 @@ def evaluate(
     open_portfolio_max_loss: float = 0.0,
     structure: str = "debit",
     width: Optional[float] = None,
+    short_delta: Optional[float] = None,
     worst_leg_spread_pct: Optional[float] = None,
     earnings_date: Optional[date] = None,
     halted: bool = False,
@@ -325,7 +342,8 @@ def evaluate(
     # spread (its payoff is its probability), so credit structures are judged
     # on credit/width instead.
     if structure == "credit":
-        gates.append(gate_credit_fraction(credit, width if width is not None else 0.0))
+        gates.append(gate_credit_fraction(
+            credit, width if width is not None else 0.0, short_delta))
     else:
         gates.append(gate_reward_risk(max_profit_per_contract, max_loss_per_contract))
 

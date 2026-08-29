@@ -206,6 +206,7 @@ def screen_income_book(feed, ledger, *, equity: float, today: date,
             today=today, open_interest=cand["open_interest"],
             open_portfolio_max_loss=committed,
             structure="credit", width=cand["width"],
+            short_delta=cand["short"]["delta"],
             worst_leg_spread_pct=cand["worst_leg_spread_pct"],
         )
         ledger.record(decision, context={

@@ -109,7 +109,7 @@ d = evaluate(
     symbol="SPY", equity=EQUITY, structure="credit", width=5.0,
     max_loss_per_contract=340.0, max_profit_per_contract=160.0,
     credit=1.60, expiry=GOOD_EXPIRY, today=TODAY,
-    open_interest=12_000,
+    open_interest=12_000, short_delta=0.30,
 )
 check("OTM credit spread now TRADES", d.decision == Decision.TRADE, d.failed_gate or "")
 check("credit_fraction gate ran", any(g.gate == "credit_fraction" for g in d.gates))
@@ -119,9 +119,17 @@ d = evaluate(
     symbol="SPY", equity=EQUITY, structure="credit", width=5.0,
     max_loss_per_contract=410.0, max_profit_per_contract=90.0,
     credit=0.90, expiry=GOOD_EXPIRY, today=TODAY, open_interest=12_000,
+    short_delta=0.30,
 )
-check("thin credit (18% of width) refused", d.decision == Decision.REFUSE and d.failed_gate == "credit_fraction")
-check("standalone: 30% floor boundary", gate_credit_fraction(1.50, 5.0).passed and not gate_credit_fraction(1.49, 5.0).passed)
+check("credit below 0.9 x delta refused", d.decision == Decision.REFUSE and d.failed_gate == "credit_fraction")
+check("delta-relative floor: 0.20 delta needs 18% of width",
+      gate_credit_fraction(0.95, 5.0, 0.20).passed and not gate_credit_fraction(0.85, 5.0, 0.20).passed)
+check("delta-relative floor: 0.35 delta needs 31.5% of width",
+      gate_credit_fraction(1.60, 5.0, 0.35).passed and not gate_credit_fraction(1.50, 5.0, 0.35).passed)
+check("sign of delta is irrelevant (puts are negative)",
+      gate_credit_fraction(0.95, 5.0, -0.20).passed)
+check("no delta -> flat fallback floor 0.20",
+      gate_credit_fraction(1.05, 5.0).passed and not gate_credit_fraction(0.95, 5.0).passed)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
