@@ -15,6 +15,7 @@ contribute.
 | [Stocks](stocks/00-index.md) | ✅ Alyrise (authoritative) + AURA Equity Lab + 4 videos | Engine spec, momentum research track, risk layer | [stocks/golden-rules.md](stocks/golden-rules.md) |
 | [Crypto](crypto/golden-rules.md) | ⛔ post-hackathon (AURA) | MEXC candidate + risk frame, parked | [crypto/golden-rules.md](crypto/golden-rules.md) |
 | [AURA platform](aura/00-platform.md) | ✅ methodology adopted corpus-wide | Validation stack, control plane, pre-committed bar · [independent review](aura/independent-review.md) | — |
+| [Execution & Timing](execution/golden-rules.md) | ✅ E1–E9 | Liquidity windows, structure-aware gates, two-book nomination, pre-registered branches | [execution/golden-rules.md](execution/golden-rules.md) |
 
 **Team sources:** videos A–I · **Elsa** (Alyrise stock engine) · **Matin / AURA**
 (source M: platform, methodology, crypto candidate, options criteria).

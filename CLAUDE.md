@@ -19,6 +19,7 @@ before that timestamp, it waits until after.
 | `research/stocks/golden-rules.md` | **Alyrise** — Elsa's stock engine spec (authoritative) + AURA Equity Lab research track |
 | `research/aura/00-platform.md` | **AURA** — Matin's platform & validation methodology, adopted corpus-wide |
 | `research/crypto/golden-rules.md` | Crypto (AURA) — ⛔ post-hackathon only; no crypto options on Alpaca |
+| `research/execution/golden-rules.md` | Execution & timing rules E1–E9 — entry windows, structure-aware gates, exits-at-entry |
 | `TEAM.md` | Team logistics, prize split, time zones |
 
 ---
