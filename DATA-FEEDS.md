@@ -256,3 +256,43 @@ Neither is needed. The gate's job is to **avoid** earnings, not to forecast
 them — and forecasting from news already failed validation once (TSLA
 playbook, p=0.44). Predicting an earnings reaction would be a fresh empirical
 claim requiring the full validation bar.
+
+
+---
+
+## Morning ritual
+
+`python3 -m deltax.morning` — one command, run pre-open. Answers: can we trade
+today, what regime are we in, which names are excluded and why, and which
+chains are too thin to use.
+
+```
+DELTAX morning brief — 2026-08-29
+market open: False   entries: BLOCKED  (market closed)
+
+REGIME  3/3 weak ['SPY','QQQ','IWM']   target short delta 0.2
+   posture: SPY call, QQQ call
+
+EARNINGS BLACKOUT  (4 blocked)
+   BLOCK TSLA   window 2026-08-07..2026-10-06
+   BLOCK AVGO   window 2026-08-25..2026-09-09
+   BLOCK COST   window 2026-08-13..2026-09-29
+   BLOCK PDD    foreign private issuer (files 20-F/6-K)
+   clear: AAPL, AMD, AMZN, GOOGL, JPM, META, MSFT, NFLX, NVDA
+```
+
+Deploy with `scripts/morning-ritual.sh`; cron line is in the file header.
+Output is also written to `data/morning-YYYY-MM-DD.json` for the record.
+
+### On scraping analyst-estimate pages
+
+Not done, deliberately. Those pages carry data the host licenses from third
+parties rather than owns, their terms prohibit automated extraction, and a
+*recurring* scraper is a sustained violation rather than a one-off — in a
+public repo attached to a competition entry. It is also JS-rendered, so it
+needs a headless browser and breaks on any markup change.
+
+The substantive reason: analyst estimates would only serve **direction
+forecasting**, which failed validation here already (TSLA playbook, p=0.44).
+The gates need **avoidance**, and SEC filings supply that from an
+authoritative source we are free to use.
