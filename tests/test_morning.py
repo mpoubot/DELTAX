@@ -3,7 +3,7 @@ import sys, os, tempfile
 from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from deltax.morning import brief, render, SATELLITE
-from deltax.screener import BENCHMARKS
+from deltax.screener import BENCHMARKS, TARGET_DELTA_BY_WEAK
 
 passed = failed = 0
 def check(n, c, d=""):
@@ -47,6 +47,9 @@ try:
     check("posture present", len(b["regime"]["posture"]) > 0)
     b3 = brief(FakeFeed(weak=BENCHMARKS), today=date(2026,8,29), check_earnings=False)
     check("3 weak -> delta 0.20", b3["regime"]["target_short_delta"] == 0.20)
+check("all targets sit in the backtested 0.20-0.22 band",
+      all(0.20 <= v <= 0.22 for v in TARGET_DELTA_BY_WEAK.values()),
+      str(TARGET_DELTA_BY_WEAK))
     check("3 weak -> calls only", all("call" in p for p in b3["regime"]["posture"]),
           str(b3["regime"]["posture"]))
 
