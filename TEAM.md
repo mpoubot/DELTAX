@@ -168,3 +168,20 @@ The social posts are a **separate $500 × 2 prize** and reward consistency over
 polish. Three people in three countries posting their own perspective on the build
 is more visible than one person posting three times — and it costs almost nothing
 alongside the work you're already doing.
+
+---
+
+## Team repositories
+
+| Repo | Owner | Role |
+|---|---|---|
+| `pautax007/DELTAX` | Pautax | **Submission repo.** Research corpus, gates, docs. Private now → public before the Fri 11:00 deadline |
+| `mpoubot/CAURAv0.5.2` | Matin | His AURA engine. Cloned locally at `../CAURAv0.5.2`. **Empty as of 2026-08-29** — pull when he pushes |
+
+**Policy — one submission repo.** The hackathon takes a single public GitHub
+link, and DELTAX's commit history carries our pre-registration timestamps, so
+DELTAX is the submission. CAURA stays Matin's dev repo; anything from it that
+the submission needs gets merged into DELTAX **with attribution and a
+license check first** — submissions must be original and MIT-compliant, so
+CAURA needs a LICENSE file before any of its code crosses over. Never add it
+as a submodule: a private-repo pointer breaks the moment DELTAX goes public.
