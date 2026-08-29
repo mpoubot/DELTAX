@@ -109,3 +109,76 @@ operational constraint, never cited as researched edge.
 3. **Execution-quality gaps are honestly listed but unpriced** — reconciliation,
    idempotency, partial fills. The listed MEXC gaps are precisely where live
    money is lost; the barriers-FALSE discipline is the right response.
+
+---
+
+# Review — Catalyst Engine proposal (2026-08-29)
+
+**[F]** Proposes a scored Fundamental/Event Catalyst State from three parts —
+earnings surprise, analyst revisions, market reaction — feeding the rule
+machine rather than generating orders directly.
+
+## Verdict: architecturally right, not buildable before Friday
+
+**[F] No conflict with our earnings gate.** Our blackout stops us holding
+*through* an announcement; this trades *after* one, once the gap risk has
+passed. They are complementary. This was the main thing to check and it is
+clean.
+
+**[I] The architecture is correct and matches rules we reached independently:**
+
+| His statement | Our rule |
+|---|---|
+| "That does not mean BUY" — score feeds the rule machine | **E4** triggers nominate, gates decide |
+| "Those weights should be researched, not assumed" | **E10** classify before encoding |
+| Output becomes MarketState, not an order | **E4** again |
+| Explicit warning on next-day revisions creating look-ahead | Our own point-in-time discipline |
+
+His look-ahead warning is the sharpest thing in the document and is exactly
+right.
+
+## Blocker: two of three components have no data
+
+**[F]** SEC gives actual reported figures but **not analyst consensus** — he
+states this himself. We verified: no analyst or estimate source exists anywhere
+in our codebase. Alpha Vantage and Finnhub would each need a key, terms review,
+and — for backtesting — *point-in-time historical* revisions, which is the
+expensive, rare kind. He identifies this as the main risk and he is right.
+
+So of his three scores, only **Market Reaction** is testable by us today.
+
+## We tested the testable third
+
+Earnings dates from SEC 8-K Item 2.02, reaction measured on the session after
+the filing, entry at the next open, 20 tickers, ~277 events:
+
+| Horizon | Bucket | n | Edge vs base | t |
+|---|---|---|---|---|
+| 5d | strong positive | 50 | +0.985 | +1.35 |
+| 5d | negative | 146 | −0.619 | −1.84 |
+| 10d | strong positive | 50 | +2.080 | +1.53 |
+| 10d | positive | 81 | +0.895 | **+1.81** |
+| 20d | strong positive | 50 | +0.145 | +0.06 |
+
+**Not proven — but the most promising directional hypothesis tested this week.**
+Every bucket is signed the right way at 5 and 10 days, and the effect decays to
+nothing by 20 days, which is what a genuine drift effect looks like rather than
+a spurious one. Compare the four we rejected: the VWAP regime filter ran
+*backwards*, and the breakout was flat.
+
+Nothing clears |t| > 1.96, the strong-positive bucket has n = 50, and nine
+cells were examined without correction.
+
+## Recommendation
+
+**Do not build before the deadline.** It is a fifth directional hypothesis, and
+four have failed this week; promoting an unproven one now would violate E10 and
+E11 in the same move.
+
+**Queue it as the top post-hackathon research item** — ahead of the ranker, the
+crypto engine and sector rotation. His instinct that market reaction may be the
+most valuable of the three components is supported by the *direction* of these
+results, if not yet by their significance.
+
+**Before it can be promoted:** a larger sample, point-in-time analyst data,
+multiple-testing correction, and a walk-forward split.
