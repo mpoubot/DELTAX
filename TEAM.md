@@ -144,7 +144,7 @@ European members would be racing the clock at 17:00–18:00 local.
       in sanctioned countries
 - [ ] **Prize split confirmed with Alpaca Finance** ⬅ the critical one
 - [ ] W-9 / W-8BEN forms prepared per member
-- [ ] Repo access granted to all three
+- [x] Repo access: **IlzeTheGreat** (Elsa) accepted · **mpoubot** (Matin) invite pending — he must accept the email
 
 ---
 
