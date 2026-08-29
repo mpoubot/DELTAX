@@ -1,0 +1,300 @@
+"""Deterministic risk gates for the DELTAX options agent.
+
+Design rule: these are PURE FUNCTIONS. No network, no clock, no globals.
+Everything they need is passed in. That makes them unit-testable without a
+market connection, and — more importantly — it means no model output can
+override them. The model proposes and may abstain; this code disposes.
+
+See STRATEGY.md and research/options/golden-rules.md for provenance.
+"""
+
+from dataclasses import dataclass, field, asdict
+from datetime import date
+from typing import Optional
+import json
+
+# ── Configuration ────────────────────────────────────────────────────────────
+# Every threshold traces to a rule in research/options/golden-rules.md
+
+PER_POSITION_RISK_PCT = 0.01   # 1% of equity max loss per position
+PORTFOLIO_RISK_PCT    = 0.05   # 5% of equity max loss across all open positions
+MIN_DTE               = 7      # rule R5: 0DTE banned; clear the gamma zone
+MAX_DTE               = 21     # short enough to resolve inside the contest window
+MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
+MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
+MAX_SIZE_TO_OI_RATIO  = 0.05   # never take more than 5% of a strike's open interest
+MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the trade
+
+
+class Decision:
+    """Outcome labels for a single evaluation."""
+    TRADE  = "TRADE"
+    REFUSE = "REFUSE"
+
+
+@dataclass
+class GateResult:
+    """Result of one gate check."""
+    gate: str
+    passed: bool
+    detail: str
+    observed: Optional[float] = None
+    threshold: Optional[float] = None
+
+
+@dataclass
+class DecisionRecord:
+    """Emitted for EVERY evaluation — trade or refusal.
+
+    This is the deliverable. An agent that explains why it declined 78 of 84
+    candidates demonstrates more than a P&L number can.
+    """
+    symbol: str
+    decision: str
+    gates: list = field(default_factory=list)
+    contracts: int = 0
+    max_loss: float = 0.0
+    max_profit: float = 0.0
+    notes: str = ""
+
+    @property
+    def failed_gate(self) -> Optional[str]:
+        for g in self.gates:
+            if not g.passed:
+                return g.gate
+        return None
+
+    def to_json(self) -> str:
+        d = asdict(self)
+        d["failed_gate"] = self.failed_gate
+        return json.dumps(d, default=str)
+
+
+# ── Individual gates ─────────────────────────────────────────────────────────
+
+def gate_expectancy(avg_win: float, avg_loss: float, win_rate: float) -> GateResult:
+    """E = (1 + W/L) * P - 1.  Trade only if E > 0.
+
+    Equivalent to P*(W/L) - (1-P): expectancy in R-multiples. This is the gate
+    the whole options corpus was missing — five sources selected on win rate
+    and none measured the tail.
+    """
+    if avg_loss <= 0:
+        return GateResult("expectancy", False, "avg_loss must be positive", None, None)
+    if not 0.0 <= win_rate <= 1.0:
+        return GateResult("expectancy", False, f"win_rate {win_rate} outside [0,1]", win_rate, None)
+    e = (1 + avg_win / avg_loss) * win_rate - 1
+    return GateResult(
+        "expectancy", e > 0,
+        f"E={e:.4f} ({'positive' if e > 0 else 'non-positive'})",
+        round(e, 4), 0.0,
+    )
+
+
+def gate_defined_risk(max_loss: Optional[float]) -> GateResult:
+    """Reject anything whose maximum loss is unknown or unbounded."""
+    if max_loss is None:
+        return GateResult("defined_risk", False, "max loss undefined — naked/unbounded")
+    if max_loss <= 0:
+        return GateResult("defined_risk", False, f"implausible max_loss {max_loss}", max_loss)
+    return GateResult("defined_risk", True, f"max loss bounded at {max_loss:.2f}", max_loss)
+
+
+def gate_position_size(max_loss: float, equity: float) -> GateResult:
+    """Per-position max loss must not exceed 1% of equity."""
+    cap = equity * PER_POSITION_RISK_PCT
+    ok = max_loss <= cap
+    return GateResult(
+        "position_size", ok,
+        f"max loss {max_loss:.2f} vs cap {cap:.2f}",
+        round(max_loss, 2), round(cap, 2),
+    )
+
+
+def gate_portfolio_risk(new_max_loss: float, open_max_loss: float, equity: float) -> GateResult:
+    """Total max loss across ALL positions must not exceed 5% of equity.
+
+    If every open position went to maximum loss simultaneously, the account
+    survives with 95% intact. A blow-up is arithmetically unavailable, not
+    merely unlikely.
+    """
+    cap = equity * PORTFOLIO_RISK_PCT
+    total = open_max_loss + new_max_loss
+    ok = total <= cap
+    return GateResult(
+        "portfolio_risk", ok,
+        f"total exposure {total:.2f} vs cap {cap:.2f}",
+        round(total, 2), round(cap, 2),
+    )
+
+
+def gate_dte(expiry: date, today: date) -> GateResult:
+    """Expiry must fall in the 7-21 day band.
+
+    Below 7: rule R5 territory. The WSJ source reports a 0DTE trader whose
+    worst day was ~8.7x his best. Above 21: won't resolve inside the window.
+    """
+    dte = (expiry - today).days
+    ok = MIN_DTE <= dte <= MAX_DTE
+    return GateResult(
+        "dte", ok,
+        f"{dte} DTE (band {MIN_DTE}-{MAX_DTE})",
+        dte, None,
+    )
+
+
+def gate_reward_risk(max_profit: float, max_loss: float) -> GateResult:
+    """Reward:risk must be at least 2:1, defined before entry."""
+    if max_loss <= 0:
+        return GateResult("reward_risk", False, "max_loss must be positive")
+    rr = max_profit / max_loss
+    ok = rr >= MIN_REWARD_RISK
+    return GateResult(
+        "reward_risk", ok,
+        f"R:R {rr:.2f} vs floor {MIN_REWARD_RISK}",
+        round(rr, 2), MIN_REWARD_RISK,
+    )
+
+
+def gate_liquidity(open_interest: Optional[int], contracts: int) -> GateResult:
+    """Open interest floor, and size must be small relative to it.
+
+    From video 02: if your order is a large fraction of open interest you fill
+    slowly or not at all — worst exactly when the trade is working. The live
+    SPCX chain (OI of 6 and 1) is the canonical example of what this rejects.
+    """
+    if open_interest is None:
+        return GateResult("liquidity", False, "open interest unknown")
+    if open_interest < MIN_OPEN_INTEREST:
+        return GateResult(
+            "liquidity", False,
+            f"OI {open_interest} below floor {MIN_OPEN_INTEREST}",
+            open_interest, MIN_OPEN_INTEREST,
+        )
+    ratio = contracts / open_interest
+    ok = ratio <= MAX_SIZE_TO_OI_RATIO
+    return GateResult(
+        "liquidity", ok,
+        f"size/OI {ratio:.4f} vs max {MAX_SIZE_TO_OI_RATIO}",
+        round(ratio, 4), MAX_SIZE_TO_OI_RATIO,
+    )
+
+
+def gate_credit(credit: float) -> GateResult:
+    """Minimum credit per contract, so fees don't consume the edge."""
+    ok = credit >= MIN_CREDIT
+    return GateResult(
+        "min_credit", ok,
+        f"credit {credit:.2f} vs floor {MIN_CREDIT}",
+        round(credit, 2), MIN_CREDIT,
+    )
+
+
+def gate_no_earnings_before_expiry(
+    earnings_date: Optional[date], expiry: date
+) -> GateResult:
+    """Refuse if an earnings announcement lands before expiry.
+
+    Every source in the corpus agrees earnings drive IV. Selling premium into
+    an earnings event looks fine right until the IV crush. News is used here
+    DEFENSIVELY — it can only veto a trade, never originate one, which is also
+    what makes the pipeline injection-resistant.
+    """
+    if earnings_date is None:
+        return GateResult("earnings", True, "no earnings scheduled before expiry")
+    if earnings_date <= expiry:
+        return GateResult(
+            "earnings", False,
+            f"earnings {earnings_date} falls on/before expiry {expiry}",
+        )
+    return GateResult("earnings", True, f"earnings {earnings_date} after expiry {expiry}")
+
+
+def gate_tradeable(halted: bool, corporate_action: Optional[str]) -> GateResult:
+    """Refuse halted names and pending corporate actions.
+
+    An options position in a halted underlying cannot be closed — which breaks
+    the assumption the portfolio cap relies on.
+    """
+    if halted:
+        return GateResult("tradeable", False, "underlying is halted")
+    if corporate_action:
+        return GateResult("tradeable", False, f"pending corporate action: {corporate_action}")
+    return GateResult("tradeable", True, "no halt or corporate action")
+
+
+# ── Sizing ───────────────────────────────────────────────────────────────────
+
+def size_from_risk(equity: float, max_loss_per_contract: float) -> int:
+    """contracts = risk budget / max loss per contract.
+
+    Size is DERIVED from defined risk, never chosen by conviction. Returns 0
+    when a single contract already exceeds the budget — which is a refusal,
+    not an error.
+    """
+    if max_loss_per_contract <= 0:
+        return 0
+    budget = equity * PER_POSITION_RISK_PCT
+    return int(budget // max_loss_per_contract)
+
+
+# ── Orchestration ────────────────────────────────────────────────────────────
+
+def evaluate(
+    *,
+    symbol: str,
+    equity: float,
+    max_loss_per_contract: float,
+    max_profit_per_contract: float,
+    credit: float,
+    expiry: date,
+    today: date,
+    open_interest: Optional[int],
+    open_portfolio_max_loss: float = 0.0,
+    earnings_date: Optional[date] = None,
+    halted: bool = False,
+    corporate_action: Optional[str] = None,
+    avg_win: Optional[float] = None,
+    avg_loss: Optional[float] = None,
+    win_rate: Optional[float] = None,
+) -> DecisionRecord:
+    """Run every gate and return a decision record.
+
+    ALL gates are evaluated even after one fails, so the record shows the full
+    picture rather than stopping at the first problem.
+    """
+    contracts = size_from_risk(equity, max_loss_per_contract)
+    total_max_loss = contracts * max_loss_per_contract
+    total_max_profit = contracts * max_profit_per_contract
+
+    gates = [
+        gate_tradeable(halted, corporate_action),
+        gate_defined_risk(max_loss_per_contract),
+        gate_dte(expiry, today),
+        gate_no_earnings_before_expiry(earnings_date, expiry),
+        gate_liquidity(open_interest, contracts),
+        gate_credit(credit),
+        gate_reward_risk(max_profit_per_contract, max_loss_per_contract),
+        gate_position_size(total_max_loss, equity),
+        gate_portfolio_risk(total_max_loss, open_portfolio_max_loss, equity),
+    ]
+
+    if None not in (avg_win, avg_loss, win_rate):
+        gates.append(gate_expectancy(avg_win, avg_loss, win_rate))
+
+    if contracts < 1:
+        gates.append(GateResult(
+            "sizing", False,
+            f"one contract ({max_loss_per_contract:.2f}) exceeds "
+            f"{PER_POSITION_RISK_PCT:.0%} budget ({equity * PER_POSITION_RISK_PCT:.2f})",
+        ))
+
+    passed = all(g.passed for g in gates)
+    return DecisionRecord(
+        symbol=symbol,
+        decision=Decision.TRADE if passed else Decision.REFUSE,
+        gates=gates,
+        contracts=contracts if passed else 0,
+        max_loss=round(total_max_loss, 2) if passed else 0.0,
+        max_profit=round(total_max_profit, 2) if passed else 0.0,
+    )
