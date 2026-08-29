@@ -127,6 +127,30 @@ class Ledger:
         self._prev_hash = entry["hash"]
         return entry
 
+    def record_raw(self, event: dict) -> dict:
+        """Append a non-gate event (order submission, fill, flatten).
+
+        Same hash chain as decisions, so the execution trail is tamper-evident
+        alongside the reasoning trail.
+        """
+        ts = self._clock()
+        entry = {
+            "schema_version": SCHEMA_VERSION,
+            "seq": self._seq,
+            "ts_utc": ts,
+            "run_id": self.run_id,
+            "rules_commit": self._rules_commit,
+            "prev_hash": self._prev_hash,
+            "kind": "event",
+            "event": event,
+        }
+        entry["hash"] = hashlib.sha256(_canonical(entry)).hexdigest()
+        with self._path_for(ts).open("a") as f:
+            f.write(json.dumps(entry, default=str) + "\n")
+        self._seq += 1
+        self._prev_hash = entry["hash"]
+        return entry
+
     def entries(self):
         """All entries across all day files, in sequence order."""
         out = []
@@ -154,7 +178,8 @@ class Ledger:
 
     def summary(self) -> dict:
         """The 'evaluated 84, refused 78' numbers, plus refusal reasons."""
-        es = self.entries()
+        es = [e for e in self.entries() if e.get("kind") != "event"]
+        events = [e for e in self.entries() if e.get("kind") == "event"]
         refusals_first, failures_all = {}, {}
         for e in es:
             if e["decision"] == "REFUSE" and e["failed_gate"]:
@@ -172,7 +197,8 @@ class Ledger:
                 sorted(failures_all.items(), key=lambda kv: -kv[1])),
             "committed_max_loss": round(
                 sum(e["max_loss"] for e in es if e["decision"] == "TRADE"), 2),
-            "runs": sorted({e["run_id"] for e in es}),
+            "events": len(events),
+            "runs": sorted({e["run_id"] for e in self.entries()}),
         }
 
 

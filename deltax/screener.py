@@ -16,7 +16,7 @@ from typing import Optional
 import re
 
 from deltax import feeds
-from deltax.gates import evaluate, MIN_DTE, MAX_DTE
+from deltax.gates import evaluate, MIN_DTE, MAX_DTE, MIN_OPEN_INTEREST
 
 BENCHMARKS = ["SPY", "QQQ", "IWM"]
 
@@ -152,11 +152,21 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
         return None
 
     short = min(eligible, key=lambda r: abs(r["delta"] - target_delta))
+    # Long leg: prefer the exact width, but accept the nearest liquid strike
+    # within a tolerance rather than abandoning an otherwise good candidate.
     want = short["strike"] - width if side == "put" else short["strike"] + width
     longs = [r for r in rows if abs(r["strike"] - want) < 0.01]
     if not longs:
-        return None
+        near = [r for r in rows
+                if r is not short
+                and abs(r["strike"] - want) <= max(1.0, width * 0.5)
+                and ((r["strike"] < short["strike"]) if side == "put"
+                     else (r["strike"] > short["strike"]))]
+        if not near:
+            return None
+        longs = [min(near, key=lambda r: abs(r["strike"] - want))]
     long_leg = longs[0]
+    width = abs(short["strike"] - long_leg["strike"])   # actual, not requested
 
     credit = short["bid"] - long_leg["ask"]          # conservative: sell bid, buy ask
     worst_spread = max(filter(None, [spread_pct(short["bid"], short["ask"]),
@@ -175,6 +185,32 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
                              oi_by_symbol.get(long_leg["symbol"], 0)),
         "expiry": parse_expiry(short["symbol"]),
     }
+
+
+def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
+                  strike_lo: float, strike_hi: float) -> Optional[tuple]:
+    """Pick the expiry in the band with the most liquid strikes.
+
+    The chain endpoint pages by expiry-then-strike, so a multi-expiry request
+    returns only the NEAREST expiries - typically thin weeklies - and never
+    reaches the liquid monthly. Every chain query must therefore target one
+    expiry at a time, and this picks which.
+
+    Returns (expiry, {symbol: open_interest}) or None.
+    """
+    best = None
+    contracts = feed.option_contracts(symbol, option_type=side, expiry_gte=gte,
+                                      expiry_lte=lte, strike_gte=strike_lo,
+                                      strike_lte=strike_hi, limit=1000)
+    by_exp: dict = {}
+    for c in contracts:
+        by_exp.setdefault(c["expiration_date"], {})[c["symbol"]] = _as_int(
+            c.get("open_interest"))
+    for exp, oi in by_exp.items():
+        liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
+        if best is None or liquid > best[2]:
+            best = (exp, oi, liquid)
+    return (best[0], best[1]) if best and best[2] >= 5 else None
 
 
 def _as_int(v) -> int:
