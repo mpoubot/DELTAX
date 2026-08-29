@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from deltax.gates import (
     evaluate, size_from_risk, Decision,
+    PER_POSITION_RISK_PCT, PORTFOLIO_RISK_PCT,
     gate_expectancy, gate_dte, gate_liquidity, gate_reward_risk,
     gate_portfolio_risk, gate_defined_risk, gate_no_earnings_before_expiry,
 )
@@ -59,8 +60,9 @@ check("1.5:1 rejected", not gate_reward_risk(150, 100).passed)
 check("2:1 accepted", gate_reward_risk(200, 100).passed)
 
 print("\n── portfolio cap ──")
-check("within 5% cap accepted", gate_portfolio_risk(1000, 3000, EQUITY).passed)
-check("breaching 5% cap rejected", not gate_portfolio_risk(1000, 4500, EQUITY).passed)
+CAP = EQUITY * PORTFOLIO_RISK_PCT
+check("within portfolio cap accepted", gate_portfolio_risk(1000, CAP - 2000, EQUITY).passed)
+check("breaching portfolio cap rejected", not gate_portfolio_risk(1000, CAP - 500, EQUITY).passed)
 
 print("\n── earnings veto ──")
 check("earnings before expiry vetoes", not gate_no_earnings_before_expiry(date(2026, 9, 5), GOOD_EXPIRY).passed)
@@ -68,9 +70,10 @@ check("earnings after expiry allowed", gate_no_earnings_before_expiry(date(2026,
 check("no earnings scheduled allowed", gate_no_earnings_before_expiry(None, GOOD_EXPIRY).passed)
 
 print("\n── sizing ──")
-check("$100 risk/contract -> 10 contracts on $100k", size_from_risk(EQUITY, 100) == 10,
+BUDGET = EQUITY * PER_POSITION_RISK_PCT
+check("sizing = budget // risk-per-contract", size_from_risk(EQUITY, 100) == int(BUDGET // 100),
       f"got {size_from_risk(EQUITY, 100)}")
-check("contract costlier than budget -> 0", size_from_risk(EQUITY, 5000) == 0)
+check("contract costlier than budget -> 0", size_from_risk(EQUITY, BUDGET + 1) == 0)
 
 print("\n── end-to-end: a clean candidate ──")
 d = evaluate(
@@ -81,8 +84,8 @@ d = evaluate(
     avg_win=250, avg_loss=100, win_rate=0.45,
 )
 check("clean candidate -> TRADE", d.decision == Decision.TRADE, d.failed_gate or "")
-check("sized to 10 contracts", d.contracts == 10, f"got {d.contracts}")
-check("max loss = 1% of equity", d.max_loss == 1000.0, f"got {d.max_loss}")
+check("sized to budget // 100", d.contracts == int(BUDGET // 100), f"got {d.contracts}")
+check("max loss = per-position budget", d.max_loss == float(int(BUDGET // 100) * 100), f"got {d.max_loss}")
 
 print("\n── end-to-end: the real SPCX chain ──")
 d = evaluate(

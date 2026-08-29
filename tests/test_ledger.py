@@ -4,7 +4,7 @@ import sys, os, json, tempfile, shutil
 from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from deltax.gates import evaluate
+from deltax.gates import evaluate, PER_POSITION_RISK_PCT
 from deltax.ledger import Ledger, GENESIS_HASH
 
 passed = failed = 0
@@ -92,7 +92,8 @@ try:
     check("4 trades, 1 refusal", s["trades"] == 4 and s["refusals"] == 1)
     check("refusal attributed to dte", s["refusals_by_first_failed_gate"] == {"dte": 1})
     check("liquidity failure also counted", s["gate_failure_counts"].get("liquidity") == 1)
-    check("committed max loss = 4 × $1000", s["committed_max_loss"] == 4000.0, str(s["committed_max_loss"]))
+    per_pos = float(int((EQUITY * PER_POSITION_RISK_PCT) // 100) * 100)
+    check("committed max loss = 4 × per-position budget", s["committed_max_loss"] == 4 * per_pos, str(s["committed_max_loss"]))
     check("both runs listed", s["runs"] == ["run2", "testrun"])
 finally:
     shutil.rmtree(tmp)

@@ -16,8 +16,10 @@ import json
 # ── Configuration ────────────────────────────────────────────────────────────
 # Every threshold traces to a rule in research/options/golden-rules.md
 
-PER_POSITION_RISK_PCT = 0.01   # 1% of equity max loss per position
-PORTFOLIO_RISK_PCT    = 0.05   # 5% of equity max loss across all open positions
+# Competition posture (see COMPETITION-PLAYBOOK.md; research posture was 1%/5%).
+# Pending team ratification before the Monday pre-registration commit.
+PER_POSITION_RISK_PCT = 0.02   # 2% of equity max loss per position
+PORTFOLIO_RISK_PCT    = 0.10   # 10% of equity max loss across all open positions
 MIN_DTE               = 7      # rule R5: 0DTE banned; clear the gamma zone
 MAX_DTE               = 21     # short enough to resolve inside the contest window
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
