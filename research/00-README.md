@@ -11,8 +11,13 @@ contribute.
 
 | Bucket | Status | Contributes | Synthesis |
 |---|---|---|---|
-| [Options](options/00-index.md) | ✅ 6 videos, 5 viewpoints | Instrument knowledge, structure selection, IV behaviour | [options/golden-rules.md](options/golden-rules.md) |
-| [Process](stocks/00-index.md) | ✅ 4 videos, 4 viewpoints | Risk, sizing, expectancy, validation, underlying selection | [stocks/golden-rules.md](stocks/golden-rules.md) |
+| [Options](options/00-index.md) | ✅ 6 videos + AURA criteria | Instrument knowledge, structure selection, gates | [options/golden-rules.md](options/golden-rules.md) |
+| [Stocks](stocks/00-index.md) | ✅ Alyrise (authoritative) + AURA Equity Lab + 4 videos | Engine spec, momentum research track, risk layer | [stocks/golden-rules.md](stocks/golden-rules.md) |
+| [Crypto](crypto/golden-rules.md) | ⛔ post-hackathon (AURA) | MEXC candidate + risk frame, parked | [crypto/golden-rules.md](crypto/golden-rules.md) |
+| [AURA platform](aura/00-platform.md) | ✅ methodology adopted corpus-wide | Validation stack, control plane, pre-committed bar · [independent review](aura/independent-review.md) | — |
+
+**Team sources:** videos A–I · **Elsa** (Alyrise stock engine) · **Matin / AURA**
+(source M: platform, methodology, crypto candidate, options criteria).
 
 **How they fit together.** The options bucket knows *what* to trade and had a
 fatal gap: five sources selected on win rate and none measured the tail. The

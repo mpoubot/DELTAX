@@ -322,3 +322,30 @@ one shared risk/execution/ledger layer. **Our options engine plugs into it as
 `engines/options/`**, and the shared intent schema, kill switch and reconciliation
 are common. That combination satisfies the requirement and is a stronger story
 than either engine alone.
+
+---
+
+## AURA Equity Lab (source M — Matin, 2026-08-29): second research track
+
+Alyrise remains the **authoritative stock engine**. AURA's Equity Lab v0.4.8
+enters as a **parallel research track**, explicitly paper-only and unvalidated
+by its own dossier.
+
+- **Signal Master:** EMA3/EMA8 bullish crossover + MACD histogram > 0 +
+  relative volume ≥ 1 · S&P 100 · entry next-day OPEN · 12 bp round-trip
+  friction. Models: A = 10-day close exit · B = ATR 2× stop / 4× target ·
+  C = both. Market baseline as benchmark.
+- **Pre-committed bar:** OOS PF > 1.10 AND >50% folds positive; no tuning
+  after holdout. **Adopted corpus-wide** as the numeric floor under our S3
+  validation ladder.
+
+**The two stock tracks are philosophical opposites — and that's useful:**
+Alyrise buys **dips** (mean reversion to VWAP references); Equity Lab buys
+**breakouts** (short-horizon momentum). Low correlation of errors if both
+survive validation; a clean A/B if only one does. Capital allocation between
+them is a team decision *after* both clear the bar — not before.
+
+**Challenges filed** (detail in `../aura/independent-review.md` §1):
+frozen-current-membership survivorship bias; RelVol ≥ 1 is a near-null filter;
+beta-matched-random null required before the crossover counts as signal;
+top-down macro→sector stack deferred until a single-layer edge exists.

@@ -250,3 +250,36 @@ Video 06 closes with its profiled trader planning to launch an options course.
 That is the pipeline that produced most of this corpus: volatile P&L → educator →
 content selected for what recruits students, not what survives the market. Weight
 sources by what they stand to gain, and let the backtest settle everything else.
+
+---
+
+## AURA convergence (source M — Matin, 2026-08-29)
+
+AURA's planned options module (v0.6.0) is **not built** — but its ten selection
+criteria, drafted independently, map almost one-to-one onto the gates we shipped:
+
+| AURA criterion | DELTAX gate | Status |
+|---|---|---|
+| Defined risk — known max loss before authorization | `gate_defined_risk` | ✅ shipped |
+| Liquidity — volume / OI / tradability | `gate_liquidity` | ✅ shipped |
+| DTE window | `gate_dte` (7–21) | ✅ shipped |
+| Premium / risk | `gate_credit` + `gate_reward_risk` | ✅ shipped |
+| Event risk — stand down around catalysts | `gate_no_earnings_before_expiry` + `gate_tradeable` | ✅ shipped |
+| Position limits — portfolio & underlying concentration | `gate_position_size` + `gate_portfolio_risk` | ✅ shipped (per-underlying cap still to add) |
+| **Bid/ask quality — tight spreads, acceptable slippage** | — | ❌ **gap: add a max-spread gate** |
+| **IV / IV rank — regime relative to history** | — | ❌ **gap: add IV-rank input** |
+| Delta — target exposure range | — | partially via R3 band; not a gate yet |
+| Exit feasibility — predefined exits | flatten routine planned | 🔶 build |
+
+Independent triple convergence on "defined-risk only, AI proposes / deterministic
+code disposes" — ours, Elsa's, Matin's — is now the headline of the write-up.
+
+**Adopted from AURA's research protocol** for the options backtest queue:
+survivorship/expired-contract handling, historical bid/ask realism, entry/exit
+timestamps, assignment and corporate actions, event-aware holdouts,
+**multiple-testing correction**, and the pre-committed acceptance bar
+(OOS PF > 1.10 AND >50% folds positive) layered on top of S0's E > 0.
+
+**Honesty note carried from his AVOID list:** our 7–21 DTE band is an
+operational constraint of the competition window — never to be cited as
+researched edge.

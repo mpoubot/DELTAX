@@ -16,7 +16,9 @@ before that timestamp, it waits until after.
 | `HACKATHON-RULES.md` | Binding competition constraints + open red flags |
 | `STRATEGY.md` | Why the agent is built the way it is; the design response to the short-window P&L problem |
 | `research/options/golden-rules.md` | Options rules from the video corpus, with the expectancy gate |
-| `research/stocks/golden-rules.md` | **Alyrise** — Elsa's stock engine spec. Authoritative for stocks; never apply to options |
+| `research/stocks/golden-rules.md` | **Alyrise** — Elsa's stock engine spec (authoritative) + AURA Equity Lab research track |
+| `research/aura/00-platform.md` | **AURA** — Matin's platform & validation methodology, adopted corpus-wide |
+| `research/crypto/golden-rules.md` | Crypto (AURA) — ⛔ post-hackathon only; no crypto options on Alpaca |
 | `TEAM.md` | Team logistics, prize split, time zones |
 
 ---
@@ -70,6 +72,10 @@ criterion of five.
 
 ## Working principles
 
+- **Validation bar (adopted from AURA):** pre-committed before looking — OOS
+  profit factor > 1.10 AND >50% of walk-forward folds positive, on top of the
+  expectancy gate. **Never tune after holdout.** Failed branches are stopped,
+  not tuned until they pass.
 - **Never promote a rule on win rate.** Expectancy only. This is how the earlier
   TSLA playbook failed validation, and the entire video corpus is built on the
   assumption that killed it.
