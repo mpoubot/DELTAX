@@ -153,3 +153,39 @@ demonstrates and that killed the TSLA playbook.
 Note that "bug" is a fourth outcome and the most valuable one that session
 produced. Inspecting live data is excellent for finding what is *broken* and
 what is *structurally true*; it cannot establish what is *profitable*.
+
+## E11 — Direction-neutral until a directional edge is proven
+
+> Absent a directional signal that has cleared the validation bar, a premium
+> seller takes **both sides** (iron condor) rather than picking one. Choosing a
+> side on an unvalidated signal is an unpriced directional bet wearing the
+> costume of a strategy.
+
+**Evidence.** Our port of the SPY/QQQ/IWM VWAP regime filter was driving the
+income book's choice between put and call spreads. Tested over 2,679 sessions
+(2016–2026) against SPY forward returns:
+
+| Weak count | n | +5d mean | up % |
+|---|---|---|---|
+| 0 | 1,114 | +0.184% | 59.7% |
+| 1 | 412 | +0.341% | 62.4% |
+| 2 | 324 | +0.414% | 63.6% |
+| 3 | 824 | +0.329% | 61.5% |
+| *base rate* | *2,674* | *+0.281%* | *61.1%* |
+
+No separation (0-weak minus 3-weak: t = −1.29, not significant), the ordering
+is non-monotonic, and the sign runs **opposite** to the hypothesis — the
+supposedly bullish 0-weak bucket has the *lowest* forward return.
+
+Worse for the posture we had planned: after 3/3 weak — which our rules mapped
+to **call** credit spreads, a bearish position — SPY still rose 61.5% of the
+time over 5 days and 67.2% over 14, essentially matching the unconditional base
+rate. We would have been selling calls into a market that drifts up.
+
+**Scope.** This tests *our repurposing*, not Elsa's engine. Alyrise uses the
+filter to deepen a dip-buying entry threshold on stocks, which is a different
+claim we have not tested and are not disputing.
+
+**Consequence.** The filter is demoted from direction selection to context. The
+income book defaults to **iron condors** — both sides gated and sized
+independently — until a directional signal clears the bar.
