@@ -151,3 +151,52 @@ result says it wouldn't work anyway.
 
 If there's time after the agent is running end to end, gate 3 is the next
 addition. Everything below that line is post-hackathon.
+
+
+---
+
+## Feed registry (`deltax/rss.py`)
+
+Generic RSS/Atom ingestion, **metadata only** — title, link, timestamp,
+categories. Article bodies are never stored: licensed third-party content the
+agent does not need.
+
+| Feed | Bucket | Active | Why |
+|---|---|---|---|
+| `coindesk` | crypto | ❌ | Registered for the crypto engine. Flag flip when that bucket ships — no new code |
+| `oilprice` | macro | ❌ | Energy/macro context; informs no gate the agent runs today |
+| `wsj_markets` | equities | ❌ | ⚠️ **Dead feed** — newest item 2025-01-27, ~19 months stale |
+| `sec_8k` | equities | ⚙️ | The one targeting a real gap. Needs `DELTAX_SEC_UA` |
+
+**`active` means: can this feed inform a gate the agent currently runs?** A feed
+can be wired and registered without pretending it affects decisions.
+
+### The freshness guard
+
+`is_stale()` rejects any feed whose newest item is older than 48 hours.
+
+This exists because of a live finding: the WSJ Markets feed in the team's n8n
+"Market Notes to Telegram" workflow **parses perfectly and returns well-formed
+items from January 2025.** A dead feed does not error — it quietly serves
+19-month-old headlines forever. Parsing is not liveness, and any feed must pass
+this check before informing a decision.
+
+*(Worth fixing in the n8n workflow too — it has been publishing stale market
+notes to Telegram.)*
+
+### SEC EDGAR
+
+8-K Item 2.02 filings are earnings releases — the authoritative source for the
+earnings gate. SEC returns **403 to generic user agents**; their policy requires
+a real name and contact email:
+
+```bash
+export DELTAX_SEC_UA="Your Name your@email.com"
+```
+
+Read from the environment, never hardcoded. Verified working against AVGO's CIK.
+
+**Caveat:** 8-K is retrospective. It confirms when earnings *happened*, not when
+the next one *will* be. It establishes cadence; a confirmed forward date still
+comes from the company's IR page. Under E10 that inference is **empirical**, not
+structural.

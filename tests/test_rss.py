@@ -50,5 +50,20 @@ if not os.environ.get("DELTAX_SEC_UA"):
     except RuntimeError: check("SEC refuses without UA", True)
     check("sec_8k inactive without UA", not FEEDS["sec_8k"][2])
 
+
+print("\n── freshness guard ──")
+from deltax.rss import is_stale, Item, MAX_FEED_AGE_HOURS
+from datetime import datetime, timezone, timedelta
+now = datetime.now(timezone.utc)
+fresh   = [Item("a", "u", now - timedelta(hours=2), [], "t")]
+old     = [Item("a", "u", now - timedelta(days=580), [], "t")]
+undated = [Item("a", "u", None, [], "t")]
+check("fresh feed passes", is_stale(fresh)[0] is False)
+check("19-month-old feed flagged stale", is_stale(old)[0] is True)
+check("age reported in hours", is_stale(old)[1] > 13000, str(is_stale(old)[1]))
+check("undated feed treated as stale", is_stale(undated) == (True, None))
+check("threshold is 48h", MAX_FEED_AGE_HOURS == 48)
+check("wsj registered but inactive", not FEEDS["wsj_markets"][2])
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

@@ -48,6 +48,15 @@ FEEDS = {
         "macro",
         False,   # energy/macro context; informs no gate the agent currently runs
     ),
+    # From the team's n8n "Market Notes to Telegram" workflow. Registered so the
+    # source is tracked - but see is_stale(): as of 2026-08-29 its newest item
+    # was from 2025-01-27, i.e. the feed is dead and was silently serving
+    # 19-month-old headlines into that workflow.
+    "wsj_markets": (
+        "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+        "equities",
+        False,
+    ),
     # 8-K Item 2.02 is where earnings releases are filed - the authoritative
     # source for the earnings gate. Needs DELTAX_SEC_UA set; inactive without it.
     "sec_8k": (
@@ -131,6 +140,23 @@ def poll_sec_8k(symbol: str) -> list:
         raise KeyError(f"no CIK registered for {symbol}; add it to rss.CIK")
     url = FEEDS["sec_8k"][0].format(cik=cik)
     return parse(fetch(url, user_agent=SEC_USER_AGENT), "sec_8k")
+
+
+MAX_FEED_AGE_HOURS = 48
+
+
+def is_stale(items: list, max_age_hours: int = MAX_FEED_AGE_HOURS) -> tuple:
+    """(stale, age_hours). A feed that parses is not a feed that is alive.
+
+    Dead feeds fail silently - they keep returning well-formed, months-old
+    items. Any feed must pass this before it can inform a decision.
+    """
+    dated = [i.published for i in items if i.published]
+    if not dated:
+        return True, None
+    newest = max(dated)
+    age = (datetime.now(timezone.utc) - newest).total_seconds() / 3600
+    return age > max_age_hours, round(age, 1)
 
 
 def active_feeds(bucket: str) -> list:
