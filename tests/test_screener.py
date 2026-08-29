@@ -60,8 +60,21 @@ oi = {s: 5000 for s in chain}
 c = select_vertical(chain, side="put", target_delta=0.30, width=5.0, oi_by_symbol=oi)
 check("short strike nearest 0.30 delta = 177.5", c["short"]["strike"] == 177.5, str(c["short"]["strike"]))
 check("long leg one width below = 172.5", c["long"]["strike"] == 172.5, str(c["long"]["strike"]))
-check("credit uses short bid - long ask", abs(c["credit"] - (3.91 - 2.63)) < 1e-9, str(c["credit"]))
-check("max loss = (width - credit) x 100", abs(c["max_loss_per_contract"] - 372.0) < 0.01, str(c["max_loss_per_contract"]))
+# Pricing is mode-dependent; assert each explicitly rather than the default.
+cw = select_vertical(chain, side="put", target_delta=0.30, width=5.0,
+                     oi_by_symbol=oi, pricing="worst")
+check("worst = short bid - long ask", abs(cw["credit"] - (3.91 - 2.63)) < 1e-9, str(cw["credit"]))
+cm = select_vertical(chain, side="put", target_delta=0.30, width=5.0,
+                     oi_by_symbol=oi, pricing="mid")
+check("mid = mid - mid", abs(cm["credit"] - (3.915 - 2.605)) < 1e-9, str(cm["credit"]))
+ch_ = select_vertical(chain, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=oi, pricing="haircut")
+check("haircut sits between worst and mid",
+      cw["credit"] < ch_["credit"] < cm["credit"], f'{cw["credit"]}/{ch_["credit"]}/{cm["credit"]}')
+check("haircut concedes 25% of combined spread",
+      abs(ch_["credit"] - (1.31 - 0.25 * 0.06)) < 1e-9, str(ch_["credit"]))
+check("max loss = (width - credit) x 100",
+      abs(cw["max_loss_per_contract"] - 372.0) < 0.01, str(cw["max_loss_per_contract"]))
 check("expiry extracted", c["expiry"] == "2026-09-18")
 # wider chain so the long leg exists further out
 wide = dict(chain)
