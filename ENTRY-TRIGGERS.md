@@ -16,7 +16,9 @@ Matin's signal family ─► satellite candidates┘
 
 ## Book 1 — Income core trigger (Elsa / Alyrise)
 
-**Cadence:** twice daily — 10:00 ET (after opening noise) and 13:30 ET.
+**Cadence:** twice daily — 10:00 ET (after opening noise) and **14:30 ET**
+(start of the afternoon liquidity window — the prior 13:30 check sat in the
+lunch lull, where thin books widen spreads on multi-leg orders).
 
 **Step 1 — Regime.** For SPY, QQQ, IWM: is `latest_price < intraday_vwap`?
 Count the weak ones. (Alyrise §4, verbatim. Data: `alpaca data multi-snapshots`.)
@@ -87,10 +89,31 @@ red-Thursday branch may carry ≤ 4% equity into Friday, flat by 10:15 ET.
    spreads → gates → ledger → orders.
 3. **10:00** — regime posture → nominate 2–3 income spreads → gates → ledger
    → mleg orders at mid.
-4. **13:30** — regime re-check; top up core if a slot is free and gates pass.
+4. **14:30** — regime re-check; top up core if a slot is free and gates pass.
 5. **Every fill** → GTC exit order placed immediately (50% credit / 100% debit).
 6. **Evening** — daily-bar scan for tomorrow's satellite entries;
    `python3 -m deltax.ledger logs/` summary posted to the team.
+
+## Session-timing rules (execution hygiene, not edge)
+
+Intraday liquidity is U-shaped — deep near the open and close, thin over
+lunch. For an agent working multi-leg limit orders at mid, that's a fill-quality
+issue, so entries are confined to the deep windows:
+
+| ET window | Rule |
+|---|---|
+| 9:30–9:45 | **No entries.** Opening auction noise; spreads at their widest |
+| 9:45–10:30 | Satellite entry window (morning liquidity) |
+| 10:00–10:30 | Core entry window #1 |
+| 11:00–14:00 | **No new entries.** Lunch lull — worst mleg fills of the day. Exits (50%-credit / 100%-debit GTCs) remain live |
+| 14:30–15:15 | Core entry window #2 + any satellite top-up |
+| after 15:15 | **No new entries.** Late-day volatility; overnight gap risk on a fresh position isn't compensated |
+| any time | Exit orders always active; flatten routines exempt |
+
+Provenance note: prompted by a session-clock infographic (folklore-grade
+source), retained only where it matches the documented U-shaped intraday
+volume pattern. The "10:30 reversal" claim and similar are **not** encoded —
+timing here is fill-quality hygiene, never a signal.
 
 ## Who owns what
 
