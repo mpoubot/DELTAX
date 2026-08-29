@@ -227,3 +227,34 @@ income-core positions — credit structures need no directional edge, we have 19
 qualified underlyings for what was 3 slots, and E11 already defaults them to
 direction-neutral condors. The signal returns to the backtest queue for a
 proper walk-forward with adequate sample, post-hackathon.
+
+## E13 — Validate the data before calibrating against it
+
+> Before any threshold is tuned, the data behind it must pass an internal
+> consistency check. A number fitted to broken quotes is worse than no number,
+> because it looks calibrated.
+
+**Evidence.** A full afternoon of threshold analysis — pricing model, minimum
+credit, credit fraction — was run against Saturday quotes and produced
+confident-looking conclusions. All of it was worthless. The quotes were frozen
+at the Friday close and structurally impossible:
+
+- bid/ask spreads of **122%, 180%, 99%** of mid
+- **seven strike pairs where a lower put strike bid higher than a higher one**,
+  which arbitrage forbids
+- four spreads priced at **negative credit**, which cannot occur for a vertical
+  credit structure
+
+Every "the gates refuse everything" finding from that session was an artifact.
+Worse, the natural response — loosening `min_credit` or `credit_fraction` until
+trades appeared — would have permanently weakened live gates to fit dead data.
+
+**The gate.** `gate_quote_sanity` runs **first**, before any economic gate:
+non-positive credit on a credit structure, or quotes older than one hour, are
+rejected as broken input rather than as unattractive trades. It is classified
+**structural** under E10 — put prices rise with strike by arbitrage, always.
+
+**Consequence.** Thresholds are calibrated only against live-session data.
+`PRICING_MODE` is set to `haircut` (mid, conceding 25% of the crossed spread)
+on reasoning rather than measurement, and is explicitly flagged for
+recalibration once live quotes exist.

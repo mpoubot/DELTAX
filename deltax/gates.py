@@ -29,6 +29,7 @@ MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the tr
 CREDIT_DELTA_MULTIPLE = 0.90   # credit structures: credit/width >= 0.9 x short delta
 MIN_CREDIT_FRACTION   = 0.20   # fallback floor when short delta is unavailable
 MAX_SPREAD_PCT        = 0.15   # worst leg's bid/ask spread as a fraction of its mid
+MAX_QUOTE_AGE_HOURS   = 1.0    # stale quotes cannot be priced or calibrated against
 
 
 class Decision:
@@ -146,6 +147,34 @@ def gate_dte(expiry: date, today: date) -> GateResult:
         f"{dte} DTE (band {MIN_DTE}-{MAX_DTE})",
         dte, None,
     )
+
+
+def gate_quote_sanity(credit: Optional[float], structure: str,
+                      quote_age_hours: Optional[float] = None) -> GateResult:
+    """Reject structurally impossible or stale quotes before pricing them.
+
+    A vertical CREDIT spread sells the nearer strike and buys the further one,
+    so its credit is positive by arbitrage. A non-positive credit means the
+    quotes are broken - crossed, stale, or timestamped inconsistently - not
+    that the trade is unattractive.
+
+    Found live: weekend quotes showed bid/ask spreads of 120-180% of mid and
+    seven strike pairs where a lower put strike bid HIGHER than a higher one.
+    Every threshold calibrated against that data would have been meaningless.
+    """
+    if credit is None:
+        return GateResult("quote_sanity", False, "no credit computable")
+    if structure == "credit" and credit <= 0:
+        return GateResult(
+            "quote_sanity", False,
+            f"credit {credit:.2f} <= 0 - impossible for a credit spread; "
+            f"quotes are crossed or stale", round(credit, 4), 0.0)
+    if quote_age_hours is not None and quote_age_hours > MAX_QUOTE_AGE_HOURS:
+        return GateResult(
+            "quote_sanity", False,
+            f"quotes {quote_age_hours:.1f}h old vs max {MAX_QUOTE_AGE_HOURS}h",
+            round(quote_age_hours, 1), MAX_QUOTE_AGE_HOURS)
+    return GateResult("quote_sanity", True, "quotes internally consistent")
 
 
 def gate_spread_quality(worst_leg_spread_pct: Optional[float]) -> GateResult:
@@ -310,6 +339,7 @@ def evaluate(
     width: Optional[float] = None,
     short_delta: Optional[float] = None,
     worst_leg_spread_pct: Optional[float] = None,
+    quote_age_hours: Optional[float] = None,
     earnings_date: Optional[date] = None,
     halted: bool = False,
     corporate_action: Optional[str] = None,
@@ -327,6 +357,7 @@ def evaluate(
     total_max_profit = contracts * max_profit_per_contract
 
     gates = [
+        gate_quote_sanity(credit, structure, quote_age_hours),
         gate_tradeable(halted, corporate_action),
         gate_defined_risk(max_loss_per_contract),
         gate_dte(expiry, today),

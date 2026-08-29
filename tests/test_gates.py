@@ -131,5 +131,26 @@ check("sign of delta is irrelevant (puts are negative)",
 check("no delta -> flat fallback floor 0.20",
       gate_credit_fraction(1.05, 5.0).passed and not gate_credit_fraction(0.95, 5.0).passed)
 
+
+print("\n── quote sanity (weekend-data guard) ──")
+from deltax.gates import gate_quote_sanity, MAX_QUOTE_AGE_HOURS
+check("negative credit on a credit spread rejected",
+      not gate_quote_sanity(-0.04, "credit").passed)
+check("zero credit rejected", not gate_quote_sanity(0.0, "credit").passed)
+check("positive credit accepted", gate_quote_sanity(1.20, "credit").passed)
+check("debit structures are not credit-signed",
+      gate_quote_sanity(-0.04, "debit").passed)
+check("missing credit rejected", not gate_quote_sanity(None, "credit").passed)
+check("stale quotes rejected", not gate_quote_sanity(1.2, "credit", quote_age_hours=48).passed)
+check("fresh quotes accepted", gate_quote_sanity(1.2, "credit", quote_age_hours=0.2).passed)
+check("reason names the cause",
+      "crossed or stale" in gate_quote_sanity(-0.01, "credit").detail)
+d = evaluate(symbol="XLK", equity=EQUITY, structure="credit", width=3.0,
+             max_loss_per_contract=301.0, max_profit_per_contract=-1.0,
+             credit=-0.01, expiry=GOOD_EXPIRY, today=TODAY,
+             open_interest=5000, short_delta=0.19)
+check("broken quote fails first, before economic gates",
+      d.decision == Decision.REFUSE and d.failed_gate == "quote_sanity", str(d.failed_gate))
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

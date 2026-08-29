@@ -23,6 +23,15 @@ BENCHMARKS = ["SPY", "QQQ", "IWM"]
 # Elsa's dynamic-threshold table, ported: more weak benchmarks -> further OTM.
 TARGET_DELTA_BY_WEAK = {0: 0.30, 1: 0.27, 2: 0.24, 3: 0.20}
 DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
+
+# How to price a spread when evaluating it. We EVALUATE at one price and
+# EXECUTE at a limit, so the two must agree or we either refuse trades we would
+# have got filled on, or book fills we never get.
+#   worst  - sell the bid, buy the ask. Assumes we cross both spreads.
+#   mid    - mid-to-mid. Assumes a perfect fill at the midpoint.
+#   haircut- mid, giving back HAIRCUT of the combined spread. Realistic.
+PRICING_MODE = "haircut"
+SPREAD_HAIRCUT = 0.25
 # The chain endpoint pages from the lowest strike, so an unbounded request
 # returns deep-ITM contracts with unpopulated greeks. Always bound around spot.
 STRIKE_BAND = {"put": (0.80, 1.02), "call": (0.98, 1.20)}
@@ -129,12 +138,30 @@ def spread_pct(bid, ask) -> Optional[float]:
     return None if mid <= 0 else (ask - bid) / mid
 
 
+def _price_credit(short: dict, long_leg: dict, mode: str) -> float:
+    """Net credit for selling `short` and buying `long_leg`, per pricing mode."""
+    worst = short["bid"] - long_leg["ask"]
+    s_mid = (short["bid"] + short["ask"]) / 2
+    l_mid = (long_leg["bid"] + long_leg["ask"]) / 2
+    mid = s_mid - l_mid
+    if mode == "worst":
+        return worst
+    if mode == "mid":
+        return mid
+    # haircut: start at mid, concede a fraction of the total spread we would
+    # have to cross. Sits between the two, and is what a resting limit that
+    # re-pegs toward the market should realistically achieve.
+    combined = (short["ask"] - short["bid"]) + (long_leg["ask"] - long_leg["bid"])
+    return mid - SPREAD_HAIRCUT * combined
+
+
 def select_vertical(chain: dict, *, side: str, target_delta: float, width: float,
-                    oi_by_symbol: dict) -> Optional[dict]:
+                    oi_by_symbol: dict, pricing: str = None) -> Optional[dict]:
     """Pick the short strike nearest target delta, then the long leg one width away.
 
     Returns a candidate dict, or None when the chain can't support the structure.
     """
+    pricing = pricing or PRICING_MODE
     rows = []
     for sym, c in chain.items():
         d, (bid, ask) = feeds.delta(c), feeds.quote(c)
@@ -168,7 +195,7 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
     long_leg = longs[0]
     width = abs(short["strike"] - long_leg["strike"])   # actual, not requested
 
-    credit = short["bid"] - long_leg["ask"]          # conservative: sell bid, buy ask
+    credit = _price_credit(short, long_leg, pricing)
     worst_spread = max(filter(None, [spread_pct(short["bid"], short["ask"]),
                                      spread_pct(long_leg["bid"], long_leg["ask"])]),
                        default=None)
