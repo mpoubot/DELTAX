@@ -345,3 +345,46 @@ historically. Weekly entries on 14-day holds overlap, so the samples are
 serially correlated and the effective n is below 300. Strikes are placed on
 realized rather than implied volatility, omitting the variance risk premium
 (would help); no costs are charged (would hurt).
+
+## E16 — A global permission state sits above strategy
+
+> One state governs whether trading is allowed at all. Strategy cannot override
+> it, evidence only *recommends* it, and when inputs conflict the agent adopts
+> the **most restrictive** reading — never the average, never the optimistic one.
+
+States, ordered by restriction: `NORMAL` → `CAUTION` → `DEFENSIVE` →
+`NO_NEW_POSITIONS` → `HALT`.
+
+**Source: Matin's live-architecture proposal.** His framing is right and
+generalises a principle we already held in scattered form — E13's data
+validation, S5's kill-switch thresholds, and the market-closed check were each
+enforcing this idea locally. Now one component owns it.
+
+**Translated for a condor book.** Put credit spreads carry the long-side
+exposure, call credit spreads the short side. `DEFENSIVE` therefore blocks put
+spreads while still permitting calls — bearish exposure without ever shorting
+stock, which sidesteps borrow and locate entirely.
+
+**What raises the state**
+
+| Trigger | State |
+|---|---|
+| Stale or incomplete feed | HALT |
+| Market status unknown | HALT |
+| Live drawdown past the backtested worst case (S5) | HALT |
+| VIX +30% or more | NO_NEW_POSITIONS |
+| Market closed | NO_NEW_POSITIONS |
+| VIX +15% | DEFENSIVE |
+| All three benchmarks weak | DEFENSIVE |
+| Any required reading unavailable | CAUTION |
+
+**Fail-closed throughout.** A missing input never yields `NORMAL`. This is
+Matin's "DATA UNCERTAIN → FAIL CLOSED → HALT", applied to every field.
+
+**What we did NOT adopt.** His short-equity engine: a call credit spread is
+already defined-risk bearish exposure, so shorting stock adds borrow, locate
+and unbounded risk to reach a place we can already stand. His Market
+Intelligence layer (Asian markets, futures, three daily news scans) is sound
+architecture but is an empirical claim about global risk-off predicting local
+outcomes — untested, and E10 requires that testing before it can gate anything.
+Queued behind the catalyst engine.

@@ -12,6 +12,7 @@ import sys
 
 from deltax import execute
 from deltax.calendar import entry_allowed
+from deltax.permission import Evidence, recommend_state, gate_permission
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
 from deltax.screener import (INCOME_UNIVERSE, DEFAULT_WIDTH, TARGET_DELTA_BY_WEAK,
@@ -35,6 +36,19 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     regime = assess_regime(snaps)
     target = TARGET_DELTA_BY_WEAK[min(regime.weak_count, 3)]
 
+    # Global permission sits ABOVE strategy - no candidate can override it.
+    perm = recommend_state(Evidence(
+        benchmarks_weak=regime.weak_count,
+        data_stale=not regime.complete,
+        market_open=bool(clock.get("is_open")),
+        drawdown_pct=0.0,
+    ))
+    ledger.record_raw({"action": "permission", "state": perm.state,
+                       "reasons": perm.reasons})
+    if perm.policy["size_factor"] <= 0 and not force_window:
+        return {"regime": regime, "traded": [], "refused": [],
+                "committed": 0.0, "skipped": f"{perm.state}: {perm.reasons[0]}"}
+
     gte = str(today.fromordinal(today.toordinal() + MIN_DTE))
     lte = str(today.fromordinal(today.toordinal() + MAX_DTE))
     committed, traded, refused = 0.0, [], []
@@ -49,6 +63,10 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             continue
         # E11: no directional edge proven, so nominate BOTH sides.
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
+            allowed, why = gate_permission(perm, side)
+            if not allowed:
+                refused.append((symbol, side, f"permission:{perm.state}"))
+                continue
             klo, khi = round(px*lo, 2), round(px*hi, 2)
             picked = choose_expiry(feed, symbol, side, gte, lte, klo, khi)
             if not picked:
