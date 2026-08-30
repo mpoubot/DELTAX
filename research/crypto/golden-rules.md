@@ -73,3 +73,48 @@ Note what it does *not* solve: CoinDesk carries no ticker tagging and no
 earnings or halt data, so it informs none of the gates the options agent runs
 today. It becomes useful when there are crypto positions for it to be news
 *about*.
+
+## C-E26 — The whole venue was screened. Nothing has an edge.
+
+> Adding coins was never going to fix the crypto sleeve. The problem is not
+> which coin — it is that spot crypto without an options overlay has no
+> measurable edge anywhere on this venue.
+
+**Source.** Matin supplied Alpaca's full crypto asset list (73 pairs,
+`data/alpaca_crypto_assets.csv`). That makes this an exhaustive test rather
+than a sample: 33 tradeable USD pairs after removing stablecoins, 22 with
+enough history for a 4-day hold.
+
+| | |
+|---|---|
+| Pairs tested | 22 |
+| Significant at 95% (t ≥ 1.96) | **0** |
+| Surviving Bonferroni (t ≥ 3.81) | **0** |
+| **Median win rate** | **43.8%** — below a coin flip |
+| Pairs with negative mean return | 14 of 22 |
+
+The best result, SKY at t = 1.92, has n = 45 and does not clear even the
+uncorrected threshold, let alone the correction required for 22 simultaneous
+tests. Ranking 22 pairs and taking the top one is exactly the selection the
+Bonferroni correction exists to punish.
+
+**The asset list also settles three earlier questions.** BNB, TRX and ZEC do
+not appear anywhere in it, confirming from an authoritative source what the
+per-pair queries found: BNB and Zcash are not listed, and TRON was delisted
+(E25).
+
+**The condor premise holds everywhere and cannot be used.** In-band rates run
+**80–85% across every pair**, better than SPY's 75%. Crypto sits inside its own
+volatility-scaled band more reliably than equities do. Alpaca lists **no crypto
+options**, so there is no instrument to sell that band with. The edge is
+visible and unreachable.
+
+**Consequence.** The $10,000 sleeve is a spot allocation with no expected
+return, and it should carry none in any forecast. It is defensible at 10% as
+part of the project's scope; it is not defensible as a source of P&L, and it
+must not be grown on the strength of a lucky week (E24 — one XRP week supplied
+34% of a three-week profit and was not repeatable).
+
+**What would change this.** A venue offering crypto options, at which point the
+condor logic transfers directly and the 80–85% in-band rate becomes tradeable.
+Until then, no amount of coin screening helps.
