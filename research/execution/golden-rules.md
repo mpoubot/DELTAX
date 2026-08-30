@@ -388,3 +388,41 @@ Intelligence layer (Asian markets, futures, three daily news scans) is sound
 architecture but is an empirical claim about global risk-off predicting local
 outcomes — untested, and E10 requires that testing before it can gate anything.
 Queued behind the catalyst engine.
+
+## E17 — Measure the hold period you can actually execute
+
+> An expectancy figure is only valid for the exit it was modelled on. If the
+> contest window closes before that exit fires, **the number does not describe
+> the trade you are placing.**
+
+**How we found this.** E15 promoted the day-7 / 50%-credit exit after modelling
+it flipped every configuration positive (held-to-expiry −0.021 to +0.076 →
++0.025 to +0.109). We then quoted **+0.107** as the strategy's expectancy for
+weeks. Checking the calendar against the contest deadline:
+
+| | |
+|---|---|
+| Entry | Mon 31 Aug 2026 |
+| Modelled exit | day 7 = **Mon 7 Sep** |
+| Submission deadline | **Fri 4 Sep, 11:00 ET** |
+| Trading sessions available | **5** (Labor Day 2026 falls 7 Sep, outside the window) |
+| Usable, allowing for a truncated Friday | **~4.5** |
+
+The exit that produced our headline number fires **three days after the
+contest ends.** Positions will instead be marked to market having captured
+partial decay. The 4-day expectancy has never been measured.
+
+**The rule.** Before trading a fixed-length event, re-measure expectancy at the
+hold period the event permits. Never carry a number across a change in exit.
+
+**Second-order consequence — the DTE band is also unvalidated for this window.**
+`MIN_DTE=7 / MAX_DTE=21` was tuned for a system that holds to its modelled
+exit. Theta accelerates into expiry, so across a fixed 4-day hold a nearer-dated
+contract decays a larger fraction of its premium — at the cost of gamma. Which
+expiry maximises a 4-day hold is an empirical question we have not asked.
+**Do not change the band on reasoning alone; sweep it.**
+
+**Why this is a rule and not a footnote.** We came within a day of trading a
+five-session contest on a seven-day number, having done the validation work
+correctly and then failed to check it against the calendar. The error was not
+in the modelling. It was in never asking whether the modelled exit was reachable.

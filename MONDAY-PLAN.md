@@ -1,5 +1,17 @@
 # DELTAX — Monday 31 Aug trading plan
 
+> ## ⚠️ STALE — do not trade from this document
+>
+> Written before two findings that change it:
+>
+> 1. **The contest window is 5 sessions, not a week.** The day-7 exit this
+>    plan assumes fires **Mon 7 Sep — after the deadline** (rule **E17**).
+>    The 4-day expectancy is unmeasured.
+> 2. **The universe below is 3 ETFs.** Screening has since passed 46 tickers.
+>
+> Read **[STATUS.md](STATUS.md)** instead. This file must be rewritten before
+> it becomes the pre-registration commit at 09:30 ET Monday.
+
 **Status: draft for ratification. Becomes the pre-registration commit before
 09:30 ET.** Nothing below is a prediction — it is a commitment to rules. Which
 contracts actually trade is resolved by the gates at entry time.

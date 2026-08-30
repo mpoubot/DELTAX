@@ -1,5 +1,7 @@
 # DELTAX
 
+> **Team: start at [STATUS.md](STATUS.md)** — current state, decisions, and what still needs deciding.
+
 Autonomous options trading agent for the **[Alpaca AI Trading Agents Hackathon](https://lablab.ai/ai-hackathons/alpaca-ai-trading-agents-hackathon)**
 (lablab.ai × Alpaca, 28 Aug – 4 Sep 2026).
 
