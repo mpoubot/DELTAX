@@ -26,9 +26,13 @@ MAX_CONCURRENT = 5          # E12: satellite budget redeployed to income
 def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
         force_window: bool = False) -> dict:
     now = datetime.now(timezone.utc)
+    # --force is an ANALYSIS switch: it relaxes the calendar window and the
+    # permission state so the pipeline can be exercised outside session
+    # hours. It is inert whenever real orders are possible.
+    analysis = force_window and dry_run
     clock = feed.clock()
     allowed, why = entry_allowed(now, bool(clock.get("is_open")))
-    if not allowed and not force_window:
+    if not allowed and not analysis:
         ledger.record_raw({"action": "skip", "reason": why})
         return {"traded": [], "refused": [], "skipped": why}
 
@@ -43,11 +47,15 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
         market_open=bool(clock.get("is_open")),
         drawdown_pct=0.0,
     ))
+    # --force is an ANALYSIS switch. It may relax permission only while
+    # dry-running; with real orders enabled the state is absolute.
+    perm_override = analysis
     ledger.record_raw({"action": "permission", "state": perm.state,
-                       "reasons": perm.reasons})
-    if perm.policy["size_factor"] <= 0 and not force_window:
-        return {"regime": regime, "traded": [], "refused": [],
-                "committed": 0.0, "skipped": f"{perm.state}: {perm.reasons[0]}"}
+                       "reasons": perm.reasons, "overridden": perm_override})
+    if perm.policy["size_factor"] <= 0 and not perm_override:
+        return {"regime": regime, "traded": [], "refused": [], "committed": 0.0,
+                "permission": perm.state, "advisory_only": False,
+                "skipped": f"{perm.state}: {perm.reasons[0]}"}
 
     gte = str(today.fromordinal(today.toordinal() + MIN_DTE))
     lte = str(today.fromordinal(today.toordinal() + MAX_DTE))
@@ -64,7 +72,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
         # E11: no directional edge proven, so nominate BOTH sides.
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
             allowed, why = gate_permission(perm, side)
-            if not allowed:
+            if not allowed and not perm_override:
                 refused.append((symbol, side, f"permission:{perm.state}"))
                 continue
             klo, khi = round(px*lo, 2), round(px*hi, 2)
@@ -110,11 +118,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             traded.append((symbol, side, dec.contracts, cand["credit"],
                            dec.max_loss, rec["result"]))
     return {"regime": regime, "traded": traded, "refused": refused,
-            "committed": committed, "skipped": None}
+            "committed": committed, "skipped": None,
+            "permission": perm.state, "advisory_only": perm_override}
 
 
 if __name__ == "__main__":
     live = "--live" in sys.argv
+    if live and "--force" in sys.argv:
+        sys.exit("REFUSED: --force is an analysis switch and cannot be "
+                 "combined with --live. Trade permission is absolute for "
+                 "real orders.")
     feed, led = AlpacaFeed(), Ledger("logs")
     out = run(feed, led, equity=100_000.0, today=date.today(),
               dry_run=not live, force_window="--force" in sys.argv)
@@ -122,7 +135,12 @@ if __name__ == "__main__":
         print(f"SKIPPED: {out['skipped']}")
         sys.exit(0)
     r = out["regime"]
-    print(f"regime {r.weak_count}/3 weak {r.weak_symbols}\n")
+    print(f"regime {r.weak_count}/3 weak {r.weak_symbols}")
+    print(f"permission: {out['permission']}")
+    if out.get("advisory_only"):
+        print("*** ADVISORY ONLY - permission overridden for dry-run "
+              "analysis. These are NOT tradeable decisions. ***")
+    print()
     print(f"TRADED ({len(out['traded'])}):")
     for sym, side, n, cr, ml, res in out["traded"]:
         print(f"  {sym:5} {side:4} x{n:<3} credit ${cr:.2f}  max loss ${ml:>7,.0f}  {res}")
