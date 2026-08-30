@@ -17,7 +17,16 @@ command -v alpaca >/dev/null && ok "alpaca CLI" "$(alpaca version 2>/dev/null|he
 command -v python3 >/dev/null && ok "python3" "$(python3 -V 2>&1)" || no "python3" "missing"
 [ -f .env.alpaca ] && ok "credentials file" "present, mode $(stat -f %Lp .env.alpaca)" || no "credentials file" "MISSING"
 git check-ignore .env.alpaca >/dev/null 2>&1 && ok "credentials gitignored" "yes" || no "credentials gitignored" "EXPOSED"
-git grep -qI "PKVEV2UCFADSR26OEXLTLABQNB" -- . 2>/dev/null && no "no keys in tracked files" "LEAK" || ok "no keys in tracked files" "clean"
+# Read the key from the env file at runtime - NEVER hardcode it here. The
+# first version of this line embedded the literal key, which put it into a
+# public repo and into git history. A leak detector must not carry the secret
+# it detects.
+KEYPAT="${ALPACA_API_KEY:-}"
+if [ -n "$KEYPAT" ] && git grep -qI -- "$KEYPAT" . 2>/dev/null; then
+  no "no keys in tracked files" "LEAK"
+else
+  ok "no keys in tracked files" "clean"
+fi
 
 echo; echo "── 2. account ──"
 A=$(alpaca account get --quiet 2>/dev/null)
