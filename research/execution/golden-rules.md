@@ -426,3 +426,76 @@ expiry maximises a 4-day hold is an empirical question we have not asked.
 five-session contest on a seven-day number, having done the validation work
 correctly and then failed to check it against the calendar. The error was not
 in the modelling. It was in never asking whether the modelled exit was reachable.
+
+## E18 — Test the expiries that exist, not the ones on your grid
+
+> A backtest grid is a set of hypotheses. The market lists a specific,
+> **discrete** set of expiries. Optimising over a grid the market does not
+> offer produces a recommendation that cannot be traded.
+
+**Evidence.** The 4-day sweep (E17) was run across 4/5/7/10/14/21/30 DTE and
+showed a clean monotonic result: shorter DTE captures more of a fixed 4-day
+hold, exactly as theta acceleration predicts. The apparent winner was 5–7 DTE.
+
+Querying the actual chain for a Mon 31 Aug entry:
+
+| Expiry | DTE | Listed |
+|---|---|---|
+| Fri 4 Sep | 4 | ✅ |
+| Fri 11 Sep | 11 | ✅ |
+| Fri 18 Sep | 18 | ✅ |
+
+**5, 7 and 10 DTE do not exist.** Equity options list Friday weeklies; only
+SPY, QQQ and IWM carry dailies. Worse, **BDX and CB list no weeklies at all** —
+their nearest expiry is the 18 Sep monthly. A universe rule that assumes a
+weekly is available for every name is wrong.
+
+**Consequence — the two findings collide.** Re-running walk-forward at the
+expiries that exist, δ0.20, TRAIN ≤2023 / TEST ≥2024:
+
+| | Sep 4 (4 DTE) | Sep 11 (11 DTE) | Sep 18 (18 DTE) |
+|---|---|---|---|
+| SPY | **+0.245, t=2.70** | +0.109, t=1.22 | +0.030, t=0.33 |
+| QQQ | +0.136, t=1.63 | +0.023, t=0.32 | −0.020, t=−0.29 |
+| IWM | **+0.251, t=2.84** | +0.147, t=1.73 | +0.076, t=0.92 |
+| **Gate** | **BLOCKED** by MIN_DTE=7 | passes | passes |
+
+**The only out-of-sample-significant configuration is the one our own gate
+forbids.** Everything MIN_DTE permits is positive in point estimate but not
+statistically distinguishable from zero.
+
+**The rule.** Enumerate the tradeable instruments *before* sweeping parameters,
+and constrain the grid to them. A parameter study on unavailable instruments is
+not conservative or optimistic — it is unusable.
+
+**Do not resolve this by relaxing MIN_DTE on the strength of this table.**
+The 4-DTE cell is where the model's constant-implied-vol assumption is weakest,
+where gamma is largest, and where R5 was aimed. See E19.
+
+## E19 — Per-trade expectancy is not one-week expectancy
+
+> Expectancy is measured across independent trades spread over years. A
+> one-week contest gets **one** draw. When every position shares a market
+> factor, spreading across 40 tickers does not give 40 independent bets.
+
+**The error to avoid.** SPY δ0.20 Sep 4 shows a 63% win rate out of sample. It
+is tempting to read that as "63% of our positions win." It is not. That figure
+is 63% of *weeks* winning, sampled over 127 independent weeks.
+
+Within a single week, direction-neutral condors on 40 correlated equities are
+approximately **one bet on realised market volatility.** If the market makes a
+sharp move Thursday, the put spreads breach together. Diversification across
+tickers reduces idiosyncratic risk; it does almost nothing against the market
+factor, which is what a condor book is actually short.
+
+**Consequence for sizing.** The 10% portfolio cap is not a 10% worst case
+across independent positions — in a correlated move it is closer to a genuine
+10% single-event loss. That is survivable by design, and it is the reason the
+cap exists. Do not raise it on the strength of a per-trade win rate.
+
+**Consequence for expiry choice.** Shorter-dated condors have the largest
+gamma, so a single adverse day translates into the largest mark-to-market
+swing. Observed worst case, SPY δ0.20: **−$270 at Sep 4** (the full max loss)
+versus −$251 at Sep 11 and −$207 at Sep 18. The shortest expiry both maximises
+expected return and maximises the correlated tail — in a contest scored once,
+on a fixed date, with no time to recover.

@@ -6,7 +6,7 @@ A credit spread held to expiry pays out on exactly two things - the credit
 received, and where the underlying finishes. We cannot observe historical
 credits (no historical option quotes), but our own gate CONSTRAINS them:
 
-    credit / width >= 0.9 x short_delta        (gate_credit_fraction)
+    credit / width >= CREDIT_DELTA_MULTIPLE x short_delta   (gate_credit_fraction)
 
 So we assume the credit is exactly that floor - the worst premium the agent
 would ever accept - and measure the payoff against real underlying history.
@@ -32,9 +32,15 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from deltax.gates import CREDIT_DELTA_MULTIPLE
+
 Z_BY_DELTA = {0.15: 1.0364, 0.20: 0.8416, 0.25: 0.6745, 0.30: 0.5244}
 DTE = 14
-CREDIT_MULT = 0.9          # gate_credit_fraction floor
+# Read from the live gate. This was hardcoded at 0.9 while the gate had moved
+# to 1.15, so the committed script no longer reproduced the E15 results it was
+# cited for. Never hardcode a constant the agent enforces elsewhere.
+CREDIT_MULT = CREDIT_DELTA_MULTIPLE
 VOL_LOOKBACK = 20
 
 
