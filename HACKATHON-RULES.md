@@ -53,13 +53,16 @@ the eligibility evidence.
 ## 📦 Deliverables checklist
 
 - [ ] Project title, short description, long description, tech/category tags
-- [ ] **Cover image**
-- [ ] **Video presentation**
+- [x] **Cover image** — ✅ done (llama/chrome logo, "CODE · RISK · EXECUTE")
+- [~] **Video presentation** — in progress (Pautax, separate session)
 - [ ] **Slide presentation**
-- [ ] **Public GitHub repository** (original work, MIT-compliant)
-- [ ] Demo application platform + **application URL**
-- [ ] **Alpaca paper trading account ID** → `PA3ID1B9L6BP`
+- [ ] **Public GitHub repository** — ⚠️ **repo is PRIVATE**, must flip before Fri 11:00 ET
+- [ ] Demo application platform + **application URL** — no web UI exists; needs a hosted page
+- [x] **Alpaca paper trading account ID** → `PA3ID1B9L6BP`
 - [ ] **One-page write-up: AI logic, risk gates, Alpaca infrastructure**
+
+**Brand palette** (from the cover image, for slides and the demo page):
+deep navy `#0A1428` · chrome `#C8D4E0` · electric blue `#1E90FF` · white text.
 - [ ] Optional: up to **5 social posts** on X/LinkedIn tagging @lablabai and
       @AlpacaHQ (separate $500 × 2 prize)
 
