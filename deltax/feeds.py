@@ -38,6 +38,21 @@ class AlpacaFeed:
             raise FeedError(str(payload["error"])[:200])
         return payload
 
+    # ── account state ───────────────────────────────────────────────────────
+
+    def account(self) -> dict:
+        """Live account. Raises on failure - never returns a plausible blank,
+        because a dashboard that invents an equity number is worse than one
+        that refuses to draw."""
+        return self._run(["account", "get"])
+
+    def positions(self) -> list:
+        """Open positions, or [] when genuinely flat."""
+        p = self._run(["position", "list"])
+        if isinstance(p, list):
+            return p
+        return p.get("positions", []) or []
+
     # ── market state ────────────────────────────────────────────────────────
 
     def clock(self) -> dict:
