@@ -499,3 +499,72 @@ swing. Observed worst case, SPY δ0.20: **−$270 at Sep 4** (the full max loss)
 versus −$251 at Sep 11 and −$207 at Sep 18. The shortest expiry both maximises
 expected return and maximises the correlated tail — in a contest scored once,
 on a fixed date, with no time to recover.
+
+## E20 — A gate that passes its unit test may still never fire
+
+> Unit-testing a gate proves the **function** works. It proves nothing about
+> whether the pipeline ever reaches it. Test every gate through the real
+> evaluation path, and assert it fires **by name**.
+
+**Source: Matin's crypto engineering review.** His team found a daily-trend
+risk filter that "had never actually blocked a single trade since it was built,
+despite passing every isolated unit test" — a wiring gap, not a logic error.
+We took that as a prompt to audit our own chain and found two instances.
+
+**Finding 1 — a crash where a refusal belonged.** `evaluate()` called
+`size_from_risk()` before running `gate_defined_risk`. A `None`
+`max_loss_per_contract` therefore raised `TypeError` and aborted the run,
+instead of producing the refusal that gate exists to produce. The gate passed
+its own tests and was unreachable for its primary case.
+
+This is worse than a missed refusal. **A crash is not a refusal:** it writes no
+decision, leaves the ledger silent, and loses the audit record. Undefined risk
+is now refused before any arithmetic depends on it.
+
+**Finding 2 — a gate that is a tautology.** `gate_position_size` cannot fail
+through `evaluate()`. `size_from_risk()` floor-divides by the same
+`PER_POSITION_RISK_PCT` cap the gate checks, so `contracts x max_loss <= budget`
+holds by construction.
+
+It is **not** removed — it is a genuine regression guard against a future change
+that sizes by some other rule, and it works when called directly. But it must
+not be counted as active protection. A test now asserts the invariant that makes
+it redundant, so if sizing ever stops deriving from the cap, that test fails
+loudly rather than the gate silently starting to matter.
+
+**The rule.** `tests/test_wiring.py` trips each gate through `evaluate()` and
+asserts the refusal is attributed to that gate by name, on a baseline that is
+first proven to APPROVE — otherwise every case passes vacuously. Any gate that
+cannot be provoked there is either unreachable or a tautology, and the team is
+entitled to know which.
+
+## E21 — The same conclusion from an unrelated asset class
+
+> Independent replication on different data, in a different market, by a
+> different team, is stronger evidence than any single result.
+
+**E15** found that the condor's edge lived in the **exit**, not the entry:
+held to expiry the strategy was marginal, and modelling the day-7 exit flipped
+every configuration positive.
+
+Matin's crypto permutation study reached the same conclusion from the opposite
+direction. Testing a momentum strategy on MEXC perpetuals against 200
+randomised controls:
+
+| Metric | Real | Random | p |
+|---|---|---|---|
+| Profit factor | 1.020 | 0.936 | 0.085 |
+| Expectancy | 0.190 | −0.530 | 0.085 |
+| **Avg MFE (R)** | **2.322** | 2.068 | **0.000** |
+
+**The entries locate genuinely better maximum favourable excursions than random
+(p = 0.000), while overall profitability is not significant (p = 0.085).** The
+strategy finds good moves and the exit logic fails to convert them.
+
+Equities and crypto, options and perpetuals, two codebases, two teams — both
+land on the exit as the binding constraint. That is the strongest support E15
+has, and it did not come from our own data.
+
+**Consequence.** Exit modelling is promoted from an options-specific technique
+to a house rule: no strategy in any asset class is evaluated, accepted or
+rejected on entry logic alone.

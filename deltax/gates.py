@@ -114,7 +114,15 @@ def gate_defined_risk(max_loss: Optional[float]) -> GateResult:
 
 
 def gate_position_size(max_loss: float, equity: float) -> GateResult:
-    """Per-position max loss must not exceed 1% of equity."""
+    """Per-position max loss must not exceed PER_POSITION_RISK_PCT of equity.
+
+    NOTE (E20): unreachable as a refusal through evaluate(). size_from_risk()
+    floor-divides by this same cap, so contracts * max_loss <= budget holds by
+    construction and this gate always passes there. It is kept as a regression
+    guard - it would catch a future change that sized by any other rule - and
+    it is meaningful when called directly. It is NOT active protection in the
+    live path, and should not be counted as one.
+    """
     cap = equity * PER_POSITION_RISK_PCT
     ok = max_loss <= cap
     return GateResult(
@@ -359,6 +367,18 @@ def evaluate(
     ALL gates are evaluated even after one fails, so the record shows the full
     picture rather than stopping at the first problem.
     """
+    # Undefined risk is refused BEFORE any arithmetic depends on it. Sizing ran
+    # first here, so a None max_loss raised TypeError and aborted the run rather
+    # than producing a refusal - making gate_defined_risk unreachable for the
+    # very case it exists to catch, despite passing its own unit tests. A crash
+    # is not a refusal: it logs no decision and leaves the ledger silent (E20).
+    if max_loss_per_contract is None or max_profit_per_contract is None:
+        return DecisionRecord(
+            symbol=symbol, decision="REFUSE",
+            gates=[gate_defined_risk(max_loss_per_contract)],
+            contracts=0, max_loss=0.0, max_profit=0.0,
+            notes="undefined risk - refused before sizing")
+
     contracts = size_from_risk(equity, max_loss_per_contract)
     total_max_loss = contracts * max_loss_per_contract
     total_max_profit = contracts * max_profit_per_contract
