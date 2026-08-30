@@ -627,3 +627,43 @@ the model understates; one week's replay cannot be extrapolated, so it
 overstates as a forecast. Report the range and say which assumption produces
 each end. A single confident number here would be the least defensible thing in
 the whole write-up.
+
+## E24 — Size the sleeve by what it contributes, not by what it costs
+
+> Capital allocated and return contributed are different quantities. A sleeve
+> can hold most of the money and produce almost none of the result.
+
+**Combined-book backtest** (SPY history, 4-day Monday→Friday hold, team
+allocation):
+
+| Sleeve | Capital | Mean/week | Return | t | Win% | Worst |
+|---|---|---|---|---|---|---|
+| Options (condor) | $30k risk | **+$774** | 2.58% | **2.10** | 68.4% | −$27,914 |
+| Stocks (covered call) | $60k | +$73 | 0.12% | 1.27 | 61.3% | −$5,338 |
+| Crypto (spot ×4) | $10k | +$86 | 0.86% | 1.69 | **52.2%** | −$1,978 |
+| **Combined** | $100k | **+$1,134** | 1.13% | 2.24 | 71.3% | −$21,168 |
+
+**The options sleeve produces 83% of the return on 30% of the capital.** The
+other $70,000 contributes $159 a week between them and carries most of the
+directional risk.
+
+**Why covered calls underperform here.** Over a 4-day hold on an 11-DTE call
+there is very little premium to capture, so the sleeve is dominated by the
+stock's own move — it is long beta with a small overlay, not a premium
+strategy. Its t of 1.27 says so. Covered calls need a longer hold or a nearer
+strike to earn their place; at this horizon they are a compliance structure
+more than an edge.
+
+**Crypto spot wins 52.2% of weeks.** That is a coin flip, and it independently
+reproduces Matin's conclusion from a different venue and codebase: the crypto
+directional premise has no measured edge.
+
+**Median beats mean, everywhere.** Combined median is +$3,444 against a +$1,134
+mean — the signature of premium selling. Most weeks are quietly good and the
+occasional week is very bad. Never quote the mean alone for a book like this.
+
+**Caveat on the combined row.** Crypto has 136 weekly samples against the
+equity book's 282, and the sleeves are index-paired rather than date-aligned.
+Per-sleeve figures are sound; the combined row is indicative, not exact.
+
+**Kill switch:** a −5% daily limit fires in **14% of weeks** on this book.

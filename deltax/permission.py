@@ -39,13 +39,22 @@ POLICY = {
 }
 
 
+# Daily loss limit. Distinct from the cumulative drawdown check below: this
+# reacts to a SHOCK - one bad session - while the drawdown check reacts to slow
+# bleed. Measured at 30% deployed risk it fires in ~19-23% of weeks (5.6-7.0%
+# of days), which is affordable because HALT stops NEW positions and does not
+# force-close the existing book (E24).
+DAILY_LOSS_LIMIT_PCT = -5.0
+
+
 @dataclass
 class Evidence:
     """Inputs to the state decision. None means UNKNOWN, which fails closed."""
     vix_change_pct: Optional[float] = None      # session change in VIX
     benchmarks_weak: Optional[int] = None       # 0-3, our existing regime read
     data_stale: bool = False                    # any feed failed freshness
-    drawdown_pct: Optional[float] = None        # live drawdown, negative
+    drawdown_pct: Optional[float] = None
+    daily_loss_pct: Optional[float] = None      # today's P&L as % of equity        # live drawdown, negative
     # Halt at two-thirds of the deployed risk budget, not at all of it. With
     # PORTFOLIO_RISK_PCT at 0.30 the modelled worst case is -30%, but a circuit
     # breaker that only fires once the entire budget is gone is not a circuit
@@ -86,6 +95,14 @@ def recommend_state(ev: Evidence) -> Decision:
         raise_to(HALT, "market status unknown")
     elif not ev.market_open:
         raise_to(NO_NEW_POSITIONS, "market closed")
+
+    # Daily loss limit. A shock filter, separate from the cumulative check
+    # below: one bad session halts new risk even if the account is still up on
+    # the week. HALT stops NEW positions - it does not force-close the book -
+    # so a false trigger costs little.
+    if ev.daily_loss_pct is not None and ev.daily_loss_pct <= DAILY_LOSS_LIMIT_PCT:
+        raise_to(HALT, f"daily loss {ev.daily_loss_pct:.1f}% breached "
+                       f"{DAILY_LOSS_LIMIT_PCT:.1f}% limit")
 
     # S5: a live drawdown past the backtested worst case means the edge
     # changed. Halt rather than persevere.

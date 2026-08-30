@@ -3,7 +3,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from deltax.permission import (Evidence, recommend_state, gate_permission,
                                NORMAL, CAUTION, DEFENSIVE, NO_NEW_POSITIONS,
-                               HALT, ORDER, POLICY)
+                               HALT, ORDER, POLICY, DAILY_LOSS_LIMIT_PCT)
 
 # Derive from the live threshold, never hardcode it - these tests silently
 # stopped testing anything when PORTFOLIO_RISK_PCT moved and the halt level
@@ -45,6 +45,20 @@ check(f"drawdown past backtested worst ({DD_PAST}%) -> HALT", d.state == HALT, d
 d = recommend_state(Evidence(**{**OK, "drawdown_pct": DD_NEAR}))
 check(f"drawdown approaching limit ({DD_NEAR}%) -> CAUTION", d.state == CAUTION, d.state)
 check("halt threshold tracks the deployed risk budget", DD_HALT <= -10.0, str(DD_HALT))
+
+print("\n── daily loss limit (shock filter) ──")
+d = recommend_state(Evidence(**{**OK, "daily_loss_pct": DAILY_LOSS_LIMIT_PCT - 0.5}))
+check(f"daily loss past {DAILY_LOSS_LIMIT_PCT}% -> HALT", d.state == HALT, d.state)
+d = recommend_state(Evidence(**{**OK, "daily_loss_pct": DAILY_LOSS_LIMIT_PCT + 0.5}))
+check("just inside the limit does NOT halt", d.state != HALT, d.state)
+d = recommend_state(Evidence(**{**OK, "daily_loss_pct": 3.0}))
+check("a profitable day never halts", d.state == NORMAL, d.state)
+# Independent of the cumulative check: up on the week, one bad day still halts.
+d = recommend_state(Evidence(**{**OK, "drawdown_pct": 0.0,
+                                "daily_loss_pct": DAILY_LOSS_LIMIT_PCT - 1}))
+check("fires even when cumulative drawdown is fine", d.state == HALT, d.state)
+check("daily limit unset is not treated as a breach",
+      recommend_state(Evidence(**OK)).state == NORMAL)
 
 print("\n── fail closed ──")
 check("stale data -> HALT", recommend_state(Evidence(data_stale=True, market_open=True)).state == HALT)
