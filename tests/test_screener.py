@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from deltax.screener import (
     assess_regime, posture, select_vertical, parse_expiry, spread_pct,
-    screen_income_book, RegimeState, BENCHMARKS,
+    screen_income_book, RegimeState, BENCHMARKS, choose_expiry,
 )
 from deltax.ledger import Ledger
 
@@ -135,6 +135,34 @@ try:
           out3["regime"].weak_count == 3)
 finally:
     shutil.rmtree(tmp)
+
+print("\n── expiry selection: nearest qualifying, not most liquid (E18) ──")
+class ExpFeed:
+    """Sep 11 weekly is tradeable; Sep 18 monthly is far more liquid."""
+    def __init__(self, weekly_liquid=8): self.weekly_liquid = weekly_liquid
+    def option_contracts(self, sym, **kw):
+        out=[]
+        for i in range(10):
+            out.append({"expiration_date":"2026-09-11","symbol":f"W{i}",
+                        "open_interest": str(9999 if i < self.weekly_liquid else 1)})
+        for i in range(10):
+            out.append({"expiration_date":"2026-09-18","symbol":f"M{i}",
+                        "open_interest": "999999"})
+        return out
+
+got = choose_expiry(ExpFeed(), "SPY", "put", "2026-09-07", "2026-09-21", 1.0, 999.0)
+check("picks the NEARER expiry when both qualify", got and got[0] == "2026-09-11",
+      str(got[0] if got else None))
+got = choose_expiry(ExpFeed(weekly_liquid=2), "SPY", "put", "2026-09-07", "2026-09-21", 1.0, 999.0)
+check("falls through to the monthly when the weekly is too thin",
+      got and got[0] == "2026-09-18", str(got[0] if got else None))
+
+class NoneFeed:
+    def option_contracts(self, sym, **kw):
+        return [{"expiration_date":"2026-09-11","symbol":f"W{i}","open_interest":"1"}
+                for i in range(10)]
+check("returns None when nothing clears the liquidity floor",
+      choose_expiry(NoneFeed(), "SPY", "put", "2026-09-07", "2026-09-21", 1.0, 999.0) is None)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

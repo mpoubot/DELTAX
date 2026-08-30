@@ -35,6 +35,7 @@ DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
 #   worst  - sell the bid, buy the ask. Assumes we cross both spreads.
 #   mid    - mid-to-mid. Assumes a perfect fill at the midpoint.
 #   haircut- mid, giving back HAIRCUT of the combined spread. Realistic.
+MIN_LIQUID_STRIKES = 5     # chain is tradeable at all; not a ranking key
 PRICING_MODE = "haircut"
 SPREAD_HAIRCUT = 0.25
 # The chain endpoint pages from the lowest strike, so an unbounded request
@@ -221,12 +222,21 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
 
 def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
                   strike_lo: float, strike_hi: float) -> Optional[tuple]:
-    """Pick the expiry in the band with the most liquid strikes.
+    """Pick the NEAREST expiry in the band that is liquid enough to trade.
 
     The chain endpoint pages by expiry-then-strike, so a multi-expiry request
     returns only the NEAREST expiries - typically thin weeklies - and never
     reaches the liquid monthly. Every chain query must therefore target one
     expiry at a time, and this picks which.
+
+    Nearest, not most-liquid (E17/E18). Over a fixed hold, a nearer expiry
+    decays a larger fraction of its premium: measured walk-forward on SPY at
+    delta 0.20, an 11-day expiry returned +0.109 against +0.030 for the 18-day.
+    Ranking by open interest instead would always select the monthly, because
+    monthlies carry far more of it than weeklies - handing us the weakest cell
+    in the table. Liquidity stays a THRESHOLD (>= 5 strikes at MIN_OPEN_INTEREST,
+    which is what keeps us out of untradeable chains); it is no longer the
+    ranking key.
 
     Returns (expiry, {symbol: open_interest}) or None.
     """
@@ -238,11 +248,13 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
     for c in contracts:
         by_exp.setdefault(c["expiration_date"], {})[c["symbol"]] = _as_int(
             c.get("open_interest"))
-    for exp, oi in by_exp.items():
+    for exp in sorted(by_exp):                      # ascending date = nearest first
+        oi = by_exp[exp]
         liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
-        if best is None or liquid > best[2]:
+        if liquid >= MIN_LIQUID_STRIKES:
             best = (exp, oi, liquid)
-    return (best[0], best[1]) if best and best[2] >= 5 else None
+            break                                   # nearest qualifying wins
+    return (best[0], best[1]) if best else None
 
 
 def _as_int(v) -> int:

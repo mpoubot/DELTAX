@@ -1,6 +1,6 @@
 # DELTAX — Team Status
 
-**Updated: Sun 30 Aug 2026** · Trading opens **Mon 31 Aug 09:30 ET** ·
+**Updated: Sun 30 Aug 2026 (expiry decision)** · Trading opens **Mon 31 Aug 09:30 ET** ·
 Submission **Fri 4 Sep 11:00 ET**
 
 For Elsa (`IlzeTheGreat`) and Matin (`mpoubot`). This is the single page to
@@ -141,20 +141,61 @@ distribution around our edge.
 
 ---
 
+## ✅ DECIDED — expiry for Monday
+
+**Trade the Sep 11 expiry. `MIN_DTE` stays 7. No gate constant changed.**
+
+The sweep ran and overturned itself twice. Full write-up in **E17–E19**;
+the short version:
+
+1. Sweeping 4–30 DTE showed shorter expiries capture more of a fixed 4-day
+   hold — as theta acceleration predicts.
+2. **δ0.30 was an artifact.** Holding the credit at `1.15 × δ × width` demands
+   the market pay 1.6–2.1× realized vol; the real premium is ~1.1–1.4×.
+   Discarded.
+3. **5, 7 and 10 DTE do not exist.** A Monday entry reaches only Sep 4,
+   Sep 11 or Sep 18. BDX and CB list no weeklies at all.
+
+Walk-forward at the expiries that exist, δ0.20, TEST ≥2024:
+
+| | Sep 4 | Sep 11 | Sep 18 |
+|---|---|---|---|
+| SPY | +0.245, t=2.70 | **+0.109**, t=1.22 | +0.030, t=0.33 |
+| QQQ | +0.136, t=1.63 | **+0.023**, t=0.32 | −0.020, t=−0.29 |
+| IWM | +0.251, t=2.84 | **+0.147**, t=1.73 | +0.076, t=0.92 |
+| Gate | 🔒 blocked | ✅ | ✅ |
+
+**The only significant column is the one MIN_DTE forbids.** We are trading a
+positive point estimate with a wide error bar, and that is the honest
+description of it.
+
+**Why not Sep 4.** It requires relaxing a safety rule the night before, on a
+model built the same day, at the point where that model's constant-implied-vol
+assumption is weakest and gamma is largest. **E19** is the deciding argument:
+per-trade expectancy is measured over 127 independent weeks and the contest
+gets one draw. Forty condors on correlated equities are roughly one bet on
+realized market volatility, so the shortest expiry maximises expected return
+*and* the correlated tail at once.
+
+**Bug this surfaced.** `choose_expiry` ranked expiries by *most liquid*, which
+always selects the monthly — monthlies carry far more open interest than
+weeklies. The agent would have traded Sep 18, the weakest column. Selection is
+now **nearest qualifying**, with liquidity kept as a threshold rather than the
+ranking key. Verified live: SPY → Sep 11; IWM → Sep 18 (its weekly is too thin
+in band, which is the fallback working).
+
+---
+
 ## Open — needs a decision
 
-1. **4-day DTE sweep** — the next task. Answers what our real expected return
-   is this week and which expiry maximises it. The `7–21 DTE` band was tuned
-   for a system that reaches its modelled exit; it is unvalidated for a 4-day
-   hold. **Do not change it on reasoning alone — sweep it.**
-2. **Universe** — add JBGS, ZETA, ACHC, BV, FN? They passed screening. Still
+1. **Universe** — add JBGS, ZETA, ACHC, BV, FN? They passed screening. Still
    unanswered.
-3. **Ratify** the 2% / 10% caps, the 40-ticker universe, and direction-neutral
+2. **Ratify** the 2% / 10% caps, the 40-ticker universe, and direction-neutral
    condors.
-4. **`MONDAY-PLAN.md` is stale** — still describes a 3-ETF universe and an
+3. **`MONDAY-PLAN.md` is stale** — still describes a 3-ETF universe and an
    unbuilt satellite book. Must be rewritten before it becomes the
    pre-registration commit at 09:30 Monday.
-5. **Crypto is 24/7**, which conflicts with the `market_open` check in
+4. **Crypto is 24/7**, which conflicts with the `market_open` check in
    `permission.py` and the entry window in `calendar.py`. Needs deciding
    before code.
 
