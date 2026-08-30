@@ -315,6 +315,33 @@ def gate_no_earnings_before_expiry(
     return GateResult("earnings", True, f"earnings {earnings_date} after expiry {expiry}")
 
 
+# An instrument can have a decade of clean history and not exist today. TRX/USD
+# carries 332 daily bars through 2023-04-19 and returns ZERO bars for Aug 2026:
+# Alpaca delisted it. Backtests read fine; an order would have no market. Age
+# limits differ because crypto trades 24/7 - a silent day there is a red flag,
+# while equities are legitimately silent over weekends and holidays (E25).
+MAX_BAR_AGE_DAYS = {"equity": 4.0, "crypto": 1.5}
+
+
+def gate_listed(tradable: Optional[bool], last_bar_age_days: Optional[float],
+                asset_class: str = "equity") -> GateResult:
+    """Is this instrument actually live RIGHT NOW - not merely in our history?"""
+    limit = MAX_BAR_AGE_DAYS.get(asset_class, 4.0)
+    if tradable is None or last_bar_age_days is None:
+        return GateResult("listed", False,
+                          "listing status unknown - fail closed", None, limit)
+    if not tradable:
+        return GateResult("listed", False, "asset not tradable at the venue",
+                          None, limit)
+    ok = last_bar_age_days <= limit
+    return GateResult(
+        "listed", ok,
+        f"last bar {last_bar_age_days:.1f}d old vs {limit:.1f}d limit "
+        f"({asset_class})" + ("" if ok else " - likely delisted"),
+        round(last_bar_age_days, 2), limit,
+    )
+
+
 def gate_tradeable(halted: bool, corporate_action: Optional[str]) -> GateResult:
     """Refuse halted names and pending corporate actions.
 
@@ -361,6 +388,9 @@ def evaluate(
     short_delta: Optional[float] = None,
     worst_leg_spread_pct: Optional[float] = None,
     quote_age_hours: Optional[float] = None,
+    tradable: Optional[bool] = None,
+    last_bar_age_days: Optional[float] = None,
+    asset_class: str = "equity",
     earnings_date: Optional[date] = None,
     halted: bool = False,
     corporate_action: Optional[str] = None,
@@ -400,6 +430,10 @@ def evaluate(
         gate_position_size(total_max_loss, equity),
         gate_portfolio_risk(total_max_loss, open_portfolio_max_loss, equity),
     ]
+    # Only enforced when listing evidence was supplied, so existing callers keep
+    # working; run.py passes it, and E25 requires it before any live order.
+    if tradable is not None or last_bar_age_days is not None:
+        gates.insert(2, gate_listed(tradable, last_bar_age_days, asset_class))
     if worst_leg_spread_pct is not None:
         gates.append(gate_spread_quality(worst_leg_spread_pct))
     # Structure-aware payoff gate: a 2:1 floor would refuse every OTM credit

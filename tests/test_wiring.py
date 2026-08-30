@@ -12,7 +12,7 @@ unreachable in production, whatever its own unit tests say.
 import sys, os
 from datetime import date, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from deltax.gates import evaluate, PORTFOLIO_RISK_PCT
+from deltax.gates import evaluate, PORTFOLIO_RISK_PCT, gate_listed, MAX_BAR_AGE_DAYS
 
 passed = failed = 0
 def check(n, c, d=""):
@@ -58,9 +58,28 @@ for gate, kw in [
     ("quote_sanity",    dict(credit=-1.0)),
     ("quote_sanity",    dict(quote_age_hours=48.0)),
     ("spread_quality",  dict(worst_leg_spread_pct=0.95)),
+    ("listed",          dict(tradable=False, last_bar_age_days=0.1)),
+    ("listed",          dict(tradable=True,  last_bar_age_days=900.0)),
 ]:
     ok, d = fires(gate, **kw)
     check(f"{gate:<16} fires on {list(kw)[0]}={list(kw.values())[0]}", ok, d)
+
+print("\n── listing gate: the TRON case (E25) ──")
+# TRX/USD: 332 clean daily bars ending 2023-04-19, zero bars in Aug 2026.
+TRX_AGE = 1227.0
+check("delisted crypto is refused", not gate_listed(True, TRX_AGE, "crypto").passed)
+check("live crypto passes", gate_listed(True, 0.4, "crypto").passed)
+check("crypto is stricter than equity",
+      MAX_BAR_AGE_DAYS["crypto"] < MAX_BAR_AGE_DAYS["equity"])
+check("equity survives a long weekend", gate_listed(True, 3.0, "equity").passed)
+check("untradable asset refused regardless of freshness",
+      not gate_listed(False, 0.0, "equity").passed)
+check("unknown listing status fails CLOSED",
+      not gate_listed(None, 1.0).passed and not gate_listed(True, None).passed)
+r = evaluate(**base(tradable=True, last_bar_age_days=TRX_AGE, asset_class="crypto"))
+check("stale listing refuses through evaluate()", r.failed_gate == "listed", str(r.failed_gate))
+r = evaluate(**base())
+check("callers without listing evidence still work", r.failed_gate is None, str(r.failed_gate))
 
 print("\n── gates that are TAUTOLOGIES in the live path (E20) ──")
 from deltax.gates import gate_position_size, size_from_risk, PER_POSITION_RISK_PCT

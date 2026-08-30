@@ -69,6 +69,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
         px = latest_price(spot)
         if not px:
             continue
+        # E25: an instrument with clean history may not exist today. Age the
+        # last bar and let gate_listed decide; unknown fails closed.
+        bar_age = None
+        db = spot.get("dailyBar") or {}
+        if db.get("t"):
+            try:
+                bar_t = datetime.fromisoformat(str(db["t"]).replace("Z", "+00:00"))
+                bar_age = (now - bar_t).total_seconds() / 86400.0
+            except (ValueError, TypeError):
+                bar_age = None
         # E11: no directional edge proven, so nominate BOTH sides.
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
             allowed, why = gate_permission(perm, side)
@@ -99,7 +109,8 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 today=today, open_interest=cand["open_interest"],
                 open_portfolio_max_loss=committed, structure="credit",
                 width=cand["width"], short_delta=cand["short"]["delta"],
-                worst_leg_spread_pct=cand["worst_leg_spread_pct"])
+                worst_leg_spread_pct=cand["worst_leg_spread_pct"],
+                tradable=True, last_bar_age_days=bar_age, asset_class="equity")
             ledger.record(dec, context={
                 "book": "income", "side": side, "regime": regime.note,
                 "short": cand["short"]["strike"], "long": cand["long"]["strike"],

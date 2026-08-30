@@ -667,3 +667,53 @@ equity book's 282, and the sleeves are index-paired rather than date-aligned.
 Per-sleeve figures are sound; the combined row is indicative, not exact.
 
 **Kill switch:** a −5% daily limit fires in **14% of weeks** on this book.
+
+## E25 — History is not evidence that something still exists
+
+> A clean price series proves an instrument **traded**. It says nothing about
+> whether it **trades**. Check listing at nomination, not at order time.
+
+**Evidence.** `TRX/USD` returns 332 clean daily bars ending 2023-04-19 and
+**zero** bars for August 2026 — Alpaca delisted it. Every backtest reads
+perfectly; an order would meet no market. `BTC/USD` and `SOL/USD` return 28
+bars over the same window, so this is a delisting, not a data outage.
+
+`gate_listed` now refuses on three grounds, fail-closed on all of them:
+
+| Condition | Result |
+|---|---|
+| Venue reports asset not tradable | REFUSE |
+| Last bar older than the age limit | REFUSE |
+| Either fact unavailable | **REFUSE — unknown is not safe** |
+
+Age limits differ by asset class: **4 days for equities** (weekends and
+holidays are legitimate silence) and **1.5 days for crypto**, which trades 24/7
+and has no excuse for going quiet.
+
+**A second, larger instance of the same error.** Five tickers — JBGS, ZETA,
+ACHC, BV, FN — were carried in `STATUS.md` as universe candidates on the
+strength of a 314-name expectancy screen. The screen results were never written
+to disk, so the recommendation outlived its evidence. Checking the live chains:
+
+| | Liquid strikes | |
+|---|---|---|
+| ZETA | 15 | ✅ tradeable |
+| ACHC | 4 | ❌ |
+| FN | 3 | ❌ |
+| JBGS | **0** | ❌ |
+| BV | **0** | ❌ |
+
+**JBGS scored best of all 314 names and cannot be traded at all.** `BDX`, already
+in the universe, also fails at 3 strikes. Ranking on price history alone
+manufactures candidates that the gates would refuse anyway — the universe-level
+form of E18.
+
+**Breadth was checked rather than assumed.** Of 39 names swept, **34 are
+tradeable and 29 carry a Sep 11 weekly** — up to 58 positions against the 15
+needed to deploy $30,000 at 2% each. Sufficient, but that is now a measured
+fact rather than a hope.
+
+**Wiring note, and an irony.** The first attempt at this passed the listing
+evidence to `execute.submit()` instead of `evaluate()` — the gate would never
+have run, exactly the failure E20 was written about. `tests/test_wiring.py`
+asserts it fires through the real path.
