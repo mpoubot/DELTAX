@@ -35,6 +35,12 @@ class Position:
     spot: float
 
     @property
+    def bias(self) -> tuple:
+        """Direction this position expresses. See screener.directional_bias."""
+        from deltax.screener import directional_bias
+        return directional_bias(self.side, "credit")
+
+    @property
     def dte(self) -> int: return (self.expiry - date.today()).days
     @property
     def captured(self) -> float:
@@ -84,14 +90,15 @@ def render(positions, *, equity, start_equity, day_pnl, permission,
              f"risk {bar} ${risk_used:,.0f}/${risk_cap:,.0f} ({used:.0f}%)   "
              f"{len(positions)} positions")
     L.append(f"{DIM}  {'─'*W}{RESET}")
-    L.append(f"{DIM}  {'SYM':<6}{'STRUCTURE':<15}{'EXP':<7}{'DTE':>4}"
+    L.append(f"{DIM}  {'SYM':<6}{'BIAS':<10}{'STRUCTURE':<15}{'EXP':<7}{'DTE':>4}"
              f"{'CR':>7}{'NOW':>7}{'P&L':>9}{'KEPT':>7}  STATUS{RESET}")
 
     for p in sorted(positions, key=lambda x: (not x.breached, -x.captured)):
         e,lab,col=status(p)
         pc_=GRN if p.pnl>=0 else RED
         struct=f"{p.side} {p.short_strike:g}/{p.long_strike:g}"
-        L.append(f"  {p.symbol:<6}{struct:<15}{p.expiry:%m-%d} {p.dte:>4}"
+        b,bi,_=p.bias
+        L.append(f"  {p.symbol:<6}{bi} {b:<7}{struct:<15}{p.expiry:%m-%d} {p.dte:>4}"
                  f"{p.credit:>7.2f}{p.current:>7.2f}{pc_}{p.pnl:>9,.0f}{RESET}"
                  f"{p.captured*100:>6.0f}%  {e} {col}{lab}{RESET}")
 
@@ -99,6 +106,14 @@ def render(positions, *, equity, start_equity, day_pnl, permission,
     sells=[p for p in positions if status(p)[1]=="SELL now"]
     risky=[p for p in positions if p.breached]
     watch=[p for p in positions if status(p)[1]=="WATCH"]
+    longs=[p for p in positions if p.bias[0]=="LONG"]
+    shorts=[p for p in positions if p.bias[0]=="SHORT"]
+    lr=sum(p.credit*p.contracts*100 for p in longs)
+    sr=sum(p.credit*p.contracts*100 for p in shorts)
+    net = "BALANCED" if abs(lr-sr)<=0.15*max(1,lr+sr) else (
+          "LONG-LEANING" if lr>sr else "SHORT-LEANING")
+    L.append(f"  📈 {len(longs)} long (${lr:,.0f})   📉 {len(shorts)} short (${sr:,.0f})"
+             f"   →  book is {BOLD}{net}{RESET}")
     L.append(f"  💰 {len(sells)} at target   🟡 {len(watch)} watching   "
              f"🔴 {len(risky)} breached   "
              f"open P&L {GRN if sum(p.pnl for p in positions)>=0 else RED}"

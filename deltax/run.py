@@ -15,7 +15,8 @@ from deltax.calendar import entry_allowed
 from deltax.permission import Evidence, recommend_state, gate_permission
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
-from deltax.screener import (INCOME_UNIVERSE, DEFAULT_WIDTH, TARGET_DELTA_BY_WEAK,
+from deltax.screener import (
+    directional_bias,INCOME_UNIVERSE, DEFAULT_WIDTH, TARGET_DELTA_BY_WEAK,
                              assess_regime, select_vertical, choose_expiry,
                              BENCHMARKS)
 from deltax.gates import evaluate, MIN_DTE, MAX_DTE
@@ -111,9 +112,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 width=cand["width"], short_delta=cand["short"]["delta"],
                 worst_leg_spread_pct=cand["worst_leg_spread_pct"],
                 tradable=True, last_bar_age_days=bar_age, asset_class="equity")
+            bias, bias_icon, bias_note = directional_bias(side, "credit")
             ledger.record(dec, context={
                 "book": "income", "side": side, "regime": regime.note,
-                "short": cand["short"]["strike"], "long": cand["long"]["strike"],
+                # bias is the DIRECTION expressed. short_leg/long_leg are the
+                # spread's legs. Both used to be called "short"/"long", which
+                # made the ledger unreadable on exactly the question the team
+                # asked: which way are we leaning?
+                "bias": bias, "bias_note": bias_note,
+                "short_leg": cand["short"]["strike"],
+                "long_leg": cand["long"]["strike"],
                 "delta": round(cand["short"]["delta"], 4),
                 "credit": round(cand["credit"], 2)})
             if dec.decision != "TRADE":
@@ -126,7 +134,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                                  context={"symbol": symbol, "side": side})
             ledger.record_raw(rec)
             committed += dec.max_loss
-            traded.append((symbol, side, dec.contracts, cand["credit"],
+            traded.append((symbol, f"{side}/{bias}", dec.contracts, cand["credit"],
                            dec.max_loss, rec["result"]))
     return {"regime": regime, "traded": traded, "refused": refused,
             "committed": committed, "skipped": None,

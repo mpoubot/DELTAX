@@ -220,6 +220,31 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
     }
 
 
+def directional_bias(side: str, structure: str = "credit") -> tuple:
+    """Translate an options structure into the direction it actually expresses.
+
+    Teams reason in LONG and SHORT; the agent nominates "put" and "call" sides.
+    They are not the same vocabulary, and the mapping inverts with structure:
+
+        SELL a put spread  -> profits if price holds up  -> LONG  bias
+        SELL a call spread -> profits if price holds down -> SHORT bias
+        BUY  a call spread -> LONG        BUY a put spread -> SHORT
+
+    A condor holds both sides at once and is therefore NEUTRAL as a book, which
+    is the honest label given E11 found no directional edge.
+
+    Returns (bias, emoji, plain_english).
+    """
+    credit = structure == "credit"
+    if side == "put":
+        return ("LONG", "📈", "profits if price holds up") if credit \
+          else ("SHORT", "📉", "profits if price falls")
+    if side == "call":
+        return ("SHORT", "📉", "profits if price holds down") if credit \
+          else ("LONG", "📈", "profits if price rises")
+    return ("NEUTRAL", "⚖️", "direction-neutral")
+
+
 def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
                   strike_lo: float, strike_hi: float) -> Optional[tuple]:
     """Pick the NEAREST expiry in the band that is liquid enough to trade.
