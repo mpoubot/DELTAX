@@ -12,7 +12,7 @@ unreachable in production, whatever its own unit tests say.
 import sys, os
 from datetime import date, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from deltax.gates import evaluate
+from deltax.gates import evaluate, PORTFOLIO_RISK_PCT
 
 passed = failed = 0
 def check(n, c, d=""):
@@ -52,7 +52,8 @@ for gate, kw in [
     ("liquidity",       dict(open_interest=None)),
     ("min_credit",      dict(credit=0.10)),
     ("sizing",          dict(max_loss_per_contract=9_000.0)),
-    ("portfolio_risk",  dict(open_portfolio_max_loss=9_950.0)),
+    # derived, so it keeps testing the gate when the cap moves (E22)
+    ("portfolio_risk",  dict(open_portfolio_max_loss=100_000.0*PORTFOLIO_RISK_PCT - 50.0)),
     ("credit_fraction", dict(credit=0.80, width=5.0, short_delta=0.20)),
     ("quote_sanity",    dict(credit=-1.0)),
     ("quote_sanity",    dict(quote_age_hours=48.0)),

@@ -5,13 +5,21 @@ from deltax.permission import (Evidence, recommend_state, gate_permission,
                                NORMAL, CAUTION, DEFENSIVE, NO_NEW_POSITIONS,
                                HALT, ORDER, POLICY)
 
+# Derive from the live threshold, never hardcode it - these tests silently
+# stopped testing anything when PORTFOLIO_RISK_PCT moved and the halt level
+# moved with it (E22).
+DD_HALT = Evidence().max_backtested_drawdown_pct        # e.g. -20.0
+DD_PAST = DD_HALT - 1.0                                 # past the limit
+DD_NEAR = DD_HALT * 0.6 - 1.0                           # into the CAUTION band
+DD_OK   = DD_HALT * 0.1                                 # comfortably fine
+
 passed = failed = 0
 def check(n, c, d=""):
     global passed, failed
     if c: passed += 1; print(f"  ✓ {n}")
     else: failed += 1; print(f"  ✗ {n}  {d}")
 
-OK = dict(vix_change_pct=2, benchmarks_weak=0, market_open=True, drawdown_pct=-1)
+OK = dict(vix_change_pct=2, benchmarks_weak=0, market_open=True, drawdown_pct=DD_OK)
 
 print("\n── normal conditions ──")
 d = recommend_state(Evidence(**OK))
@@ -32,23 +40,24 @@ check("shock blocks both sides",
       not gate_permission(d,"put")[0] and not gate_permission(d,"call")[0])
 
 print("\n── kill switch (S5) ──")
-d = recommend_state(Evidence(**{**OK, "drawdown_pct": -11}))
-check("drawdown past backtested worst -> HALT", d.state == HALT, d.state)
-d = recommend_state(Evidence(**{**OK, "drawdown_pct": -6.5}))
-check("drawdown approaching limit -> CAUTION", d.state == CAUTION, d.state)
+d = recommend_state(Evidence(**{**OK, "drawdown_pct": DD_PAST}))
+check(f"drawdown past backtested worst ({DD_PAST}%) -> HALT", d.state == HALT, d.state)
+d = recommend_state(Evidence(**{**OK, "drawdown_pct": DD_NEAR}))
+check(f"drawdown approaching limit ({DD_NEAR}%) -> CAUTION", d.state == CAUTION, d.state)
+check("halt threshold tracks the deployed risk budget", DD_HALT <= -10.0, str(DD_HALT))
 
 print("\n── fail closed ──")
 check("stale data -> HALT", recommend_state(Evidence(data_stale=True, market_open=True)).state == HALT)
 check("unknown market status -> HALT", recommend_state(Evidence(vix_change_pct=1)).state == HALT)
 check("market closed -> NO_NEW_POSITIONS",
       recommend_state(Evidence(**{**OK, "market_open": False})).state == NO_NEW_POSITIONS)
-d = recommend_state(Evidence(vix_change_pct=None, benchmarks_weak=0, market_open=True, drawdown_pct=-1))
+d = recommend_state(Evidence(vix_change_pct=None, benchmarks_weak=0, market_open=True, drawdown_pct=DD_OK))
 check("missing VIX raises to CAUTION, never NORMAL", d.state != NORMAL, d.state)
-d = recommend_state(Evidence(vix_change_pct=2, benchmarks_weak=None, market_open=True, drawdown_pct=-1))
+d = recommend_state(Evidence(vix_change_pct=2, benchmarks_weak=None, market_open=True, drawdown_pct=DD_OK))
 check("missing regime raises to CAUTION", d.state != NORMAL, d.state)
 
 print("\n── most restrictive wins ──")
-d = recommend_state(Evidence(vix_change_pct=45, benchmarks_weak=0, market_open=True, drawdown_pct=-11))
+d = recommend_state(Evidence(vix_change_pct=45, benchmarks_weak=0, market_open=True, drawdown_pct=DD_PAST))
 check("halt beats no-new-positions", d.state == HALT, d.state)
 check("every reason recorded", len(d.reasons) >= 2, str(d.reasons))
 

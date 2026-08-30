@@ -46,7 +46,12 @@ class Evidence:
     benchmarks_weak: Optional[int] = None       # 0-3, our existing regime read
     data_stale: bool = False                    # any feed failed freshness
     drawdown_pct: Optional[float] = None        # live drawdown, negative
-    max_backtested_drawdown_pct: float = -10.0  # S5 kill-switch threshold
+    # Halt at two-thirds of the deployed risk budget, not at all of it. With
+    # PORTFOLIO_RISK_PCT at 0.30 the modelled worst case is -30%, but a circuit
+    # breaker that only fires once the entire budget is gone is not a circuit
+    # breaker. -20% stops us with a third of the risk budget still unspent and
+    # 80% of the account intact. CAUTION fires at 60% of this, i.e. -12%.
+    max_backtested_drawdown_pct: float = -20.0  # S5 kill-switch threshold
     market_open: Optional[bool] = None
 
 

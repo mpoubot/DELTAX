@@ -19,7 +19,13 @@ import json
 # Competition posture (see COMPETITION-PLAYBOOK.md; research posture was 1%/5%).
 # Pending team ratification before the Monday pre-registration commit.
 PER_POSITION_RISK_PCT = 0.02   # 2% of equity max loss per position
-PORTFOLIO_RISK_PCT    = 0.10   # 10% of equity max loss across all open positions
+# Raised 0.10 -> 0.30 for the competition, on the team's $30k options allocation
+# (E22). Per-trade expectancy is a per-contract R-multiple and does not change
+# with size - what scales is the ACCOUNT outcome distribution, in both
+# directions. Worst case moves from -10% to -30%. Per-position stays at 2%, so
+# deploying the full budget forces at least 15 positions rather than a few
+# large ones, which is what E19 asks for.
+PORTFOLIO_RISK_PCT    = 0.30   # 30% of equity max loss across all open positions
 MIN_DTE               = 7      # rule R5: 0DTE banned; clear the gamma zone
 MAX_DTE               = 21     # short enough to resolve inside the contest window
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate

@@ -568,3 +568,62 @@ has, and it did not come from our own data.
 **Consequence.** Exit modelling is promoted from an options-specific technique
 to a house rule: no strategy in any asset class is evaluated, accepted or
 rejected on entry logic alone.
+
+## E22 — Raising size changes the account, not the edge
+
+> Per-trade expectancy is a per-contract R-multiple. It does not improve or
+> degrade when you trade more contracts. What scales with size is the **account
+> outcome distribution — in both directions, symmetrically.**
+
+**The decision.** The team allocated $30,000 to options (from $10,000), $60,000
+to stocks and $10,000 to crypto. `PORTFOLIO_RISK_PCT` therefore moves
+**0.10 → 0.30**. Nothing about the strategy's validation changes: E is still
++0.109 (SPY, Sep 11, out-of-sample). The number of contracts triples, the
+expected return triples, and **so does the worst case: −10% becomes −30%.**
+
+**Per-position stays at 2%.** With a $30,000 budget and a $2,000 per-position
+cap, deploying the full budget requires **at least 15 distinct positions**. That
+is deliberate: E19 established that a condor book is approximately one bet on
+realised market volatility, so the defence available is many small positions
+rather than few large ones. Raising the portfolio cap without holding the
+position cap would have produced concentration, which is the opposite of what
+the evidence asks for.
+
+**The kill switch had to move with it.** `max_backtested_drawdown_pct` was
+−10%, matching the old budget. Left there, it would have fired on a routine bad
+day at the new size and frozen the agent mid-contest — a threshold calibrated
+for one risk level silently becomes wrong at another. It is now **−20%**: two
+thirds of the deployed budget, which stops us with a third still unspent and
+80% of the account intact. Halting only after the entire budget is gone is not
+a circuit breaker.
+
+**Tests were hardcoding the old thresholds.** Five cases asserted against −11%,
+−6.5% and $9,950 literals. They passed the moment the constants moved while
+testing nothing — the same silent drift that left `condor_expectancy.py`
+pinned at `CREDIT_MULT=0.9` after the gate moved to 1.15. Every risk test now
+derives its inputs from the live constant.
+
+**Rule.** A threshold expressed as a percentage of equity is coupled to every
+other such threshold. Move one and re-derive the rest, or the safety chain
+quietly develops a gap at the new size.
+
+## E23 — Quote two bounds, not one number
+
+> Our two estimates of the same week's return differ by a factor of nineteen.
+> Reporting either one alone would misinform the team.
+
+| Method | Basis | This week on $30,000 risk |
+|---|---|---|
+| BS model, walk-forward | credit at the **gate floor**, constant IV, no fills above minimum | **≈ +$723** |
+| Last-week replay | **actual chain prices**, 5 names | **≈ +$13,800** (+46% on capital at risk) |
+
+Both are honest; they answer different questions. The model asks *what if every
+fill is the worst the gate would accept* — a deliberate lower bound. The replay
+asks *what did real quotes actually pay* on one week that has already happened,
+which is a single sample and cannot be a distribution.
+
+**The truth is bracketed, not pinpointed.** Real fills land above the floor, so
+the model understates; one week's replay cannot be extrapolated, so it
+overstates as a forecast. Report the range and say which assumption produces
+each end. A single confident number here would be the least defensible thing in
+the whole write-up.
