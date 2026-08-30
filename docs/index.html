@@ -1,0 +1,80 @@
+<title>DELTAX — Autonomous Options Agent</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0A1428;color:#C8D4E0;
+ font:15px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:30px;margin:0;letter-spacing:.14em;color:#fff}
+h1 span{color:#1E90FF}
+.sub{color:#7A8BA0;margin:6px 0 4px;letter-spacing:.05em}
+.team{color:#7A8BA0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:26px}
+.card{background:#0F1D33;border:1px solid #1d3050;border-radius:10px;padding:14px 16px}
+.lbl{color:#7A8BA0;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.val{font-size:23px;color:#fff;margin-top:5px}
+.note{color:#7A8BA0;font-size:11px;margin-top:3px}
+h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#1E90FF;
+ margin:30px 0 10px;border-bottom:1px solid #1d3050;padding-bottom:7px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:#7A8BA0;font-weight:400;font-size:11px;
+ letter-spacing:.1em;text-transform:uppercase;padding:7px 8px}
+td{padding:7px 8px;border-top:1px solid #16263f}
+td.num{text-align:right;color:#fff}
+td.empty{color:#7A8BA0;text-align:center;padding:20px}
+td.bar span{display:block;height:7px;background:#1E90FF;border-radius:3px}
+code{color:#1E90FF}
+.warn{background:#3a2a08;border:1px solid #7a5a10;color:#f0c674;
+ padding:10px 14px;border-radius:8px;margin-bottom:18px;font-size:13px}
+.foot{color:#7A8BA0;font-size:11px;margin-top:34px;border-top:1px solid #1d3050;padding-top:14px}
+.tag{display:inline-block;background:#132b4c;border:1px solid #1d3050;border-radius:20px;
+ padding:2px 11px;margin-right:6px;font-size:11px;color:#7A8BA0}
+@media(max-width:600px){.val{font-size:19px}h1{font-size:22px}}
+</style>
+<div class="wrap">
+<h1>DELTA<span>X</span></h1>
+<div class="sub">AUTONOMOUS OPTIONS TRADING &nbsp;·&nbsp; CODE · RISK · EXECUTE</div>
+<div class="team">TEAM SYNC BOARD &nbsp;·&nbsp; shared status for the DELTAX team &nbsp;·&nbsp;
+ <span class="tag">US</span><span class="tag">Latvia</span><span class="tag">Denmark</span></div>
+
+<div class="grid">
+<div class="card"><div class="lbl">Account</div><div class="val">PA3ID1B9L6BP</div><div class="note">Alpaca paper</div></div>
+<div class="card"><div class="lbl">Equity</div><div class="val">$100,000</div><div class="note">live</div></div>
+<div class="card"><div class="lbl">Cash</div><div class="val">$100,000</div><div class="note"></div></div>
+<div class="card"><div class="lbl">Open positions</div><div class="val">0</div><div class="note"></div></div>
+<div class="card"><div class="lbl">Decisions logged</div><div class="val">36</div><div class="note">every evaluation, incl. refusals</div></div>
+<div class="card"><div class="lbl">Refused</div><div class="val">36</div><div class="note">100% of candidates</div></div>
+</div>
+
+<h2>Why the agent said no</h2>
+<p class="note">Every evaluation is recorded — approvals and refusals alike — in a
+hash-chained, append-only ledger. An agent that can explain why it declined a
+candidate demonstrates more than a P&amp;L number can.</p>
+<table><tr><th>Gate</th><th>Refusals</th><th></th></tr><tr><td><code>min_credit</code></td><td class="num">17</td><td class="bar"><span style="width:100%"></span></td></tr><tr><td><code>liquidity</code></td><td class="num">14</td><td class="bar"><span style="width:82%"></span></td></tr><tr><td><code>quote_sanity</code></td><td class="num">5</td><td class="bar"><span style="width:29%"></span></td></tr></table>
+
+<h2>Open positions</h2>
+<table><tr><th>Symbol</th><th>Bias</th><th>Qty</th><th>P&amp;L</th></tr><tr><td colspan="4" class="empty">No open positions. The agent has placed no orders.</td></tr></table>
+
+<h2>Book allocation</h2>
+<table>
+<tr><th>Sleeve</th><th>Capital</th><th>Structure</th><th>Status</th></tr>
+<tr><td>Options</td><td class="num">$30,000 risk</td><td>Iron condors, 11 DTE, δ0.20</td><td>validated</td></tr>
+<tr><td>Stocks</td><td class="num">$60,000</td><td>Covered calls</td><td>build pending</td></tr>
+<tr><td>Crypto</td><td class="num">$10,000</td><td>Spot — no crypto options on venue</td><td>build pending</td></tr>
+</table>
+
+<h2>How it decides</h2>
+<table>
+<tr><td>Structure</td><td>Iron condors — direction-neutral credit spreads, defined risk</td></tr>
+<tr><td>Direction</td><td>Put spread = 📈 LONG · Call spread = 📉 SHORT · book reports its net lean</td></tr>
+<tr><td>Risk</td><td>2% per position · 30% portfolio · −5% daily kill switch</td></tr>
+<tr><td>Gates</td><td>13 deterministic gates, fail-closed — unknown is never treated as safe</td></tr>
+<tr><td>Permission</td><td>NORMAL → CAUTION → DEFENSIVE → NO_NEW_POSITIONS → HALT, above strategy</td></tr>
+<tr><td>Validation</td><td>Walk-forward, base-rate comparison, Bonferroni; failed ideas are stopped, not tuned</td></tr>
+</table>
+
+<div class="foot">
+Generated 2026-08-30 18:38 UTC · refreshed every 5 minutes by a scheduled job ·
+paper trading only, no real capital ·
+<span class="tag">312 tests</span><span class="tag">Alpaca CLI</span><span class="tag">MIT</span>
+</div>
+</div>
