@@ -111,6 +111,67 @@ def render(positions, *, equity, start_equity, day_pnl, permission,
     return "\n".join(L)
 
 
+def render_backtest(weeks, *, title, assumptions) -> str:
+    """Backtest results in the live dashboard's shape.
+
+    Same columns and same emoji thresholds as the live screen, so a replay reads
+    like the thing it simulates. Marked BACKTEST throughout - after a preview
+    was mistaken for a live account, no simulated screen goes out unlabelled.
+    """
+    L=[]; W=78
+    L.append(f"{BOLD}╔{'═'*W}╗{RESET}")
+    L.append(f"{BOLD}║{(' ' + title):<{W}}║{RESET}")
+    L.append(f"{BOLD}╚{'═'*W}╝{RESET}")
+    L.append(f"  {CYN}╔{'═'*58}╗{RESET}")
+    L.append(f"  {CYN}║  📊  BACKTEST — real historical prices, simulated fills    ║{RESET}")
+    L.append(f"  {CYN}║      Not live positions. No orders were placed.           ║{RESET}")
+    L.append(f"  {CYN}╚{'═'*58}╝{RESET}")
+
+    running=0.0
+    for wk in weeks:
+        running+=wk["total"]
+        col=GRN if wk["total"]>=0 else RED
+        L.append("")
+        L.append(f"{BOLD}  ── week of {wk['entry']:%a %d %b} → {wk['exit']:%a %d %b} "
+                 f"{'─'*22} {col}{wk['total']:+,.0f}{RESET}{BOLD} ──{RESET}")
+        L.append(f"{DIM}  {'SYM':<7}{'SLEEVE':<12}{'STRUCTURE':<15}"
+                 f"{'IN':>8}{'OUT':>8}{'P&L':>10}{'KEPT':>7}  RESULT{RESET}")
+        for r in sorted(wk["rows"], key=lambda x: x["pnl"]):
+            pc=GRN if r["pnl"]>=0 else RED
+            e,lab,c=r["emoji"],r["label"],r["colour"]
+            kept=f"{r['kept']*100:>5.0f}%" if r["kept"] is not None else "    —"
+            L.append(f"  {r['sym']:<7}{r['sleeve']:<12}{r['struct']:<15}"
+                     f"{r['entry']:>8.2f}{r['exit']:>8.2f}"
+                     f"{pc}{r['pnl']:>10,.0f}{RESET}{kept}  {e} {c}{lab}{RESET}")
+        s_=wk["sleeves"]
+        L.append(f"{DIM}  {'·'*W}{RESET}")
+        L.append("  " + "   ".join(
+            f"{k} {GRN if v>=0 else RED}{v:+,.0f}{RESET}" for k,v in s_.items())
+            + f"   {BOLD}week {col}{wk['total']:+,.0f}{RESET}"
+            + f"   running {GRN if running>=0 else RED}{running:+,.0f}{RESET}")
+
+    L.append("")
+    L.append(f"{BOLD}  {'═'*W}{RESET}")
+    tot=sum(w["total"] for w in weeks)
+    wins=sum(1 for w in weeks if w["total"]>0)
+    allrows=[r for w in weeks for r in w["rows"]]
+    winners=[r for r in allrows if r["pnl"]>0]
+    col=GRN if tot>=0 else RED
+    L.append(f"  {BOLD}TOTAL {col}{tot:+,.0f}{RESET}{BOLD} over {len(weeks)} weeks{RESET}"
+             f"   ({tot/100_000*100:+.2f}% of $100k)"
+             f"   weeks won {wins}/{len(weeks)}"
+             f"   positions won {len(winners)}/{len(allrows)}"
+             f" ({len(winners)/max(1,len(allrows))*100:.0f}%)")
+    best=max(allrows,key=lambda r:r["pnl"]); worst=min(allrows,key=lambda r:r["pnl"])
+    L.append(f"  best {GRN}{best['sym']} {best['pnl']:+,.0f}{RESET}"
+             f"   ·   worst {RED}{worst['sym']} {worst['pnl']:+,.0f}{RESET}")
+    L.append(f"{BOLD}  {'═'*W}{RESET}")
+    L.append(f"{DIM}  assumptions:{RESET}")
+    for a in assumptions:
+        L.append(f"{DIM}    · {a}{RESET}")
+    return "\n".join(L)
+
+
 def demo() -> str:
     from datetime import timedelta
     t=date.today()
