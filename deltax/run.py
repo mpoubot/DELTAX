@@ -13,6 +13,7 @@ import sys
 from deltax import execute
 from deltax.calendar import entry_allowed
 from deltax.permission import Evidence, recommend_state, gate_permission
+from deltax.manage import place_exit
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
 from deltax.screener import (
@@ -133,6 +134,12 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                                  dry_run=dry_run,
                                  context={"symbol": symbol, "side": side})
             ledger.record_raw(rec)
+            # E5/E15: the exit is placed AT ENTRY, not watched for later. An
+            # exit that needs the agent alive at the right minute is not an
+            # exit — and the 50% close is where the measured edge lives.
+            if rec.get("result") not in (None, "REFUSED"):
+                place_exit(legs, dec.contracts, cand["credit"],
+                           ledger=ledger, dry_run=dry_run)
             committed += dec.max_loss
             traded.append((symbol, f"{side}/{bias}", dec.contracts, cand["credit"],
                            dec.max_loss, rec["result"]))
