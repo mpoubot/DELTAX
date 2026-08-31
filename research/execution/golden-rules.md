@@ -868,3 +868,47 @@ exactly like a system that works.
 
 *(Note: this entry was itself lost once — its original commit was blocked and
 the corpus text silently dropped while the code landed. Restored 31 Aug.)*
+
+## E31 — A threshold without a deadband classifies noise as signal
+
+> `price < vwap` has no noise floor. Any gap counts, however small. On the
+> agent's first live session that blocked the entire put side of the book on a
+> flat tape.
+
+**Evidence, 31 Aug 09:45 ET — the first entry window the agent ever reached:**
+
+| | Gap vs VWAP | Classified |
+|---|---|---|
+| SPY | −0.05% | WEAK |
+| QQQ | **−0.004%** | WEAK |
+| IWM | −0.26% | WEAK |
+
+3/3 weak → `DEFENSIVE` → put spreads blocked → **38 candidates refused, zero
+trades.** QQQ was four thousandths of one percent below its average price. That
+is not a regime; it is a tick.
+
+A **0.15% deadband** re-reads the same tape as 1/3 weak → `NORMAL`, put side
+open at full size.
+
+**Why this is a fix and not a loosening.** The test applied before changing it:
+*would I make this change if it BLOCKED trades instead of unblocking them?*
+Yes — a 0.004% gap is not a market regime in whichever direction it points, and
+a rule that reads it as one is wrong on the days it costs nothing as well as the
+days it costs a session. The tests assert the symmetry: noise **above** VWAP is
+ignored on the same terms.
+
+**What was deliberately NOT changed.** Risk caps, kill switches, credit floor,
+liquidity gates — all firing correctly, all untouched. The change is confined to
+how one measurement is classified.
+
+**The larger admission this exposed.** The `3/3 weak → DEFENSIVE` rule was never
+backtested; it was written from reasoning. Meanwhile **E11**, which *was*
+backtested, found the regime filter has no directional edge at all (t = −1.29,
+sign inverted). So an unproven rule was blocking half the book — precisely what
+**E10** exists to prevent, sitting in our own corpus unnoticed until it cost a
+session.
+
+**Outstanding work, tonight.** Backtest whether 3/3-weak genuinely predicts
+worse put-spread outcomes. If it does not, `DEFENSIVE` should reduce **size**,
+not block a **side** — caution without a directional bet the evidence does not
+support.

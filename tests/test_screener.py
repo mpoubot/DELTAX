@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from deltax.screener import (
     assess_regime, posture, select_vertical, parse_expiry, spread_pct,
     screen_income_book, RegimeState, BENCHMARKS, choose_expiry,
+    REGIME_DEADBAND,
 )
 from deltax.ledger import Ledger
 
@@ -163,6 +164,27 @@ class NoneFeed:
                 for i in range(10)]
 check("returns None when nothing clears the liquidity floor",
       choose_expiry(NoneFeed(), "SPY", "put", "2026-09-07", "2026-09-21", 1.0, 999.0) is None)
+
+print("\n── regime deadband: noise is not a regime (E31) ──")
+def _sn(px, vw): return {"latestTrade": {"p": px}, "dailyBar": {"vw": vw}}
+def _all(px, vw): return assess_regime({b: _sn(px, vw) for b in BENCHMARKS})
+
+check("a 0.004% gap is NOT weak (the 31 Aug QQQ case)", _all(715.25, 715.26).weak_count == 0)
+check("a 0.05% gap is NOT weak", _all(766.14, 766.50).weak_count == 0)
+check("a 0.26% gap IS weak", _all(293.50, 294.27).weak_count == 3)
+check("a 1.5% gap IS weak", _all(985.0, 1000.0).weak_count == 3)
+check("above vwap is never weak", _all(1005.0, 1000.0).weak_count == 0)
+# Exact-boundary equality is a float artifact (998.5/1000-1 lands at
+# -0.00149999...), so test just past it rather than on it.
+check("just past the deadband counts as weak",
+      _all(1000.0 * (1 - REGIME_DEADBAND * 1.01), 1000.0).weak_count == 3)
+check("just inside the deadband does not",
+      _all(1000.0 * (1 - REGIME_DEADBAND * 0.9), 1000.0).weak_count == 0)
+check("deadband is a real threshold, not zero", REGIME_DEADBAND > 0)
+# The fix must cut both ways: it is a noise floor, not a bias toward trading.
+check("noise ABOVE vwap is equally ignored", _all(1000.04, 1000.0).weak_count == 0)
+check("missing data still fails closed at 3/3",
+      assess_regime({b: {} for b in BENCHMARKS}).weak_count == 3)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

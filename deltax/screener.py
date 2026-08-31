@@ -86,8 +86,20 @@ class RegimeState:
 
 # ── pure logic ───────────────────────────────────────────────────────────────
 
+# A benchmark must sit MEANINGFULLY below its VWAP to count as weak. Without a
+# deadband the test has no noise floor: on 31 Aug at 09:45 QQQ was 0.004% below
+# its VWAP and classified WEAK, which with SPY and IWM produced 3/3 -> DEFENSIVE
+# and blocked the entire put side of the book on a flat tape.
+#
+# This is a measurement fix, not a loosening. A 0.004% gap is not a regime, and
+# classifying it as one is wrong in whichever direction it happens to point -
+# the same change would BLOCK trades on a day the noise ran the other way (E31).
+REGIME_DEADBAND = 0.0015   # 0.15% below VWAP
+
+
 def assess_regime(snapshots: dict) -> RegimeState:
-    """Alyrise §4: a benchmark is weak when latest price < its intraday VWAP."""
+    """Alyrise §4: a benchmark is weak when latest price sits meaningfully
+    below its intraday VWAP - meaningfully being REGIME_DEADBAND (E31)."""
     weak, detail, complete = [], {}, True
     for sym in BENCHMARKS:
         snap = snapshots.get(sym) or {}
@@ -96,7 +108,7 @@ def assess_regime(snapshots: dict) -> RegimeState:
             complete = False
             detail[sym] = {"price": price, "vwap": vwap, "weak": None}
             continue
-        is_weak = price < vwap
+        is_weak = vwap > 0 and (price / vwap - 1.0) <= -REGIME_DEADBAND
         if is_weak:
             weak.append(sym)
         detail[sym] = {"price": price, "vwap": vwap, "weak": is_weak}
