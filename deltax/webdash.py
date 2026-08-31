@@ -67,6 +67,18 @@ import html as _html
 import re as _re
 
 _KEYSHAPE = _re.compile(r"(PK[A-Z0-9]{16,}|[A-Za-z0-9]{40,})")
+# The CLI writes ANSI colour into cron.log; the web reads that file verbatim,
+# so every line arrived carrying literal escape codes like "[38;5;28m". That is
+# what made the board unreadable - not the palette.
+_ANSI = _re.compile(r"\x1b\[[0-9;]*m|\[[0-9;]{1,8}m")
+# Box-drawing is the CLI's structure. The web has CSS for that, so it is noise.
+_BOX = _re.compile(r"^[─│┌└├┤╔╚║]+\s*|\s*[─│]+$")
+
+
+def _clean(line: str) -> str:
+    line = _ANSI.sub("", line)
+    line = _BOX.sub("", line).strip()
+    return _re.sub(r"\s{2,}", "  ", line)
 
 def _terminal_lines(limit=90):
     """The agent's real activity — timestamped, icon-coded, newest FIRST.
@@ -106,11 +118,17 @@ def _terminal_lines(limit=90):
                 continue
             if ln.startswith("exit="):
                 continue
-            icon, css = ("⏸️", "skip") if "SKIPPED" in ln else \
+            ln = _clean(ln)
+            if not ln or set(ln) <= {"-", "=", "·", "."}:
+                continue
+            low = ln.lower()
+            icon, css = ("⏸️", "skip") if "skipped" in low or "no action" in low else \
                         ("📡", "intel") if tag == "intel" else ("⚙️", "agent")
-            if "TRADED" in ln:  icon, css = "🟢", "fill"
-            if "REFUSED" in ln: icon, css = "⛔", "refuse"
-            if "regime"  in ln: icon, css = "📊", "agent"
+            if "opened" in low or "filled" in low:   icon, css = "🟢", "fill"
+            if "exit"   in low:                      icon, css = "💰", "fill"
+            if "refused" in low or "⛔" in ln:        icon, css = "⛔", "refuse"
+            if "scoreboard" in low:                  icon, css = "📊", "agent"
+            if low.startswith("decision"):           icon, css = "✅", "agent"
             events.append((cur_k, cur_t, icon, css, ln[:150]))
 
     # ── ledger: every decision the agent made ──
@@ -291,35 +309,39 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
-.term{{background:#000000;border:1px solid #0d3a1a;padding:4px 0;
+.term{{background:#0B1B33;border:1px solid #1C3A5E;padding:0;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
-.term .body{{margin:0;padding:6px 0;max-height:520px;overflow:auto;font-size:12px;
- background:#000;font-family:var(--mono)}}
-.tl{{display:flex;gap:11px;align-items:baseline;padding:5px 18px;
- border-left:2px solid transparent;line-height:1.5}}
-.tl:hover{{background:rgba(10,186,181,.05)}}
-.ts{{color:#00E676;font-variant-numeric:tabular-nums;flex:none;
- font-size:11.5px;letter-spacing:.03em;text-shadow:0 0 6px rgba(0,230,118,.5)}}
+.term .body{{margin:0;padding:10px 0;max-height:540px;overflow:auto;font-size:12.5px;
+ background:#0B1B33;font-family:var(--mono);line-height:1.6}}
+.tl{{display:flex;gap:16px;align-items:baseline;padding:7px 22px;
+ border-left:3px solid transparent;line-height:1.55}}
+.tl:hover{{background:rgba(255,255,255,.045)}}
+.ts{{color:#7FA8CC;font-variant-numeric:tabular-nums;flex:none;
+ font-size:11.5px;letter-spacing:.04em;min-width:62px}}
 .ic{{flex:none;width:18px;text-align:center}}
-.tx{{color:#00E676;word-break:break-word;text-shadow:0 0 5px rgba(0,230,118,.28)}}
-.tl.fill{{border-left-color:#39FF14;background:rgba(57,255,20,.09)}}
-.tl.fill .tx{{color:#39FF14;text-shadow:0 0 9px rgba(57,255,20,.6)}}
-.tl.refuse{{border-left-color:#FF3860}}
-.tl.refuse .tx{{color:#FF6B85}}
-.tl.skip .tx,.tl.skip .ts{{color:#1F7A3D;text-shadow:none}}
-.tl.intel{{border-left-color:#00E676}}
-.tl.intel .tx{{color:#33B36B;text-shadow:none}}
-/* A rule between 5-minute cycles — without it the log reads as one wall. */
-.tl.cyc{{border-top:1px solid #0d3a1a;margin-top:5px;padding-top:9px}}
-.tl.cyc .tx{{color:#39FF14;font-weight:500;letter-spacing:.06em;
- text-shadow:0 0 10px rgba(57,255,20,.55)}}
+.tx{{color:#EAF2FB;word-break:break-word}}
+.tl.fill{{border-left-color:#4ADE80;background:rgba(74,222,128,.10)}}
+.tl.fill .tx{{color:#86EFAC;font-weight:500}}
+.tl.refuse{{border-left-color:#F87171}}
+.tl.refuse .tx{{color:#FCA5A5}}
+.tl.skip .tx{{color:#6C88A8}} .tl.skip .ts{{color:#4A6684}}
+.tl.intel{{border-left-color:#60A5FA}}
+.tl.intel .tx{{color:#B6D4F0}}
+/* Each 5-minute cycle is a block, separated by real whitespace and a rule.
+   A hairline was not enough - the log still read as one wall. */
+.tl.cyc{{margin-top:20px;padding-top:16px;border-top:1px solid #24466E;
+ position:relative}}
+.tl.cyc:first-child{{margin-top:2px;padding-top:8px;border-top:none}}
+.tl.cyc .ts{{color:#FFFFFF;font-weight:600;font-size:12px;
+ background:#1C3A5E;padding:3px 9px;border-radius:3px;min-width:auto}}
 .live{{display:inline-flex;align-items:center;gap:7px;font-size:10px;
  letter-spacing:.2em;color:#3BE8A0;margin-left:12px}}
 .live b{{width:7px;height:7px;border-radius:50%;background:#3BE8A0;
  box-shadow:0 0 9px #3BE8A0;animation:p 1.6s ease-in-out infinite}}
 @keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
-.legend{{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:#1F7A3D;
- padding:9px 18px;border-bottom:1px solid #0d3a1a;background:#000}}
+.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#8FB0D0;
+ padding:12px 22px;border-bottom:1px solid #24466E;background:#132A47;
+ letter-spacing:.05em}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
