@@ -55,9 +55,9 @@ the eligibility evidence.
 - [ ] Project title, short description, long description, tech/category tags
 - [x] **Cover image** — ✅ done (llama/chrome logo, "CODE · RISK · EXECUTE")
 - [~] **Video presentation** — in progress (Pautax, separate session)
-- [ ] **Slide presentation**
-- [ ] **Public GitHub repository** — ⚠️ **repo is PRIVATE**, must flip before Fri 11:00 ET
-- [ ] Demo application platform + **application URL** — no web UI exists; needs a hosted page
+- [x] **Slide presentation** — ✅ live at /slides.html + PDF in repo (v3 rewrite pending)
+- [x] **Public GitHub repository** — ✅ public, MIT licensed
+- [x] Demo application platform + **application URL** — ✅ https://pautax007.github.io/DELTAX/ (live board, refreshes every 3 min)
 - [x] **Alpaca paper trading account ID** → `PA3ID1B9L6BP`
 - [ ] **One-page write-up: AI logic, risk gates, Alpaca infrastructure**
 
