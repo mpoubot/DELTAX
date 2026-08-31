@@ -68,50 +68,101 @@ import re as _re
 
 _KEYSHAPE = _re.compile(r"(PK[A-Z0-9]{16,}|[A-Za-z0-9]{40,})")
 
-def _terminal_lines(limit=110):
-    """The agent's real activity, newest last, as it happened.
+def _terminal_lines(limit=90):
+    """The agent's real activity — timestamped, icon-coded, newest FIRST.
 
-    Three streams interleaved by timestamp where possible: scheduled runs
-    (cron.log), pre-market intelligence (premarket.log), and every ledger
-    decision. Each line is HTML-escaped and passed through a key-shape
-    redactor - the publish script refuses key-shaped strings outright, and
-    this makes sure it never has a reason to.
+    The previous version dropped timestamps entirely and buried the newest line
+    at the bottom of a scroll box. For a team watching an autonomous system,
+    "when" is the first question and "what just happened" is the second.
     """
-    out = []
-    for path, tag in (("logs/premarket.log", "intel"), ("logs/cron.log", "agent")):
+    from datetime import timezone as _tz, timedelta as _td
+    ET = _tz(_td(hours=-4))
+    events = []          # (sort_key, hhmmss, icon, css, text)
+
+    def stamp(dt):
         try:
-            with open(path) as fh:
-                for ln in fh.readlines()[-40:]:
-                    ln = ln.rstrip()
-                    if ln:
-                        out.append((tag, ln))
+            return dt.astimezone(ET).strftime("%H:%M:%S"), dt.timestamp()
+        except Exception:
+            return "--:--:--", 0.0
+
+    # ── scheduled runs and pre-market passes ──
+    for path, tag in (("logs/cron.log", "agent"), ("logs/premarket.log", "intel")):
+        cur_t, cur_k = "--:--:--", 0.0
+        try:
+            lines = open(path).readlines()[-90:]
         except OSError:
             continue
+        for ln in lines:
+            ln = ln.rstrip()
+            if not ln:
+                continue
+            m = _re.match(r"─+ (?:PRE-MARKET )?(\d{4}-\d\d-\d\dT[\d:]+Z)", ln)
+            if m:
+                try:
+                    d = datetime.fromisoformat(m.group(1).replace("Z", "+00:00"))
+                    cur_t, cur_k = stamp(d)
+                except Exception:
+                    pass
+                continue
+            if ln.startswith("exit="):
+                continue
+            icon, css = ("⏸️", "skip") if "SKIPPED" in ln else \
+                        ("📡", "intel") if tag == "intel" else ("⚙️", "agent")
+            if "TRADED" in ln:  icon, css = "🟢", "fill"
+            if "REFUSED" in ln: icon, css = "⛔", "refuse"
+            if "regime"  in ln: icon, css = "📊", "agent"
+            events.append((cur_k, cur_t, icon, css, ln[:150]))
+
+    # ── ledger: every decision the agent made ──
     try:
         for f in sorted(glob.glob("logs/decisions-*.jsonl")):
-            for ln in open(f).readlines()[-45:]:
+            for ln in open(f).readlines()[-70:]:
                 try:
                     r = json.loads(ln)
                 except Exception:
                     continue
                 e = r.get("event") or r
-                a = e.get("action") or e.get("decision")
+                t, k = "--:--:--", 0.0
+                for key in ("ts", "timestamp", "time"):
+                    if e.get(key) or r.get(key):
+                        try:
+                            d = datetime.fromisoformat(str(e.get(key) or r.get(key)).replace("Z", "+00:00"))
+                            t, k = stamp(d)
+                        except Exception:
+                            pass
+                        break
                 if e.get("decision"):
                     g = e.get("failed_gate")
-                    out.append(("ledger", f"{e.get('decision','?'):<7} {e.get('symbol','?'):<6}"
-                                + (f"refused by {g}" if g else "all gates passed")))
-                elif a:
-                    keys = {k: v for k, v in e.items()
-                            if k in ("action","state","result","reason","note","open_positions",
-                                     "committed","limit_price","qty","symbol","side","error")}
-                    out.append(("ledger", " ".join(f"{k}={v}" for k, v in keys.items())[:150]))
+                    if g:
+                        events.append((k, t, "⛔", "refuse",
+                                       f"REFUSE  {e.get('symbol','?'):<6} blocked by {g}"))
+                    else:
+                        events.append((k, t, "🟢", "fill",
+                                       f"TRADE   {e.get('symbol','?'):<6} all 13 gates passed"))
+                    continue
+                a = e.get("action")
+                if not a:
+                    continue
+                icon, css = {"permission": ("🛡️", "agent"), "reconcile": ("🔄", "agent"),
+                             "exit_order": ("💰", "fill"), "close": ("💰", "fill"),
+                             "submit": ("📤", "fill"), "submit_failed": ("❌", "refuse"),
+                             "skip": ("⏸️", "skip")}.get(a, ("•", "agent"))
+                bits = {k2: v for k2, v in e.items() if k2 in
+                        ("state", "result", "reason", "note", "open_positions",
+                         "committed", "limit_price", "qty", "symbol", "side")}
+                events.append((k, t, icon, css,
+                               f"{a}  " + " ".join(f"{x}={y}" for x, y in bits.items())[:130]))
     except Exception:
         pass
-    lines = []
-    for tag, ln in out[-limit:]:
-        ln = _KEYSHAPE.sub("[redacted]", ln)
-        lines.append(f'<span class="tl {tag}">{_html.escape(ln)}</span>')
-    return "\n".join(lines) or '<span class="tl">no activity recorded yet</span>'
+
+    events.sort(key=lambda e: e[0], reverse=True)          # newest first
+    out = []
+    for _, t, icon, css, txt in events[:limit]:
+        txt = _KEYSHAPE.sub("[redacted]", txt)
+        out.append(f'<div class="tl {css}"><span class="ts">{t}</span>'
+                   f'<span class="ic">{icon}</span>'
+                   f'<span class="tx">{_html.escape(txt)}</span></div>')
+    return "".join(out) or '<div class="tl"><span class="tx">no activity yet</span></div>'
 
 
 def build(account=None, positions=None, error=None) -> str:
@@ -237,12 +288,28 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
 .term{{background:#010403;border:1px solid var(--line);padding:4px 0;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
-.term pre{{margin:0;padding:14px 18px;max-height:430px;overflow:auto;
- font-size:11px;line-height:1.75;color:var(--dim2)}}
-.tl{{display:block;white-space:pre-wrap;word-break:break-all}}
-.tl:before{{content:"❯ ";color:var(--tif)}}
-.tl.ledger{{color:var(--txt)}}
-.tl.intel{{color:#7FA8A4}}
+.term .body{{margin:0;padding:6px 0;max-height:460px;overflow:auto;font-size:12px}}
+.tl{{display:flex;gap:11px;align-items:baseline;padding:5px 18px;
+ border-left:2px solid transparent;line-height:1.5}}
+.tl:hover{{background:rgba(10,186,181,.05)}}
+.ts{{color:var(--tif);font-variant-numeric:tabular-nums;flex:none;
+ font-size:11.5px;letter-spacing:.03em}}
+.ic{{flex:none;width:18px;text-align:center}}
+.tx{{color:var(--txt);word-break:break-word}}
+.tl.fill{{border-left-color:#3BE8A0;background:rgba(59,232,160,.05)}}
+.tl.fill .tx{{color:#8FF0C4}}
+.tl.refuse{{border-left-color:#FF5C7A}}
+.tl.refuse .tx{{color:#E28FA0}}
+.tl.skip .tx,.tl.skip .ts{{color:#4A6360}}
+.tl.intel{{border-left-color:var(--tif)}}
+.tl.intel .tx{{color:#7FA8A4}}
+.live{{display:inline-flex;align-items:center;gap:7px;font-size:10px;
+ letter-spacing:.2em;color:#3BE8A0;margin-left:12px}}
+.live b{{width:7px;height:7px;border-radius:50%;background:#3BE8A0;
+ box-shadow:0 0 9px #3BE8A0;animation:p 1.6s ease-in-out infinite}}
+@keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
+.legend{{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:var(--dim2);
+ padding:9px 18px;border-bottom:1px solid var(--line)}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
@@ -355,11 +422,18 @@ Positive in <span class="gd">80%</span> of them. We cannot forecast direction �
 strategies were tested and all five failed. This says where weeks like this one have
 <span class="cy">landed</span>, and the contest gets exactly one draw.</div>
 
-<h2>LIVE TERMINAL — EVERYTHING THE AGENT DID</h2><div class="rule"></div>
+<h2>LIVE TERMINAL — EVERYTHING THE AGENT DID
+ <span class="live"><b></b>STREAMING</span></h2><div class="rule"></div>
 <div class="lead">The raw activity streams, exactly as written: scheduled runs, pre-market
 intelligence passes, and every ledger entry — approvals, refusals, exits, reconciliations.
 Nothing summarised, nothing hidden. Refreshes with the page.</div>
-<div class="term"><pre>{_terminal_lines()}</pre></div>
+<div class="term">
+  <div class="legend"><span>🟢 filled</span><span>⛔ refused by a gate</span>
+   <span>💰 exit / close</span><span>🛡️ permission</span><span>🔄 reconcile</span>
+   <span>📡 pre-market intel</span><span>⏸️ outside window</span>
+   <span style="color:var(--tif)">newest first · all times ET</span></div>
+  <div class="body">{_terminal_lines()}</div>
+</div>
 
 <div class="foot">
 GENERATED {now:%Y-%m-%d %H:%M} UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
