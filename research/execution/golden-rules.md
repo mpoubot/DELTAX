@@ -1083,3 +1083,68 @@ does both.
 **Rule.** Any constraint that can end the run — a deadline, a capital limit, a
 regulatory window — belongs in a gate with a test, not in prose. Documentation
 records what you decided. Only code enforces it.
+
+## E38 — Dealer gamma: measurable, valuable, and unbacktestable here
+
+> Net dealer gamma tells you whether market-maker hedging **damps** the tape or
+> **amplifies** it. Positive gamma: dealers buy weakness and sell strength, the
+> range holds, premium selling is on the right side. Negative gamma: hedging
+> goes with the move, the tape trends, and a short-premium book fights every
+> hedge.
+
+`GEX = open_interest × gamma × 100 × spot² × 1%`, calls positive and puts
+negative on the dealer's side of the trade.
+
+**Why the input matters as much as the idea.** Open interest updates **once a
+day** and is therefore immune to the 15-minute delay on free-tier options
+quotes. Every other input we gate on is delayed. This one is not — which is the
+insight, not the formula.
+
+**Measured live, 31 Aug, Sep-4 expiry:**
+
+| | Net GEX | Regime |
+|---|---|---|
+| SPY | **+1.54B** | POSITIVE |
+| QQQ | +0.92B | POSITIVE |
+| IWM | −0.10B | NEGATIVE |
+| **UNH** | **−0.02B** | **NEGATIVE** |
+
+The live UNH condor was opened into a **negative-gamma** regime — exactly the
+condition this measure says to avoid.
+
+**It ships ADVISORY, and that is not caution for its own sake.** Historical
+dealer gamma cannot be reconstructed from this API: expired chains return zero
+contracts and `open_interest` carries no as-of parameter. There is no way to ask
+whether the regime predicted anything. **E10 forbids an unvalidated signal
+gating a trade**, and a compelling mechanism with no measurement is exactly what
+E10 exists to stop. It is computed, logged per symbol, and shown — never
+blocking.
+
+**It fails OPEN, unlike E28.** A thin chain means the regime was not measured,
+not that it is bad. Contrast the earnings gate, where a missing check leaves a
+*known, scheduled* risk unexamined and must block.
+
+## E39 — Close before you open
+
+> A cycle that opens first caps the book at whatever was opened earliest. The
+> budget is already spent on positions that may be moments from closing.
+
+**Measured over 25 Mondays since March, 10 names, real market credit:**
+
+| Ordering | P&L | Opened | Blocked by budget |
+|---|---|---|---|
+| Entries first | −7,690 | 228 | **22** |
+| **Exits first** | **−2,805** | **250** | **0** |
+
+**+$4,885 and 22 more positions**, from reordering two blocks of code. Freeing
+committed risk before evaluating candidates removes the artificial ceiling
+entirely — the blocked count goes to zero.
+
+**The uncomfortable second finding.** Both orderings are **negative** across ten
+names, while the same period on SPY + UNH alone returned **+1,688**. Widening
+the universe did not diversify the risk; it multiplied it. That is E19 stated in
+P&L rather than in theory — these positions share one market factor, so more
+names in a drawdown is proportionally more loss, not less.
+
+**Consequence.** Exits-first is adopted; it is strictly better under either
+universe. The ten-name universe is **not** adopted on this evidence.

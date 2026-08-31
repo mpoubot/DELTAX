@@ -17,6 +17,8 @@ from deltax.manage import place_exit
 from deltax.reconcile import reconcile, safe_to_open
 from deltax import report
 from deltax import news_gate
+from deltax import gamma as gamma_mod
+from deltax.manage import manage, Managed
 from deltax import blocklist
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
@@ -89,6 +91,28 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 "committed": book["committed"], "permission": perm.state,
                 "advisory_only": False, "skipped": why}
 
+    # Exits run BEFORE entries every cycle. Closing a position frees risk budget
+    # the gates would otherwise refuse the next candidate for, so an entry-first
+    # order silently caps the book at whatever was opened earliest (E39).
+    swept = {"closed": [], "held": [], "unpriceable": []}
+    try:
+        live = []
+        for p_ in feed.positions():
+            try:
+                q = int(float(p_.get("qty") or 0))
+                if q >= 0:
+                    continue                      # short leg carries the position
+                live.append(Managed(symbol=p_.get("symbol", "?"), qty=abs(q),
+                                    entry_credit=abs(float(p_.get("avg_entry_price") or 0)),
+                                    current=abs(float(p_.get("current_price") or 0)) or None,
+                                    dte=None))
+            except (TypeError, ValueError):
+                continue
+        if live:
+            swept = manage(live, ledger=ledger, dry_run=dry_run)
+    except Exception as e:
+        ledger.record_raw({"action": "exit_sweep_failed", "error": str(e)[:160]})
+
     committed, traded, refused = book["committed"], [], []
     held = book["held"]
     # Earnings blocklist, built once in pre-market. Read here rather than
@@ -121,6 +145,27 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             except (ValueError, TypeError):
                 bar_age = None
         # E11: no directional edge proven, so nominate BOTH sides.
+        # Dealer gamma regime. ADVISORY: it cannot be backtested with this data
+        # (open interest has no as-of parameter), and E10 forbids an unvalidated
+        # signal gating a trade. Measured, logged, displayed - never blocking.
+        try:
+            gch = feed.option_chain(symbol, expiry_gte=gte, expiry_lte=lte,
+                                    strike_gte=round(px * 0.90, 2),
+                                    strike_lte=round(px * 1.10, 2))
+            gcs = feed.option_contracts(symbol, expiry_gte=gte, expiry_lte=lte,
+                                        strike_gte=round(px * 0.90, 2),
+                                        strike_lte=round(px * 1.10, 2), limit=1000)
+            gmap = gamma_mod.build(symbol, px,
+                                   gch, {c["symbol"]: c.get("open_interest") for c in gcs})
+            _, gwhy = gamma_mod.gate_gamma_regime(gmap, require_positive=False)
+            ledger.record_raw({"action": "gamma_regime", "symbol": symbol,
+                               "regime": gmap.regime, "net_gex": round(gmap.total, 0),
+                               "pin": gmap.pin, "flip": gmap.flip,
+                               "advisory": True, "note": gwhy})
+        except Exception as e:
+            ledger.record_raw({"action": "gamma_failed", "symbol": symbol,
+                               "error": str(e)[:120]})
+
         # One earnings decision per symbol, before either side is considered.
         ok_earn, why_earn = blocklist.check(symbol, date.fromisoformat(
             (lte if isinstance(lte, str) else str(lte))), bl)
@@ -220,7 +265,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     return {"regime": regime, "traded": traded, "refused": refused,
             "committed": committed, "skipped": None,
             "permission": perm.state, "advisory_only": perm_override,
-            "book": book, "exits": exits_placed}
+            "book": book, "exits": exits_placed, "swept": swept}
 
 
 if __name__ == "__main__":
