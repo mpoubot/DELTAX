@@ -57,6 +57,29 @@ FEEDS = {
         "equities",
         False,
     ),
+    # ── Financial press, registered 31 Aug (pre-open). All eight verified
+    # serving items dated the same morning before registration. Two candidates
+    # were REJECTED at the door: MarketWatch realtime (newest item Jun 2025 -
+    # dead, exactly the wsj_markets failure) and BLS (serves HTML, not RSS).
+    # 'active' stays False for all: per E-corpus, news can only VETO a trade,
+    # never originate one, and no currently-running gate consumes these. They
+    # feed the pre-market brief and the intelligence log.
+    "cnbc_markets": (
+        "https://www.cnbc.com/id/20910258/device/rss/rss.html", "equities", False),
+    "cnbc_finance": (
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html", "equities", False),
+    "marketwatch_top": (
+        "https://feeds.content.dowjones.io/public/rss/mw_topstories", "equities", False),
+    "yahoo_finance": (
+        "https://finance.yahoo.com/news/rssindex", "equities", False),
+    "seeking_alpha": (
+        "https://seekingalpha.com/market_currents.xml", "equities", False),
+    "investing_news": (
+        "https://www.investing.com/rss/news.rss", "equities", False),
+    "ft_markets": (
+        "https://www.ft.com/markets?format=rss", "macro", False),
+    "nasdaq_markets": (
+        "https://www.nasdaq.com/feed/rssoutbound?category=Markets", "equities", False),
     # 8-K Item 2.02 is where earnings releases are filed - the authoritative
     # source for the earnings gate. Needs DELTAX_SEC_UA set; inactive without it.
     "sec_8k": (
@@ -92,7 +115,12 @@ def _when(raw: str) -> Optional[datetime]:
         return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
     except Exception:
         try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            d = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            # Feeds that omit an offset (investing.com: "2026-08-31 08:19:48")
+            # parse naive here; comparing that against now(utc) raises, and a
+            # naive item in max() poisons the whole staleness check. Assume UTC
+            # - the same normalisation the RFC-2822 branch above applies.
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
         except Exception:
             return None
 
