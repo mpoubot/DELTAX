@@ -223,16 +223,30 @@ def build(account=None, positions=None, error=None) -> str:
         acct = account.get("account_number", "—")
     money = lambda v: f"${float(v):,.0f}" if v not in (None, "") else "unavailable"
 
-    def stat(label, value, note=""):
-        return (f'<div class="stat"><div class="k">{label}</div>'
+    def stat(label, value, note="", cls=""):
+        return (f'<div class="stat {cls}"><div class="k">{label}</div>'
                 f'<div class="v">{value}</div><div class="n">{note}</div></div>')
+
+    # P&L against the $100,000 start. Sign drives the colour, so a stakeholder
+    # reads direction before reading digits.
+    START = 100_000.0
+    pnl = (float(eq) - START) if eq not in (None, "") else None
+    pnl_cls = "" if pnl is None else ("pos" if pnl >= 0 else "neg")
+    pnl_val = "unavailable" if pnl is None else f"{pnl:+,.2f}"
+    pnl_pct = "" if pnl is None else f"{pnl/START*100:+.2f}% of $100,000 start"
 
     # 6 stats -> exactly two rows of three. Never an orphan.
     stats = "".join([
         stat("ACCOUNT", acct, "Alpaca paper · competition"),
-        stat("EQUITY", money(eq), "live read" if eq else "not read"),
+        stat("EQUITY", money(eq), "live read" if eq else "not read", "big"),
+        stat("P&amp;L", pnl_val, pnl_pct, f"big {pnl_cls}"),
         stat("CASH", money(cash), "uncommitted"),
-        stat("OPEN POSITIONS", len(positions or []), "live"),
+        # 4 legs is 2 spreads. A stakeholder reading "4 positions" would think
+        # four trades are on, which is twice the truth.
+        stat("OPEN POSITIONS",
+             f"{len(positions or []) // 2}" if positions else "0",
+             (f"{len(positions or [])} legs · {len(positions or []) // 2} spread(s)"
+              if positions else "flat")),
         stat("DECISIONS LOGGED", len(dec), "every evaluation"),
         stat("REFUSED", f"{len(ref)}",
              f"{len(ref)/max(1,len(dec))*100:.0f}% of candidates screened"),
@@ -297,7 +311,8 @@ h1 b{{color:var(--cy);font-weight:600}}
 .pill.on{{border-color:var(--cy);color:var(--cy);box-shadow:0 0 12px rgba(10,186,181,.2)}}
 
 /* ── stats: fixed 3 columns, always symmetric ── */
-.stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:34px}}
+.stats{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px}}
+.stats .stat:nth-child(1){{grid-column:span 2}}
 .stat{{background:linear-gradient(160deg,rgba(10,186,181,.05),transparent 60%),var(--panel);
  border:1px solid var(--line);padding:17px 19px;position:relative;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
@@ -305,7 +320,13 @@ h1 b{{color:var(--cy);font-weight:600}}
  background:var(--cy);box-shadow:0 0 10px var(--cy)}}
 .k{{font-size:10px;letter-spacing:.22em;color:var(--dim2)}}
 .v{{font-size:27px;color:var(--white);margin:7px 0 3px;letter-spacing:.03em;
- text-shadow:0 0 16px rgba(10,186,181,.3)}}
+ text-shadow:0 0 16px rgba(10,186,181,.3);font-variant-numeric:tabular-nums}}
+/* Equity and P&L carry the weight — they are what anyone opens this page for. */
+.stat.big .v{{font-size:34px;font-weight:700;letter-spacing:.01em}}
+.stat.pos .v{{color:#5CCFE6;text-shadow:0 0 20px rgba(92,207,230,.60)}}
+.stat.neg .v{{color:#FF6B85;text-shadow:0 0 20px rgba(255,107,133,.45)}}
+.stat.pos:before{{background:#5CCFE6;box-shadow:0 0 12px #5CCFE6}}
+.stat.neg:before{{background:#FF6B85;box-shadow:0 0 12px #FF6B85}}
 .n{{font-size:10.5px;color:var(--dim2);letter-spacing:.06em}}
 
 /* ── sections ── */
