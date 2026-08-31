@@ -205,6 +205,73 @@ def _terminal_lines(limit=90):
     return "".join(out) or '<div class="tl"><span class="tx">no activity yet</span></div>'
 
 
+def _occ(sym):
+    """SPY260918P00380000 -> (SPY, 18 Sep 2026, put, 380.0). None if not an option."""
+    if not sym or len(sym) < 16:
+        return None
+    b, root = sym[-15:], sym[:-15]
+    if not (root and b[:6].isdigit() and b[6] in "CP" and b[7:].isdigit()):
+        return None
+    return (root, f"{b[4:6]} {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][int(b[2:4])-1]}",
+            "put" if b[6] == "P" else "call", int(b[7:]) / 1000.0)
+
+
+def _positions_table(positions):
+    """Group legs into the spreads a person actually holds, in plain language.
+
+    Four rows of OCC symbols is not a position anyone can read. A spread is one
+    trade: what was sold, what was bought as protection, what it paid, and the
+    price range where it wins.
+    """
+    if not positions:
+        return ('<tr><td colspan="6" class="empty">No positions open. '
+                'The agent is holding cash.</td></tr>')
+
+    # Pair each short leg with the long leg protecting it.
+    legs = []
+    for p in positions:
+        o = _occ(p.get("symbol", ""))
+        if not o:
+            continue
+        try:
+            legs.append({"root": o[0], "exp": o[1], "right": o[2], "strike": o[3],
+                         "qty": int(float(p.get("qty") or 0)),
+                         "entry": abs(float(p.get("avg_entry_price") or 0)),
+                         "now": abs(float(p.get("current_price") or 0)),
+                         "pl": float(p.get("unrealized_pl") or 0)})
+        except (TypeError, ValueError):
+            continue
+
+    rows, used = "", set()
+    for a in legs:
+        if a["qty"] >= 0 or id(a) in used:
+            continue
+        mate = next((b for b in legs if b["qty"] > 0 and id(b) not in used
+                     and b["root"] == a["root"] and b["right"] == a["right"]), None)
+        if not mate:
+            continue
+        used.update({id(a), id(mate)})
+        n = abs(a["qty"])
+        credit = (a["entry"] - mate["entry"]) * n * 100
+        pl = a["pl"] + mate["pl"]
+        width = abs(a["strike"] - mate["strike"])
+        risk = width * n * 100 - credit
+        wins = (f"stays above ${a['strike']:,.0f}" if a["right"] == "put"
+                else f"stays below ${a['strike']:,.0f}")
+        cls = "gd" if pl >= 0 else "rd"
+        rows += (
+            f'<tr><td class="cy"><b>{a["root"]}</b><div class="sub">{a["exp"]} · '
+            f'{"📈 bullish" if a["right"] == "put" else "📉 bearish"}</div></td>'
+            f'<td>sold the ${a["strike"]:,.0f} {a["right"]}<div class="sub">'
+            f'bought the ${mate["strike"]:,.0f} {mate["right"]} as protection</div></td>'
+            f'<td class="num">{n}<div class="sub">contracts</div></td>'
+            f'<td class="num">${credit:,.0f}<div class="sub">collected up front</div></td>'
+            f'<td class="num">${risk:,.0f}<div class="sub">most it can lose</div></td>'
+            f'<td class="num {cls}">{pl:+,.0f}<div class="sub">wins if {wins}</div></td></tr>')
+    return rows or ('<tr><td colspan="6" class="empty">Positions open but not '
+                    'recognised as spreads — see the terminal below.</td></tr>')
+
+
 def build(account=None, positions=None, error=None) -> str:
     now = datetime.now(timezone.utc)
     rows = _ledger()
@@ -259,11 +326,7 @@ def build(account=None, positions=None, error=None) -> str:
         for g, n in top) or \
         '<tr><td colspan="3" class="empty">No refusals recorded yet.</td></tr>'
 
-    pos = "".join(
-        f'<tr><td class="cy">{p.get("symbol","")}</td><td>{p.get("bias","—")}</td>'
-        f'<td class="num">{p.get("qty","")}</td><td class="num">{p.get("pl","")}</td></tr>'
-        for p in (positions or [])) or \
-        '<tr><td colspan="4" class="empty">Flat. The agent has placed no orders.</td></tr>'
+    pos = _positions_table(positions)
 
     frows = ""
     for key, bucket, n, age, st, note in _feeds_status():
@@ -342,6 +405,8 @@ td{{padding:9px 10px;border-bottom:1px solid rgba(14,32,51,.6)}}
 tr:hover td{{background:rgba(10,186,181,.035)}}
 td.num{{text-align:right;color:var(--white)}}
 td.empty{{color:var(--dim2);text-align:center;padding:26px}}
+.sub{{font-size:10px;color:var(--dim2);margin-top:3px;font-weight:400;letter-spacing:.02em}}
+td.gd{{color:#5CCFE6}} td.rd{{color:#FF6B85}}
 td.bar{{width:38%}}
 td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl),var(--cy));
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
@@ -425,8 +490,14 @@ candidate demonstrates more than a P&amp;L number can.</div>
 <table><tr><th>GATE</th><th style="text-align:right">REFUSALS</th><th></th></tr>{gate_rows}</table>
 
 <h2>OPEN POSITIONS</h2><div class="rule"></div>
-<table><tr><th>SYMBOL</th><th>BIAS</th><th style="text-align:right">QTY</th>
-<th style="text-align:right">P&amp;L</th></tr>{pos}</table>
+<div class="lead">Each row is one spread — two option contracts traded together.
+We <b>sell</b> one and <b>buy</b> a cheaper one as protection, so the loss is
+capped before the order is ever sent. We keep the money collected up front if
+the stock stays in range.</div>
+<div class="tw"><table>
+<tr><th>STOCK</th><th>WHAT WE DID</th><th class="n">SIZE</th>
+<th class="n">MONEY IN</th><th class="n">MAX LOSS</th><th class="n">P&amp;L NOW</th></tr>
+{pos}</table></div>
 
 <div class="two">
 <div>
@@ -532,8 +603,10 @@ def main():
     try:
         from deltax.feeds import AlpacaFeed
         f = AlpacaFeed(); account = f.account()
-        positions = [{"symbol": p.get("symbol"), "bias": "—", "qty": p.get("qty"),
-                      "pl": p.get("unrealized_pl")} for p in f.positions()]
+        # Pass the broker's rows through whole. The previous shape kept only
+        # symbol/qty/pl, so entry and current price were gone by the time the
+        # table tried to compute what each spread actually collected.
+        positions = list(f.positions())
     except Exception as e:
         err = str(e)[:110]
     os.makedirs("docs", exist_ok=True)
