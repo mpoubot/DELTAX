@@ -15,6 +15,7 @@ from deltax.calendar import entry_allowed
 from deltax.permission import Evidence, recommend_state, gate_permission
 from deltax.manage import place_exit
 from deltax.reconcile import reconcile, safe_to_open
+from deltax import report
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
 from deltax.screener import (
@@ -86,6 +87,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
 
     committed, traded, refused = book["committed"], [], []
     held = book["held"]
+    exits_placed = []
 
     for symbol in INCOME_UNIVERSE:
         if len(traded) >= MAX_CONCURRENT:
@@ -173,14 +175,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             # exit that needs the agent alive at the right minute is not an
             # exit — and the 50% close is where the measured edge lives.
             if str(rec.get("result", "")).startswith(("SUBMITTED", "DRY_RUN")):
-                place_exit(legs, dec.contracts, cand["credit"],
-                           ledger=ledger, dry_run=dry_run)
+                ex = place_exit(legs, dec.contracts, cand["credit"],
+                                ledger=ledger, dry_run=dry_run)
+                exits_placed.append((symbol, side, ex.get("limit_price")))
             committed += dec.max_loss
             traded.append((symbol, f"{side}/{bias}", dec.contracts, cand["credit"],
                            dec.max_loss, rec["result"]))
     return {"regime": regime, "traded": traded, "refused": refused,
             "committed": committed, "skipped": None,
-            "permission": perm.state, "advisory_only": perm_override}
+            "permission": perm.state, "advisory_only": perm_override,
+            "book": book, "exits": exits_placed}
 
 
 if __name__ == "__main__":
@@ -193,18 +197,31 @@ if __name__ == "__main__":
     out = run(feed, led, equity=100_000.0, today=date.today(),
               dry_run=not live, force_window="--force" in sys.argv)
     if out.get("skipped"):
-        print(f"SKIPPED: {out['skipped']}")
+        # Even a skipped cycle narrates: account state, why, and what it holds.
+        try:
+            acct = feed.account()
+            eq, csh = float(acct.get("equity") or 0), float(acct.get("cash") or 0)
+        except Exception:
+            eq = csh = 0.0
+        print(report.render(equity=eq, cash=csh,
+                            market_open=bool(feed.clock().get("is_open")),
+                            regime=getattr(out.get("regime"), "note", "—"),
+                            permission=out.get("permission", "—"),
+                            events=[("refuse", "CYCLE", out["skipped"])]))
         sys.exit(0)
+
+    try:
+        acct = feed.account()
+        eq, csh = float(acct.get("equity") or 0), float(acct.get("cash") or 0)
+    except Exception:
+        eq = csh = 0.0
     r = out["regime"]
-    print(f"regime {r.weak_count}/3 weak {r.weak_symbols}")
-    print(f"permission: {out['permission']}")
-    if out.get("advisory_only"):
-        print("*** ADVISORY ONLY - permission overridden for dry-run "
-              "analysis. These are NOT tradeable decisions. ***")
-    print()
-    print(f"TRADED ({len(out['traded'])}):")
-    for sym, side, n, cr, ml, res in out["traded"]:
-        print(f"  {sym:5} {side:4} x{n:<3} credit ${cr:.2f}  max loss ${ml:>7,.0f}  {res}")
-    print(f"\ncommitted max loss: ${out['committed']:,.0f}")
-    print(f"REFUSED ({len(out['refused'])}): "
-          f"{', '.join(f'{s}/{d}:{g}' for s, d, g in out['refused'][:12])}")
+    events = [("open", sym, f"OPENED {side} · {ct} ct · credit ${cr*100*ct:,.0f} → {res}")
+              for sym, side, ct, cr, ml, res in out["traded"]]
+    events += [("exit", sym, f"EXIT RESTING at {lim:.2f} (50% of credit) · fills unattended")
+               for sym, side, lim in out.get("exits", []) if lim]
+    print(report.render(
+        equity=eq, cash=csh, market_open=True,
+        unrealized=0.0, realized=0.0,
+        positions=[], events=events, refused=out["refused"],
+        regime=f"{r.weak_count}/3 weak", permission=out.get("permission", "—")))
