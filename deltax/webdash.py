@@ -309,39 +309,51 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
-.term{{background:#0B1B33;border:1px solid #1C3A5E;padding:0;
+.term{{background:linear-gradient(160deg,rgba(10,186,181,.10),rgba(8,22,34,.72) 42%),
+ rgba(6,18,28,.55);
+ backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);
+ border:1px solid rgba(10,186,181,.30);padding:0;
+ box-shadow:0 0 42px rgba(10,186,181,.13),inset 0 1px 0 rgba(255,255,255,.10),
+ inset 0 0 70px rgba(10,186,181,.05);
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
-.term .body{{margin:0;padding:10px 0;max-height:540px;overflow:auto;font-size:12.5px;
- background:#0B1B33;font-family:var(--mono);line-height:1.6}}
+.term .body{{margin:0;padding:12px 0;max-height:540px;overflow:auto;font-size:12.5px;
+ background:transparent;font-family:var(--mono);line-height:1.6}}
+.term .body::-webkit-scrollbar{{width:9px}}
+.term .body::-webkit-scrollbar-track{{background:rgba(255,255,255,.03)}}
+.term .body::-webkit-scrollbar-thumb{{background:rgba(10,186,181,.32);border-radius:5px}}
 .tl{{display:flex;gap:16px;align-items:baseline;padding:7px 22px;
  border-left:3px solid transparent;line-height:1.55}}
-.tl:hover{{background:rgba(255,255,255,.045)}}
-.ts{{color:#7FA8CC;font-variant-numeric:tabular-nums;flex:none;
+.tl:hover{{background:rgba(10,186,181,.09)}}
+.ts{{color:#5FD8D3;font-variant-numeric:tabular-nums;flex:none;
  font-size:11.5px;letter-spacing:.04em;min-width:62px}}
 .ic{{flex:none;width:18px;text-align:center}}
-.tx{{color:#EAF2FB;word-break:break-word}}
-.tl.fill{{border-left-color:#4ADE80;background:rgba(74,222,128,.10)}}
+.tx{{color:#EAFBFA;word-break:break-word}}
+.tl.fill{{border-left-color:#4ADE80;background:rgba(74,222,128,.11)}}
 .tl.fill .tx{{color:#86EFAC;font-weight:500}}
 .tl.refuse{{border-left-color:#F87171}}
 .tl.refuse .tx{{color:#FCA5A5}}
-.tl.skip .tx{{color:#6C88A8}} .tl.skip .ts{{color:#4A6684}}
-.tl.intel{{border-left-color:#60A5FA}}
-.tl.intel .tx{{color:#B6D4F0}}
+.tl.skip .tx{{color:#6F9A9A}} .tl.skip .ts{{color:#3F6E6D}}
+.tl.intel{{border-left-color:rgba(63,224,218,.75)}}
+.tl.intel .tx{{color:#A9DEDB}}
 /* Each 5-minute cycle is a block, separated by real whitespace and a rule.
    A hairline was not enough - the log still read as one wall. */
-.tl.cyc{{margin-top:20px;padding-top:16px;border-top:1px solid #24466E;
- position:relative}}
-.tl.cyc:first-child{{margin-top:2px;padding-top:8px;border-top:none}}
-.tl.cyc .ts{{color:#FFFFFF;font-weight:600;font-size:12px;
- background:#1C3A5E;padding:3px 9px;border-radius:3px;min-width:auto}}
+.tl.cyc{{margin-top:22px;padding-top:17px;position:relative}}
+.tl.cyc:before{{content:"";position:absolute;left:22px;right:22px;top:0;height:1px;
+ background:linear-gradient(90deg,rgba(10,186,181,.55),rgba(10,186,181,.06) 60%,transparent)}}
+.tl.cyc:first-child{{margin-top:2px;padding-top:8px}}
+.tl.cyc:first-child:before{{display:none}}
+.tl.cyc .ts{{color:#EAFBFA;font-weight:600;font-size:12px;
+ background:rgba(10,186,181,.16);border:1px solid rgba(10,186,181,.38);
+ padding:3px 10px;border-radius:4px;min-width:auto;
+ box-shadow:0 0 14px rgba(10,186,181,.20)}}
 .live{{display:inline-flex;align-items:center;gap:7px;font-size:10px;
  letter-spacing:.2em;color:#3BE8A0;margin-left:12px}}
 .live b{{width:7px;height:7px;border-radius:50%;background:#3BE8A0;
  box-shadow:0 0 9px #3BE8A0;animation:p 1.6s ease-in-out infinite}}
 @keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
-.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#8FB0D0;
- padding:12px 22px;border-bottom:1px solid #24466E;background:#132A47;
- letter-spacing:.05em}}
+.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#8FC5C2;
+ padding:12px 22px;border-bottom:1px solid rgba(10,186,181,.22);
+ background:rgba(10,186,181,.07);letter-spacing:.05em}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
