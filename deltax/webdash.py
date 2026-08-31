@@ -122,13 +122,30 @@ def _terminal_lines(limit=90):
             if not ln or set(ln) <= {"-", "=", "·", "."}:
                 continue
             low = ln.lower()
-            icon, css = ("⏸️", "skip") if "skipped" in low or "no action" in low else \
-                        ("📡", "intel") if tag == "intel" else ("⚙️", "agent")
-            if "opened" in low or "filled" in low:   icon, css = "🟢", "fill"
-            if "exit"   in low:                      icon, css = "💰", "fill"
-            if "refused" in low or "⛔" in ln:        icon, css = "⛔", "refuse"
-            if "scoreboard" in low:                  icon, css = "📊", "agent"
-            if low.startswith("decision"):           icon, css = "✅", "agent"
+            # The marker must never overstate what happened. A stakeholder
+            # scanning icons should reach the same conclusion as one reading the
+            # text: a tick against "no action" reads as success when nothing
+            # occurred, which is the one thing this board must not do.
+            icon, css = ("·", "skip") if tag != "intel" else ("📡", "intel")
+
+            if "scoreboard" in low:
+                icon, css = "📊", "agent"
+            elif low.startswith("decision"):
+                if "opened" in low:      icon, css = "✅", "fill"      # money moved
+                elif "closed" in low:    icon, css = "💰", "fill"      # position exited
+                elif "no action" in low: icon, css = "⏳", "skip"      # STOOD BY
+                elif "refused" in low:   icon, css = "🚫", "refuse"    # all declined
+                else:                    icon, css = "·", "skip"
+            elif "opened" in low or "submitted" in low or "filled" in low:
+                icon, css = "✅", "fill"
+            elif "exit" in low:
+                icon, css = "💰", "fill"
+            elif "refused" in low or "⛔" in ln:
+                icon, css = "🚫", "refuse"
+            elif "market closed" in low or "outside entry window" in low:
+                icon, css = "🌙", "skip"
+            elif "skipped" in low:
+                icon, css = "⏳", "skip"
             events.append((cur_k, cur_t, icon, css, ln[:150]))
 
     # ── ledger: every decision the agent made ──
@@ -152,11 +169,11 @@ def _terminal_lines(limit=90):
                 if e.get("decision"):
                     g = e.get("failed_gate")
                     if g:
-                        events.append((k, t, "⛔", "refuse",
-                                       f"REFUSE  {e.get('symbol','?'):<6} blocked by {g}"))
+                        events.append((k, t, "🚫", "refuse",
+                                       f"DECLINED  {e.get('symbol','?'):<6} blocked by {g}"))
                     else:
-                        events.append((k, t, "🟢", "fill",
-                                       f"TRADE   {e.get('symbol','?'):<6} all 13 gates passed"))
+                        events.append((k, t, "✅", "fill",
+                                       f"APPROVED  {e.get('symbol','?'):<6} cleared every gate"))
                     continue
                 a = e.get("action")
                 if not a:
@@ -309,51 +326,49 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
-.term{{background:linear-gradient(160deg,rgba(10,186,181,.10),rgba(8,22,34,.72) 42%),
- rgba(6,18,28,.55);
- backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);
- border:1px solid rgba(10,186,181,.30);padding:0;
- box-shadow:0 0 42px rgba(10,186,181,.13),inset 0 1px 0 rgba(255,255,255,.10),
- inset 0 0 70px rgba(10,186,181,.05);
+.term{{background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(0,0,0,.82) 45%),
+ rgba(0,0,0,.72);
+ backdrop-filter:blur(20px) saturate(115%);-webkit-backdrop-filter:blur(20px) saturate(115%);
+ border:1px solid rgba(255,255,255,.16);padding:0;
+ box-shadow:0 0 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.13);
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
 .term .body{{margin:0;padding:12px 0;max-height:540px;overflow:auto;font-size:12.5px;
  background:transparent;font-family:var(--mono);line-height:1.6}}
 .term .body::-webkit-scrollbar{{width:9px}}
 .term .body::-webkit-scrollbar-track{{background:rgba(255,255,255,.03)}}
-.term .body::-webkit-scrollbar-thumb{{background:rgba(10,186,181,.32);border-radius:5px}}
+.term .body::-webkit-scrollbar-thumb{{background:rgba(255,255,255,.26);border-radius:5px}}
 .tl{{display:flex;gap:16px;align-items:baseline;padding:7px 22px;
  border-left:3px solid transparent;line-height:1.55}}
-.tl:hover{{background:rgba(10,186,181,.09)}}
-.ts{{color:#5FD8D3;font-variant-numeric:tabular-nums;flex:none;
+.tl:hover{{background:rgba(255,255,255,.055)}}
+.ts{{color:#9AA3AD;font-variant-numeric:tabular-nums;flex:none;
  font-size:11.5px;letter-spacing:.04em;min-width:62px}}
 .ic{{flex:none;width:18px;text-align:center}}
-.tx{{color:#EAFBFA;word-break:break-word}}
-.tl.fill{{border-left-color:#4ADE80;background:rgba(74,222,128,.11)}}
-.tl.fill .tx{{color:#86EFAC;font-weight:500}}
-.tl.refuse{{border-left-color:#F87171}}
-.tl.refuse .tx{{color:#FCA5A5}}
-.tl.skip .tx{{color:#6F9A9A}} .tl.skip .ts{{color:#3F6E6D}}
-.tl.intel{{border-left-color:rgba(63,224,218,.75)}}
-.tl.intel .tx{{color:#A9DEDB}}
+.tx{{color:#F2F4F7;word-break:break-word}}
+.tl.fill{{border-left-color:#FFFFFF;background:rgba(255,255,255,.085)}}
+.tl.fill .tx{{color:#FFFFFF;font-weight:600}}
+.tl.refuse{{border-left-color:rgba(255,255,255,.34)}}
+.tl.refuse .tx{{color:#B9C0C8}}
+.tl.skip .tx{{color:#7C858F}} .tl.skip .ts{{color:#5A626B}}
+.tl.intel{{border-left-color:rgba(255,255,255,.22)}}
+.tl.intel .tx{{color:#A6AEB7}}
 /* Each 5-minute cycle is a block, separated by real whitespace and a rule.
    A hairline was not enough - the log still read as one wall. */
 .tl.cyc{{margin-top:22px;padding-top:17px;position:relative}}
 .tl.cyc:before{{content:"";position:absolute;left:22px;right:22px;top:0;height:1px;
- background:linear-gradient(90deg,rgba(10,186,181,.55),rgba(10,186,181,.06) 60%,transparent)}}
+ background:linear-gradient(90deg,rgba(255,255,255,.42),rgba(255,255,255,.07) 60%,transparent)}}
 .tl.cyc:first-child{{margin-top:2px;padding-top:8px}}
 .tl.cyc:first-child:before{{display:none}}
-.tl.cyc .ts{{color:#EAFBFA;font-weight:600;font-size:12px;
- background:rgba(10,186,181,.16);border:1px solid rgba(10,186,181,.38);
- padding:3px 10px;border-radius:4px;min-width:auto;
- box-shadow:0 0 14px rgba(10,186,181,.20)}}
+.tl.cyc .ts{{color:#FFFFFF;font-weight:600;font-size:12px;
+ background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.26);
+ padding:3px 10px;border-radius:4px;min-width:auto}}
 .live{{display:inline-flex;align-items:center;gap:7px;font-size:10px;
  letter-spacing:.2em;color:#3BE8A0;margin-left:12px}}
 .live b{{width:7px;height:7px;border-radius:50%;background:#3BE8A0;
  box-shadow:0 0 9px #3BE8A0;animation:p 1.6s ease-in-out infinite}}
 @keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
-.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#8FC5C2;
- padding:12px 22px;border-bottom:1px solid rgba(10,186,181,.22);
- background:rgba(10,186,181,.07);letter-spacing:.05em}}
+.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#9AA3AD;
+ padding:12px 22px;border-bottom:1px solid rgba(255,255,255,.14);
+ background:rgba(255,255,255,.045);letter-spacing:.05em}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
@@ -472,10 +487,12 @@ strategies were tested and all five failed. This says where weeks like this one 
 intelligence passes, and every ledger entry — approvals, refusals, exits, reconciliations.
 Nothing summarised, nothing hidden. Refreshes with the page.</div>
 <div class="term">
-  <div class="legend"><span>🟢 filled</span><span>⛔ refused by a gate</span>
-   <span>💰 exit / close</span><span>🛡️ permission</span><span>🔄 reconcile</span>
-   <span>📡 pre-market intel</span><span>⏸️ outside window</span>
-   <span style="color:var(--tif)">newest first · all times ET</span></div>
+  <div class="legend">
+   <span>✅ order placed</span><span>💰 position closed</span>
+   <span>🚫 declined by a gate</span><span>⏳ stood by — no action taken</span>
+   <span>🌙 market closed</span><span>📊 account state</span>
+   <span>📡 pre-market intel</span>
+   <span style="color:#FFF">newest first · all times ET</span></div>
   <div class="body">{_terminal_lines()}</div>
 </div>
 
