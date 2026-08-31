@@ -476,7 +476,7 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 </div>
 <div class="pills">
   <span class="pill on">TEAM SYNC BOARD</span>
-  <a class="pill" href="slides.html" style="text-decoration:none">📊 SLIDES</a>
+  <a class="pill" href="presentation.html" style="text-decoration:none">📊 PRESENTATION</a>
   <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
   <span class="pill">ALPACA PAPER</span><span class="pill">366 TESTS</span><span class="pill">MIT</span>
 </div>

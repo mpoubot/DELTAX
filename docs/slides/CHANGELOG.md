@@ -8,11 +8,26 @@ older deck can be traced to what we believed when we made it.
 |---|---|---|---|
 | **v1** | 30 Aug | First deck: 52 rules, 312 tests, 2 build days, 2-card tracker | Team review before going live |
 | **v2** | 31 Aug (pre-live) | 56 rules, 366 tests, 3-card tracker with Day 03, autonomous execution, exits built | Agent went live; counts and story updated |
-| **v3** | *pending* | See "planned for v3" below | Competitor review + Monday's findings |
+| **v3** | 31 Aug (post-live) | Correction-log slide; E34 stated openly and the +8.39% figure struck; 15-min delay named; counts to 60 rules / 380 tests / 100 commits / 2 live orders; renamed `presentation.html` | Competitor review + Monday's live session |
 
 ---
 
-## Planned for v3 — before Friday
+## Delivered in v3
+
+1. ✅ **Correction log** — 14 defects, one line each, with the gate that now prevents it
+2. ✅ **15-minute delay named** on the strategy slide
+3. ✅ **E34 told openly** — the assumed-credit slide replaces the old backtest headline
+4. ✅ **Superseded figures struck through**, not quietly deleted
+5. ✅ **Dealer gamma** recorded as advisory, with the reason it cannot gate
+6. ✅ Renamed `slides.html` → **`presentation.html`**; old path redirects
+
+## Still open for v4
+
+- Lead with the corpus on slide 2 rather than slide 3
+- Restate the outcome-distribution slide at real prices (still assumed-credit)
+- Add the live result once Friday's close is known
+
+## Superseded — planned for v3
 
 Driven by reading eight competitor decks on 31 Aug and by what Monday's live
 session actually taught us.
