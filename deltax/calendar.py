@@ -46,7 +46,27 @@ EARNINGS: dict = {
 
 # ETFs do not report earnings. The income book trades these, so it is immune
 # to this gate by construction; only single-name satellite trades need it.
-NO_EARNINGS = {"SPY", "QQQ", "IWM", "DIA", "IBIT"}
+# Every ETF the agent can trade. This list being incomplete is not a cosmetic
+# gap: the earnings blocklist fails CLOSED, so an ETF missing from here is
+# treated as a single name with no 8-K history and is blocked outright. When
+# first wired, XLE/XLK/XLF/SMH and eleven others were blocked for "no filings
+# retrieved" - which is correct behaviour for a stock and nonsense for a fund
+# (E32). An ETF absent here silently removes itself from the tradeable universe.
+NO_EARNINGS = {
+    # broad market
+    "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV", "RSP", "MDY",
+    # sectors
+    "XLE", "XLF", "XLK", "XLI", "XLV", "XLY", "XLP", "XLU", "XLB", "XLC", "XLRE",
+    # industry / thematic
+    "XOP", "SMH", "SOXX", "KRE", "XBI", "IBB", "ITB", "XHB", "XRT", "OIH", "JETS",
+    # international / EM
+    "EEM", "EFA", "IEFA", "IEMG", "FXI", "EWZ", "EWJ", "VEA", "VWO",
+    # rates / credit / commodity
+    "TLT", "IEF", "SHY", "AGG", "BND", "LQD", "HYG", "JNK", "TIP",
+    "GLD", "SLV", "USO", "UNG", "GDX", "GDXJ",
+    # volatility / crypto trusts
+    "VXX", "UVXY", "SVXY", "VIXY", "IBIT", "GBTC", "ETHE",
+}
 
 
 def earnings_before(symbol: str, expiry: date) -> Optional[date]:

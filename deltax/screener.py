@@ -67,7 +67,22 @@ DEFAULT_WIDTH = {
 # does not select direction. Direction still comes from the regime filter.
 SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
                   "XLI", "XLV", "XLY", "XLP", "XLU", "XLB"]
-INCOME_UNIVERSE = BENCHMARKS + ["DIA", "EEM", "TLT"] + SECTOR_SLEEVES
+# Names that can BOTH clear the min_credit floor and are earnings-clear.
+#
+# The old list was 19 ETFs, and more than half of them were mathematically
+# incapable of passing our own gate: min_credit needs a >= $3.26 strike width,
+# which needs a high-priced underlying, and XLU at $42 or XLF at $58 trade
+# $1-wide strikes yielding $0.23. They could never trade, on any day (E33).
+#
+# Single names are permitted only because the earnings blocklist is now wired
+# and fail-closed - blocklist.check() refuses anything it cannot positively
+# clear, so a name entering this list still has to survive the gate each cycle.
+INCOME_UNIVERSE = [
+    # index and sector ETFs with wide strikes
+    "SPY", "QQQ", "IWM", "DIA", "XLK", "XLV", "XLI", "SMH", "SOXX", "XOP",
+    # single names: earnings verified clear of the 11 Sep expiry
+    "AAPL", "MSFT", "META", "AMZN", "GOOGL", "MA", "V", "JPM", "UNH", "HD", "CRM",
+]
 
 
 @dataclass

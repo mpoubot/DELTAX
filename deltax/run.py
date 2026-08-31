@@ -16,6 +16,7 @@ from deltax.permission import Evidence, recommend_state, gate_permission
 from deltax.manage import place_exit
 from deltax.reconcile import reconcile, safe_to_open
 from deltax import report
+from deltax import blocklist
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
 from deltax.screener import (
@@ -87,6 +88,14 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
 
     committed, traded, refused = book["committed"], [], []
     held = book["held"]
+    # Earnings blocklist, built once in pre-market. Read here rather than
+    # queried, so a SEC timeout can never sit inside the trading loop (E32).
+    bl = blocklist.load()
+    ledger.record_raw({"action": "earnings_blocklist",
+                       "present": bl is not None,
+                       "age_hours": round(blocklist.age_hours(bl), 2) if bl else None,
+                       "blocked": len((bl or {}).get("blocked") or {}),
+                       "clear": len((bl or {}).get("clear") or [])})
     exits_placed = []
 
     for symbol in INCOME_UNIVERSE:
@@ -108,6 +117,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             except (ValueError, TypeError):
                 bar_age = None
         # E11: no directional edge proven, so nominate BOTH sides.
+        # One earnings decision per symbol, before either side is considered.
+        ok_earn, why_earn = blocklist.check(symbol, date.fromisoformat(
+            (lte if isinstance(lte, str) else str(lte))), bl)
+        if not ok_earn:
+            refused.append((symbol, "both", "earnings"))
+            continue
+
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
             if (symbol, side) in held:
                 refused.append((symbol, side, "already_held"))
