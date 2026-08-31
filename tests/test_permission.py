@@ -98,6 +98,7 @@ class StubFeed:
     # Required since reconciliation: a feed that cannot report open positions
     # makes the agent refuse to trade blind, which is the intended behaviour.
     def positions(self): return []
+    def open_orders(self): return []
 
 class StubLedger:
     def __init__(self): self.rows = []

@@ -31,7 +31,38 @@ def parse_occ(sym: str) -> Optional[dict]:
             "strike": int(body[7:]) / 1000.0}
 
 
-def reconcile(positions: list) -> dict:
+def pending(orders: list) -> dict:
+    """(underlying, side) pairs with an order WORKING at the broker.
+
+    Positions alone are not the book. Between submitting a spread and its fill
+    there is a window - seconds to minutes on a wide chain - in which the
+    position does not exist yet and the risk absolutely does. Reconciling on
+    positions alone treats that window as empty and re-submits into it (E36).
+    """
+    held, unparsed = set(), []
+    for o in orders or []:
+        legs = o.get("legs") or []
+        if not legs:
+            sym = o.get("symbol") or ""
+            occ = parse_occ(sym)
+            if occ is None:
+                unparsed.append(sym or "?")
+                continue
+            held.add((occ["underlying"], occ["right"]))
+            continue
+        for leg in legs:
+            occ = parse_occ(leg.get("symbol", ""))
+            if occ is None:
+                unparsed.append(leg.get("symbol", "?"))
+                continue
+            # A resting EXIT is not new risk - it is how a position closes.
+            if str(leg.get("position_intent", "")).endswith("_to_close"):
+                continue
+            held.add((occ["underlying"], occ["right"]))
+    return {"held": held, "unparsed": unparsed, "count": len(orders or [])}
+
+
+def reconcile(positions: list, orders: Optional[list] = None) -> dict:
     """Live book -> committed risk and the (underlying, side) pairs held.
 
     `committed` is deliberately conservative: for a vertical we are short one
@@ -56,8 +87,13 @@ def reconcile(positions: list) -> dict:
         # Short legs carry the risk; long legs are the protection already paid for.
         if float(p.get("qty") or 0) < 0:
             committed += max(basis, occ["strike"] * qty * 100 * 0.0)
+    # Fold in anything already working at the broker.
+    pend = pending(orders or [])
+    held |= pend["held"]
+    unparsed += pend["unparsed"]
     return {"held": held, "committed": committed, "unparsed": unparsed,
-            "count": len(positions or [])}
+            "count": len(positions or []), "pending": len(pend["held"]),
+            "pending_orders": pend["count"]}
 
 
 def safe_to_open(rec: dict) -> tuple:

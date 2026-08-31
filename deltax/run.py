@@ -71,7 +71,8 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     # schedule. The risk cap only means something across cycles if committed
     # risk is seeded from the broker, not from this run's fills.
     try:
-        book = reconcile(feed.positions())
+        # Positions AND working orders — an unfilled order is still risk (E36).
+        book = reconcile(feed.positions(), feed.open_orders())
     except Exception as e:
         ledger.record_raw({"action": "reconcile_failed", "error": str(e)[:200]})
         return {"regime": regime, "traded": [], "refused": [], "committed": 0.0,
@@ -79,6 +80,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 "skipped": f"cannot read open positions - refusing to trade blind: {e}"}
     ok, why = safe_to_open(book)
     ledger.record_raw({"action": "reconcile", "open_positions": book["count"],
+                       "working_orders": book.get("pending_orders", 0),
                        "committed": round(book["committed"], 2),
                        "held": sorted(f"{u}/{s_}" for u, s_ in book["held"]),
                        "safe_to_open": ok, "note": why})

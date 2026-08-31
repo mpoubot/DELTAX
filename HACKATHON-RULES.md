@@ -42,9 +42,9 @@ the eligibility evidence.
 
 | # | Requirement | Status |
 |---|---|---|
-| 1 | **Autonomous AI trading agent** using Alpaca's Trading API | ❌ not built |
-| 2 | **Must use Alpaca's MCP server OR CLI** | ❌ not set up |
-| 3 | **All strategies must incorporate options trading** | ⚠️ see red flag 1 |
+| 1 | **Autonomous AI trading agent** using Alpaca's Trading API | ✅ live 31 Aug — screens, gates, opens, closes unattended |
+| 2 | **Must use Alpaca's MCP server OR CLI** | ✅ CLI, every market-data and execution call |
+| 3 | **All strategies must incorporate options trading** | ✅ iron condors only — no equity or crypto leg trades |
 | 4 | Developed and tested in the **paper trading environment** | ✅ |
 | 5 | Submission must include the **paper account ID** | ✅ have it |
 

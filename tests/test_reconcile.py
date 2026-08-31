@@ -2,7 +2,7 @@
 import sys, os
 from datetime import date
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from deltax.reconcile import parse_occ, reconcile, safe_to_open
+from deltax.reconcile import parse_occ, reconcile, safe_to_open, pending
 from deltax.run import run
 
 passed = failed = 0
@@ -46,6 +46,7 @@ class Feed:
         return {s: {"latestTrade":{"p":100.0},"dailyBar":{"c":100.0,"o":99.0,"t":"2026-08-31T20:00:00Z"},
                     "prevDailyBar":{"c":99.0}} for s in syms}
     def positions(self): return self.pos
+    def open_orders(self): return []
     def option_contracts(self, *a, **k): return []
     def chain(self, *a, **k): return {}
 class L:
@@ -67,6 +68,28 @@ out2 = run(Feed([{"symbol":"BROKEN","qty":"1","cost_basis":"1"}]),
            led2, equity=100_000.0, today=date.today(), dry_run=True, force_window=True)
 check("illegible book refuses to trade", out2.get("skipped") is not None, str(out2.get("skipped")))
 check("and opens nothing", out2["traded"] == [])
+
+print("\n── THE 31 AUG BUG: a working order is still risk (E36) ──")
+OPEN = [{"legs": [{"symbol": "UNH260918P00380000", "position_intent": "sell_to_open"},
+                  {"symbol": "UNH260918P00370000", "position_intent": "buy_to_open"}]}]
+r = reconcile([], OPEN)
+check("a working order with NO position is seen", ("UNH", "put") in r["held"])
+check("so a second identical order is blocked", ("UNH", "put") in r["held"])
+check("it is counted", r.get("pending_orders") == 1)
+
+EXIT = [{"legs": [{"symbol": "UNH260918P00380000", "position_intent": "buy_to_close"},
+                  {"symbol": "UNH260918P00370000", "position_intent": "sell_to_close"}]}]
+check("a resting EXIT blocks nothing — it is how a position closes",
+      reconcile([], EXIT)["held"] == set())
+
+check("positions and orders combine, not replace",
+      reconcile([{"symbol": "SPY260911P00750000", "qty": "-1", "cost_basis": "-100"}],
+                OPEN)["held"] == {("SPY", "put"), ("UNH", "put")})
+check("no orders behaves exactly as before", reconcile([], [])["held"] == set())
+check("an unparseable working order still fails closed",
+      reconcile([], [{"legs": [{"symbol": "GARBAGE", "position_intent": "sell_to_open"}]}])["unparsed"])
+check("a legless order falls back to its own symbol",
+      ("UNH", "call") in pending([{"symbol": "UNH260918C00400000"}])["held"])
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

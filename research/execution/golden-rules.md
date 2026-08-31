@@ -1010,3 +1010,40 @@ costs real trades for nothing.
 originate one. A test asserts no code path in the module returns a buy signal.
 That is what keeps the pipeline injection-resistant: a headline, however
 crafted, cannot talk the agent INTO a position.
+
+## E36 — A working order is risk; positions alone are not the book
+
+> Between submitting a spread and its fill there is a window — seconds on a
+> tight chain, minutes on a wide one — in which **the position does not exist
+> yet and the risk absolutely does.** Reconciling on positions alone treats
+> that window as empty and submits into it again.
+
+**Evidence, 31 Aug, first live session.** At 14:30:02 the scheduled agent
+submitted a UNH 380/370 put spread. At 14:31:06 a manually-triggered run of the
+same agent submitted an identical one. `reconcile()` read `positions()`,
+the first order was still `new`, and the second run saw an empty book.
+
+**Two identical orders, 64 seconds apart, for double the intended risk.** Caught
+before either filled; one was cancelled. It would not have been caught on a
+larger book.
+
+This is E30's own failure shape, one layer down. E30 fixed "the agent does not
+know what it holds." This fixes "the agent does not know what it has *asked
+for*."
+
+**The fix, and the subtlety in it.** Reconciliation now folds working orders
+into the held set — but a **resting exit is skipped**. An exit carries
+`position_intent` ending `_to_close`; it is how a position leaves, not new risk.
+Blocking on it would mean a name could never be re-entered while its own exit
+sat in the book, which is most of the holding period.
+
+| Broker state | Counts as held? |
+|---|---|
+| Filled position | yes |
+| Working `*_to_open` order | **yes — this is the fix** |
+| Resting `*_to_close` exit | no |
+| Unparseable order | fails closed |
+
+**Rule.** Any agent that both submits orders and reconciles state must reconcile
+against *submitted* and *filled*, not filled alone. The gap between them is
+exactly where a scheduled job re-enters.

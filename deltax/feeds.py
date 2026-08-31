@@ -46,6 +46,17 @@ class AlpacaFeed:
         that refuses to draw."""
         return self._run(["account", "get"])
 
+    def open_orders(self) -> list:
+        """Orders working at the broker but not yet filled.
+
+        An unfilled order is invisible to positions(), which is how two
+        identical spreads were submitted a minute apart on 31 Aug (E36).
+        """
+        p = self._run(["order", "list", "--status", "open", "--limit", "100"])
+        if isinstance(p, list):
+            return p
+        return p.get("orders", []) or []
+
     def positions(self) -> list:
         """Open positions, or [] when genuinely flat."""
         p = self._run(["position", "list"])
