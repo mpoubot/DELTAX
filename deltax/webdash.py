@@ -35,6 +35,34 @@ def _logo():
     return '<div class="mark"></div>'
 
 
+def _feeds_status():
+    """Probe every registered feed and report honestly: live, stale, or error.
+
+    Short timeout per feed - the dashboard regenerates every few minutes and
+    one hanging endpoint must not stall the publish. A feed that cannot be
+    fetched is shown as an error, never silently dropped: a dead feed that
+    disappears from the board looks exactly like a healthy board.
+    """
+    from deltax import rss
+    rows = []
+    for key, (url, bucket, active) in rss.FEEDS.items():
+        if "{cik}" in url:
+            rows.append((key, bucket, None, None, "template", "per-symbol (earnings gate)"))
+            continue
+        try:
+            items = rss.parse(rss.fetch(url, timeout=6), source=key)
+            stale, age = rss.is_stale(items)
+            rows.append((key, bucket, len(items), age,
+                         "stale" if stale else "live",
+                         f"newest {age}h ago" if age is not None else "no dated items"))
+        except Exception as e:
+            rows.append((key, bucket, None, None, "error", f"{type(e).__name__}"))
+    # live first, then stale, then errors - the reader scans for trouble
+    order = {"live": 0, "stale": 1, "error": 2, "template": 3}
+    rows.sort(key=lambda r: (order.get(r[4], 9), r[0]))
+    return rows
+
+
 def build(account=None, positions=None, error=None) -> str:
     now = datetime.now(timezone.utc)
     rows = _ledger()
@@ -80,6 +108,16 @@ def build(account=None, positions=None, error=None) -> str:
         f'<td class="num">{p.get("qty","")}</td><td class="num">{p.get("pl","")}</td></tr>'
         for p in (positions or [])) or \
         '<tr><td colspan="4" class="empty">Flat. The agent has placed no orders.</td></tr>'
+
+    frows = ""
+    for key, bucket, n, age, st, note in _feeds_status():
+        pill = {"live": '<span class="pill gd">● LIVE</span>',
+                "stale": '<span class="pill" style="color:#F0C674">● STALE</span>',
+                "error": '<span class="pill rd">● ERROR</span>',
+                "template": '<span class="pill" style="color:#5B807D">SEC 8-K</span>'}[st]
+        frows += (f'<tr><td class="cy">{key}</td><td>{bucket}</td>'
+                  f'<td class="num">{n if n is not None else "—"}</td>'
+                  f'<td>{note}</td><td>{pill}</td></tr>')
 
     warn = (f'<div class="warn">LIVE ACCOUNT UNREADABLE — {error}. '
             f'Figures omitted rather than estimated.</div>') if error else ""
@@ -207,6 +245,12 @@ candidate demonstrates more than a P&amp;L number can.</div>
 </table>
 </div>
 </div>
+
+<h2>NEWS &amp; DATA FEEDS</h2><div class="rule"></div>
+<div class="lead">Probed live at every page generation. Per the corpus, news can
+veto a trade, never originate one — a stale feed is disarmed, not trusted.</div>
+<table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
+<th>FRESHNESS</th><th>STATUS</th></tr>{frows}</table>
 
 <h2>BOOK ALLOCATION</h2><div class="rule"></div>
 <table>
