@@ -846,3 +846,25 @@ it says; none of them asked what happens on the *second* run.
 **Rule.** Any agent that runs on a schedule must reconcile against external
 state at the start of every cycle. State held only in a local variable is state
 that resets, and a limit computed from it silently stops being a limit.
+
+## E29 — A documented rule that nothing calls is not a rule
+
+> E5 required a GTC exit at every fill from day one. `build_close_args()` was
+> written to place it. **Nothing ever called it.** For two days the agent could
+> open positions and had no way to close one.
+
+E15 measured the exit as the *source* of the edge — the 50% close flips every
+configuration positive. An agent that opens and never closes is not a weaker
+version of the backtested strategy; it is the version we measured as marginal.
+
+`deltax/manage.py` now owns both halves: `place_exit()` rests a GTC
+buy-to-close at 50% of credit at fill time, and a 2-DTE time stop closes
+regardless of profit. Found by the user asking why the bot was not "following
+sales" — all tests were green while the strategy was missing half of itself.
+
+**Rule.** Every corpus rule that mandates an action needs a test asserting the
+action actually happens. Otherwise the corpus documents intentions, and reads
+exactly like a system that works.
+
+*(Note: this entry was itself lost once — its original commit was blocked and
+the corpus text silently dropped while the code landed. Restored 31 Aug.)*

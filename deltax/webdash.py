@@ -164,8 +164,9 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 </div>
 <div class="pills">
   <span class="pill on">TEAM SYNC BOARD</span>
+  <a class="pill" href="slides.html" style="text-decoration:none">📊 SLIDES</a>
   <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
-  <span class="pill">ALPACA PAPER</span><span class="pill">312 TESTS</span><span class="pill">MIT</span>
+  <span class="pill">ALPACA PAPER</span><span class="pill">366 TESTS</span><span class="pill">MIT</span>
 </div>
 {warn}
 <div class="stats">{stats}</div>
@@ -201,7 +202,7 @@ candidate demonstrates more than a P&amp;L number can.</div>
 <tr><td>Daily kill switch</td><td class="rd">−5% → HALT</td></tr>
 <tr><td>Drawdown halt</td><td class="rd">−20%</td></tr>
 <tr><td>Min positions</td><td class="wh">15 (forces diversification)</td></tr>
-<tr><td>Gates</td><td class="wh">13, fail-closed</td></tr>
+<tr><td>Gates</td><td class="wh">13, fail-closed · book reconciled every cycle</td></tr>
 <tr><td>Permission</td><td class="wh">NORMAL→CAUTION→DEFENSIVE→<span class="rd">HALT</span></td></tr>
 </table>
 </div>
