@@ -95,6 +95,9 @@ class StubFeed:
                     "prevDailyBar": {"c": 99.0}} for s in syms}
     def chain(self, *a, **k): return {}
     def option_contracts(self, *a, **k): return []
+    # Required since reconciliation: a feed that cannot report open positions
+    # makes the agent refuse to trade blind, which is the intended behaviour.
+    def positions(self): return []
 
 class StubLedger:
     def __init__(self): self.rows = []

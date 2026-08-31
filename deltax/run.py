@@ -14,6 +14,7 @@ from deltax import execute
 from deltax.calendar import entry_allowed
 from deltax.permission import Evidence, recommend_state, gate_permission
 from deltax.manage import place_exit
+from deltax.reconcile import reconcile, safe_to_open
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
 from deltax.screener import (
@@ -61,7 +62,30 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
 
     gte = str(today.fromordinal(today.toordinal() + MIN_DTE))
     lte = str(today.fromordinal(today.toordinal() + MAX_DTE))
-    committed, traded, refused = 0.0, [], []
+
+    # What do we ALREADY hold? Without this, every cycle believes the book is
+    # empty and re-opens the same positions - 96 times a day on the live
+    # schedule. The risk cap only means something across cycles if committed
+    # risk is seeded from the broker, not from this run's fills.
+    try:
+        book = reconcile(feed.positions())
+    except Exception as e:
+        ledger.record_raw({"action": "reconcile_failed", "error": str(e)[:200]})
+        return {"regime": regime, "traded": [], "refused": [], "committed": 0.0,
+                "permission": perm.state, "advisory_only": False,
+                "skipped": f"cannot read open positions - refusing to trade blind: {e}"}
+    ok, why = safe_to_open(book)
+    ledger.record_raw({"action": "reconcile", "open_positions": book["count"],
+                       "committed": round(book["committed"], 2),
+                       "held": sorted(f"{u}/{s_}" for u, s_ in book["held"]),
+                       "safe_to_open": ok, "note": why})
+    if not ok:
+        return {"regime": regime, "traded": [], "refused": [],
+                "committed": book["committed"], "permission": perm.state,
+                "advisory_only": False, "skipped": why}
+
+    committed, traded, refused = book["committed"], [], []
+    held = book["held"]
 
     for symbol in INCOME_UNIVERSE:
         if len(traded) >= MAX_CONCURRENT:
@@ -83,6 +107,9 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 bar_age = None
         # E11: no directional edge proven, so nominate BOTH sides.
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
+            if (symbol, side) in held:
+                refused.append((symbol, side, "already_held"))
+                continue
             allowed, why = gate_permission(perm, side)
             if not allowed and not perm_override:
                 refused.append((symbol, side, f"permission:{perm.state}"))
@@ -130,14 +157,22 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 continue
             legs = [execute.Leg(cand["short"]["symbol"], "sell"),
                     execute.Leg(cand["long"]["symbol"], "buy")]
-            rec = execute.submit(legs, dec.contracts, cand["credit"],
-                                 dry_run=dry_run,
-                                 context={"symbol": symbol, "side": side})
+            try:
+                rec = execute.submit(legs, dec.contracts, cand["credit"],
+                                     dry_run=dry_run,
+                                     context={"symbol": symbol, "side": side})
+            except Exception as e:
+                # One rejected order must not kill the loop. Record it, skip
+                # this candidate, keep the rest of the book intact.
+                ledger.record_raw({"action": "submit_failed", "symbol": symbol,
+                                   "side": side, "error": f"{type(e).__name__}: {str(e)[:160]}"})
+                refused.append((symbol, side, "submit_failed"))
+                continue
             ledger.record_raw(rec)
             # E5/E15: the exit is placed AT ENTRY, not watched for later. An
             # exit that needs the agent alive at the right minute is not an
             # exit — and the 50% close is where the measured edge lives.
-            if rec.get("result") not in (None, "REFUSED"):
+            if str(rec.get("result", "")).startswith(("SUBMITTED", "DRY_RUN")):
                 place_exit(legs, dec.contracts, cand["credit"],
                            ledger=ledger, dry_run=dry_run)
             committed += dec.max_loss

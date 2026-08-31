@@ -798,3 +798,51 @@ the whole point.
 E20 (a gate that could never fire), E25 (history mistaken for existence), and
 now E28. All three passed their unit tests. All three were found by asking what
 the code does when the world does not answer.
+
+## E30 — Ask the broker what you hold before opening anything
+
+> `run()` started `committed = 0.0` on every cycle and never queried open
+> positions. Scheduled every five minutes from 09:30, that is **96 runs a day,
+> each believing the book was empty.**
+
+**What would have happened today.** The simulation opens 12 positions per run
+at roughly $23,100 of risk. The $30,000 portfolio cap would have been breached
+on the **second** run, and the account would have carried on the order of 1,150
+positions by the close. The cap was not weak — it was measuring the wrong thing.
+`open_portfolio_max_loss` was seeded from the current cycle's fills, so it
+described one run, never the book.
+
+**Reconciliation is not bookkeeping.** It is the thing that makes a risk limit
+mean anything across more than one cycle. A cap that resets every five minutes
+is not a cap.
+
+`deltax/reconcile.py` now runs before any candidate is considered:
+
+| | |
+|---|---|
+| Seeds `committed` | from the live book's short legs, not from zero |
+| Records `held` | `(underlying, side)` pairs — an existing leg is never re-opened |
+| Fails closed | an unparseable position refuses **all** new risk |
+| Logged | every cycle, to the ledger |
+
+**Two further faults found in the same pass.**
+
+*An order failure aborted the whole run.* `execute.submit()` raises on a
+rejected order, a preflight mismatch, or a CLI error, and nothing caught it.
+The fifth of twelve orders failing would have left four positions open, eight
+never attempted, and no summary written — then the next cycle would have opened
+the first four again. Each candidate is now wrapped: the failure is recorded,
+that candidate is skipped, the rest of the book proceeds.
+
+*A guard tested a string that is never returned.* `rec["result"] not in
+(None, "REFUSED")` gated exit placement, but `submit()` raises rather than
+returning `"REFUSED"`, and the live value is `"SUBMITTED"`. It now matches on
+the prefixes actually produced.
+
+**How these were found.** The user asked for a bug check five hours before live
+trading. All 343 tests passed the whole time. Tests verify the code does what
+it says; none of them asked what happens on the *second* run.
+
+**Rule.** Any agent that runs on a schedule must reconcile against external
+state at the start of every cycle. State held only in a local variable is state
+that resets, and a limit computed from it silently stops being a limit.
