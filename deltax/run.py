@@ -16,6 +16,7 @@ from deltax.permission import Evidence, recommend_state, gate_permission
 from deltax.manage import place_exit
 from deltax.reconcile import reconcile, safe_to_open
 from deltax import report
+from deltax import news_gate
 from deltax import blocklist
 from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
@@ -97,6 +98,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                        "blocked": len((bl or {}).get("blocked") or {}),
                        "clear": len((bl or {}).get("clear") or [])})
     exits_placed = []
+    news_checked = {}      # symbol -> verdict, one fetch per name per cycle
 
     for symbol in INCOME_UNIVERSE:
         if len(traded) >= MAX_CONCURRENT:
@@ -175,6 +177,22 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 continue
             legs = [execute.Leg(cand["short"]["symbol"], "sell"),
                     execute.Leg(cand["long"]["symbol"], "buy")]
+            # LAST gate before real money: read the tape for THIS name only.
+            # Runs here, not earlier, so it screens the handful that survived 13
+            # gates rather than the whole universe (E35).
+            if symbol not in news_checked:
+                news_checked[symbol] = news_gate.screen(symbol)
+                ledger.record_raw({"action": "news_gate", "symbol": symbol,
+                                   "allowed": news_checked[symbol]["allowed"],
+                                   "read": news_checked[symbol]["read"],
+                                   "recent": news_checked[symbol]["recent"],
+                                   "reachable": news_checked[symbol]["reachable"],
+                                   "reason": news_checked[symbol]["reason"]})
+            nv = news_checked[symbol]
+            if not nv["allowed"]:
+                refused.append((symbol, side, "news"))
+                continue
+
             try:
                 rec = execute.submit(legs, dec.contracts, cand["credit"],
                                      dry_run=dry_run,

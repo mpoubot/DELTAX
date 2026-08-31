@@ -963,3 +963,50 @@ fiction.
 **Standing caveat.** The surviving edge lives in one ticker. That may be an
 IWM-specific volatility artifact rather than a general effect, and it is one
 afternoon's research. It is validated, and it is young.
+
+## E35 — Screen the survivors, and screen them for the right thing
+
+> A news check placed before the gates reads hundreds of names to inform
+> nothing. Placed after them, it reads the handful about to receive real money.
+> Position in the pipeline is the design.
+
+**The gap this closed.** On 31 Aug the agent was minutes from sending a real
+order on UNH. Our eleven live RSS feeds carried **216 articles** that morning
+and **not one mentioned UnitedHealth.** CNBC, FT, Yahoo and the rest cover the
+*market*, not the *ticker*. A single-name veto built on them would have
+returned "all clear" while seeing nothing at all.
+
+Alpaca's per-symbol news endpoint returns **20 UNH-specific articles** for the
+same question. That is what a single-name check has to read.
+
+**Where it sits.** Last. After the 13 deterministic gates, immediately before
+`execute.submit`. One fetch per symbol per cycle, cached across both sides.
+Screening 21 names would be 21 API calls to inform two decisions; screening the
+survivors is one call that matters.
+
+**Asymmetric failure, deliberately.**
+
+| Condition | Behaviour |
+|---|---|
+| Fetch succeeds, blocking headline found | **REFUSE** |
+| Fetch succeeds, nothing blocking | allow |
+| Fetch fails / endpoint down | **allow** |
+
+This inverts E28 on purpose, and the reason matters. The earnings gate fails
+closed because the *absence* of an earnings check leaves a known, scheduled
+risk unexamined. A news outage leaves nothing unexamined - the 13 gates have
+already approved this candidate on price, structure, liquidity and risk. Letting
+a third-party availability problem veto a validated decision hands an outage
+power over the book.
+
+**The blocklist is narrow on purpose.** 25 patterns, all genuine overnight
+re-rating events: halts, bankruptcy, fraud, restatements, regulatory
+enforcement, guidance withdrawal, CEO/CFO exits, M&A, recalls, clinical holds.
+Tested explicitly against the noise that must NOT veto - "Stock Edges Higher",
+"Whale Activity", "$100 Invested 15 Years Ago" - because a vague word here
+costs real trades for nothing.
+
+**Veto only.** News can refuse a trade the gates approved; it can never
+originate one. A test asserts no code path in the module returns a buy signal.
+That is what keeps the pipeline injection-resistant: a headline, however
+crafted, cannot talk the agent INTO a position.
