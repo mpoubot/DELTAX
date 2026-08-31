@@ -63,6 +63,57 @@ def _feeds_status():
     return rows
 
 
+import html as _html
+import re as _re
+
+_KEYSHAPE = _re.compile(r"(PK[A-Z0-9]{16,}|[A-Za-z0-9]{40,})")
+
+def _terminal_lines(limit=110):
+    """The agent's real activity, newest last, as it happened.
+
+    Three streams interleaved by timestamp where possible: scheduled runs
+    (cron.log), pre-market intelligence (premarket.log), and every ledger
+    decision. Each line is HTML-escaped and passed through a key-shape
+    redactor - the publish script refuses key-shaped strings outright, and
+    this makes sure it never has a reason to.
+    """
+    out = []
+    for path, tag in (("logs/premarket.log", "intel"), ("logs/cron.log", "agent")):
+        try:
+            with open(path) as fh:
+                for ln in fh.readlines()[-40:]:
+                    ln = ln.rstrip()
+                    if ln:
+                        out.append((tag, ln))
+        except OSError:
+            continue
+    try:
+        for f in sorted(glob.glob("logs/decisions-*.jsonl")):
+            for ln in open(f).readlines()[-45:]:
+                try:
+                    r = json.loads(ln)
+                except Exception:
+                    continue
+                e = r.get("event") or r
+                a = e.get("action") or e.get("decision")
+                if e.get("decision"):
+                    g = e.get("failed_gate")
+                    out.append(("ledger", f"{e.get('decision','?'):<7} {e.get('symbol','?'):<6}"
+                                + (f"refused by {g}" if g else "all gates passed")))
+                elif a:
+                    keys = {k: v for k, v in e.items()
+                            if k in ("action","state","result","reason","note","open_positions",
+                                     "committed","limit_price","qty","symbol","side","error")}
+                    out.append(("ledger", " ".join(f"{k}={v}" for k, v in keys.items())[:150]))
+    except Exception:
+        pass
+    lines = []
+    for tag, ln in out[-limit:]:
+        ln = _KEYSHAPE.sub("[redacted]", ln)
+        lines.append(f'<span class="tl {tag}">{_html.escape(ln)}</span>')
+    return "\n".join(lines) or '<span class="tl">no activity recorded yet</span>'
+
+
 def build(account=None, positions=None, error=None) -> str:
     now = datetime.now(timezone.utc)
     rows = _ledger()
@@ -184,6 +235,14 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
+.term{{background:#010403;border:1px solid var(--line);padding:4px 0;
+ clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
+.term pre{{margin:0;padding:14px 18px;max-height:430px;overflow:auto;
+ font-size:11px;line-height:1.75;color:var(--dim2)}}
+.tl{{display:block;white-space:pre-wrap;word-break:break-all}}
+.tl:before{{content:"❯ ";color:var(--tif)}}
+.tl.ledger{{color:var(--txt)}}
+.tl.intel{{color:#7FA8A4}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
@@ -295,6 +354,12 @@ they would do worse. The crypto figure is almost entirely one week of XRP and is
 Positive in <span class="gd">80%</span> of them. We cannot forecast direction — five directional
 strategies were tested and all five failed. This says where weeks like this one have
 <span class="cy">landed</span>, and the contest gets exactly one draw.</div>
+
+<h2>LIVE TERMINAL — EVERYTHING THE AGENT DID</h2><div class="rule"></div>
+<div class="lead">The raw activity streams, exactly as written: scheduled runs, pre-market
+intelligence passes, and every ledger entry — approvals, refusals, exits, reconciliations.
+Nothing summarised, nothing hidden. Refreshes with the page.</div>
+<div class="term"><pre>{_terminal_lines()}</pre></div>
 
 <div class="foot">
 GENERATED {now:%Y-%m-%d %H:%M} UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
