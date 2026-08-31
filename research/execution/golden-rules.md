@@ -763,3 +763,38 @@ is the control working, demonstrated on the person who wrote it.
 **Rule.** Any check for a secret reads it from the environment at runtime.
 Any automated job that commits stages named files only — never `git add -A`,
 which is one stray write away from publishing everything.
+
+## E28 — "Nothing found" and "could not look" are different answers
+
+> A gate that returns the same value for *checked, clean* and *check failed*
+> is at its most permissive exactly when it is least informed.
+
+**Evidence.** `gate_no_earnings_before_expiry` took `earnings_date=None` and
+passed. But `None` meant two unrelated things: an ETF that files no 8-K and
+genuinely has no earnings, or a SEC lookup that raised. The morning brief made
+the collapse visible and it went unread:
+
+```
+EARNINGS BLACKOUT  (0 blocked)
+   UNCHECKED: DIA (RuntimeError); EEM (RuntimeError); TLT (RuntimeError); ...
+```
+
+Nine names could not be checked and none was blocked. A SEC outage — a rate
+limit, a 403, a network blip — would have waved every candidate through the one
+gate whose entire job is refusing to sell premium into an earnings event.
+
+**Why the ETF case makes this subtle.** The obvious fix, refuse on `None`,
+would block the whole income universe, since ETFs correctly have no earnings
+date. The states had to be separated rather than merged: `checked=True` with no
+date is a clean bill of health; `checked=False` is an admission of ignorance
+and refuses.
+
+**Rule.** Every gate reading an external source carries an explicit
+*was-this-check-possible* flag, distinct from what the check returned. Absence
+of evidence is not evidence of absence, and in a risk gate the difference is
+the whole point.
+
+**Pattern.** This is the third instance of the same failure shape in two days —
+E20 (a gate that could never fire), E25 (history mistaken for existence), and
+now E28. All three passed their unit tests. All three were found by asking what
+the code does when the world does not answer.

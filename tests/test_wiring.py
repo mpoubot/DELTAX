@@ -48,6 +48,8 @@ for gate, kw in [
     ("dte",             dict(expiry=TODAY+timedelta(days=45))),
     ("dte",             dict(expiry=TODAY+timedelta(days=1))),
     ("earnings",        dict(earnings_date=TODAY+timedelta(days=3))),
+    # E28: a failed lookup must refuse, not sail through as "no earnings"
+    ("earnings",        dict(earnings_checked=False)),
     ("liquidity",       dict(open_interest=10)),
     ("liquidity",       dict(open_interest=None)),
     ("min_credit",      dict(credit=0.10)),
@@ -63,6 +65,20 @@ for gate, kw in [
 ]:
     ok, d = fires(gate, **kw)
     check(f"{gate:<16} fires on {list(kw)[0]}={list(kw.values())[0]}", ok, d)
+
+print("\n── earnings: unknown is not the same as none (E28) ──")
+from deltax.gates import gate_no_earnings_before_expiry as _eg
+_exp = TODAY + timedelta(days=11)
+check("ETF with genuinely no earnings passes", _eg(None, _exp, True).passed)
+check("FAILED lookup refuses", not _eg(None, _exp, False).passed)
+check("the two states are distinguishable",
+      _eg(None,_exp,True).passed != _eg(None,_exp,False).passed)
+check("earnings before expiry still refuses",
+      not _eg(TODAY+timedelta(days=3), _exp, True).passed)
+check("earnings after expiry still passes",
+      _eg(TODAY+timedelta(days=40), _exp, True).passed)
+r = evaluate(**base(earnings_checked=False))
+check("unknown earnings refuses through evaluate()", r.failed_gate == "earnings", str(r.failed_gate))
 
 print("\n── listing gate: the TRON case (E25) ──")
 # TRX/USD: 332 clean daily bars ending 2023-04-19, zero bars in Aug 2026.

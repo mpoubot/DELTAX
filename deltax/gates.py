@@ -296,7 +296,7 @@ def gate_credit(credit: float) -> GateResult:
 
 
 def gate_no_earnings_before_expiry(
-    earnings_date: Optional[date], expiry: date
+    earnings_date: Optional[date], expiry: date, checked: bool = True
 ) -> GateResult:
     """Refuse if an earnings announcement lands before expiry.
 
@@ -304,7 +304,20 @@ def gate_no_earnings_before_expiry(
     an earnings event looks fine right until the IV crush. News is used here
     DEFENSIVELY — it can only veto a trade, never originate one, which is also
     what makes the pipeline injection-resistant.
+
+    `checked` separates two states that a bare None used to collapse (E28):
+
+        checked=True,  earnings_date=None  -> genuinely no earnings (e.g. an
+                                              ETF, which files no 8-K at all)
+        checked=False                      -> the lookup FAILED and we do not
+                                              know. Refuse.
+
+    Collapsing them made a SEC outage look identical to a clean bill of health,
+    so every candidate passed the gate precisely when the gate could not see.
     """
+    if not checked:
+        return GateResult("earnings", False,
+                          "earnings status UNKNOWN - lookup failed, refusing (fail-closed)")
     if earnings_date is None:
         return GateResult("earnings", True, "no earnings scheduled before expiry")
     if earnings_date <= expiry:
@@ -392,6 +405,7 @@ def evaluate(
     last_bar_age_days: Optional[float] = None,
     asset_class: str = "equity",
     earnings_date: Optional[date] = None,
+    earnings_checked: bool = True,
     halted: bool = False,
     corporate_action: Optional[str] = None,
     avg_win: Optional[float] = None,
@@ -424,7 +438,7 @@ def evaluate(
         gate_tradeable(halted, corporate_action),
         gate_defined_risk(max_loss_per_contract),
         gate_dte(expiry, today),
-        gate_no_earnings_before_expiry(earnings_date, expiry),
+        gate_no_earnings_before_expiry(earnings_date, expiry, earnings_checked),
         gate_liquidity(open_interest, contracts),
         gate_credit(credit),
         gate_position_size(total_max_loss, equity),
