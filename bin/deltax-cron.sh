@@ -33,12 +33,12 @@ if [ ! -f ./.env.alpaca ]; then
 fi
 set -a; . ./.env.alpaca; set +a
 export ALPACA_API_KEY ALPACA_SECRET_KEY
-unset DELTAX_ORDERS_ALLOWED
+export DELTAX_ORDERS_ALLOWED=1     # autonomous execution ON
 unset ALPACA_LIVE_TRADE
 
 STAMP=$(date -u +%FT%TZ)
 {
   echo "──────── $STAMP ────────"
-  "$PYBIN" -m deltax.run 2>&1
+  "$PYBIN" -m deltax.run --live 2>&1
   echo "exit=$?"
 } >> logs/cron.log

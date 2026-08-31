@@ -36,11 +36,27 @@ EQ=$(echo "$A"|python3 -c "import sys,json;print(json.load(sys.stdin).get('equit
 [ "$EQ" = "100000" ] && ok "starting equity" "\$100,000 untouched" || warn "starting equity" "$EQ"
 echo "$A" | grep -q '"options_trading_level": *3' && ok "options level" "3 (spreads permitted)" || no "options level" "insufficient for spreads"
 
-echo; echo "── 3. safety interlocks ──"
+echo; echo "── 3. autonomous execution ──"
+# The agent is MEANT to place orders. These verify it can, and that the guards
+# which must survive that are intact. Checking for orders-disabled here would
+# fail on the intended configuration and train the reader to ignore preflight.
+grep -q "DELTAX_ORDERS_ALLOWED=1" bin/deltax-cron.sh && ok "orders enabled in cron" "autonomous" || no "orders NOT enabled" "agent cannot trade"
+grep -q -- "--live" bin/deltax-cron.sh && ok "cron passes --live" "orders will submit" || no "cron missing --live" "dry run only"
+grep -vE '^\s*#' bin/deltax-cron.sh | grep -q -- "--force" && no "cron passes --force" "WOULD OVERRIDE PERMISSION STATE" || ok "cron never passes --force" "permission state authoritative"
+[ -z "${ALPACA_LIVE_TRADE:-}" ] && ok "paper only" "ALPACA_LIVE_TRADE unset" || no "ALPACA_LIVE_TRADE" "SET — refuse to run"
+grep -q "unset ALPACA_LIVE_TRADE" bin/deltax-cron.sh && ok "cron forces paper" "live-trade unset in wrapper" || no "cron paper guard" "missing"
 python3 -m deltax.run --force --live 2>&1 | grep -q REFUSED && ok "--force cannot reach --live" "refused" || no "--force + --live" "ALLOWED"
-[ -z "${DELTAX_ORDERS_ALLOWED:-}" ] && ok "orders disabled by default" "env flag unset" || warn "orders enabled" "DELTAX_ORDERS_ALLOWED set"
-[ -z "${ALPACA_LIVE_TRADE:-}" ] && ok "live-trade flag absent" "paper only" || no "ALPACA_LIVE_TRADE" "SET — refuse to run"
-grep -q "unset DELTAX_ORDERS_ALLOWED" bin/deltax-cron.sh && ok "cron cannot place orders" "flag unset in wrapper" || no "cron order guard" "missing"
+python3 -c "
+import sys; sys.path.insert(0,'.')
+from deltax import execute
+import inspect
+src = inspect.getsource(execute.preflight)
+sys.exit(0 if 'COMPETITION_ACCOUNT' in inspect.getsource(execute) and 'account mismatch' in src else 1)" 2>/dev/null && ok "orders pinned to one account" "preflight refuses mismatch" || no "account pinning" "NOT enforced"
+python3 -c "
+import sys; sys.path.insert(0,'.')
+from deltax.manage import TAKE_PROFIT_FRACTION, TIME_STOP_DTE
+sys.exit(0 if TAKE_PROFIT_FRACTION==0.50 and TIME_STOP_DTE==2 else 1)" 2>/dev/null && ok "exit rule armed" "GTC at 50% credit, 2-DTE time stop" || no "exit rule" "not configured"
+grep -q "place_exit" deltax/run.py && ok "exits placed at fill" "E5 wired into run.py" || no "exits NOT wired" "agent would never close"
 
 echo; echo "── 4. agent ──"
 TP=0; TF=0
