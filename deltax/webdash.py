@@ -21,6 +21,20 @@ def _ledger():
             except Exception: pass
     return rows
 
+LOGO_NAMES = ("logo.png", "logo.jpg", "logo.jpeg", "logo.webp", "deltax.png")
+
+def _logo():
+    """Use the real artwork the moment it exists; fall back to the CSS mark.
+
+    GitHub Pages serves docs/ directly, so the file is referenced by relative
+    name - no embedding needed, and dropping a new file in replaces it.
+    """
+    for n in LOGO_NAMES:
+        if os.path.exists(os.path.join("docs", n)):
+            return f'<img class="logo" src="{n}" alt="DELTAX">'
+    return '<div class="mark"></div>'
+
+
 def build(account=None, positions=None, error=None) -> str:
     now = datetime.now(timezone.utc)
     rows = _ledger()
@@ -85,6 +99,9 @@ body{{background:#000;color:var(--txt);
 
 /* ── mark ── */
 .top{{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:6px}}
+.logo{{width:96px;height:96px;flex:none;border-radius:50%;object-fit:cover;
+ box-shadow:0 0 26px rgba(10,186,181,.45),0 0 60px rgba(10,186,181,.16);
+ border:1px solid rgba(10,186,181,.4)}}
 .mark{{width:62px;height:62px;flex:none;position:relative;
  border:1px solid var(--cy);transform:rotate(45deg);
  box-shadow:0 0 18px rgba(10,186,181,.4),inset 0 0 18px rgba(10,186,181,.16)}}
@@ -139,7 +156,7 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 
 <div class="wrap">
 <div class="top">
-  <div class="mark"></div>
+  {_logo()}
   <div>
     <h1>DELTA<b>X</b></h1>
     <div class="tag1">AUTONOMOUS OPTIONS TRADING &nbsp;·&nbsp; CODE · RISK · EXECUTE</div>
