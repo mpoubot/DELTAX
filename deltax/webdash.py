@@ -157,8 +157,13 @@ def _terminal_lines(limit=90):
 
     events.sort(key=lambda e: e[0], reverse=True)          # newest first
     out = []
+    seen_stamp = None
     for _, t, icon, css, txt in events[:limit]:
         txt = _KEYSHAPE.sub("[redacted]", txt)
+        # Newest-first, so a change of timestamp opens a new cycle block.
+        if t != seen_stamp:
+            css += " cyc"
+            seen_stamp = t
         out.append(f'<div class="tl {css}"><span class="ts">{t}</span>'
                    f'<span class="ic">{icon}</span>'
                    f'<span class="tx">{_html.escape(txt)}</span></div>')
@@ -286,30 +291,35 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
-.term{{background:#010403;border:1px solid var(--line);padding:4px 0;
+.term{{background:#000000;border:1px solid #0d3a1a;padding:4px 0;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
-.term .body{{margin:0;padding:6px 0;max-height:460px;overflow:auto;font-size:12px}}
+.term .body{{margin:0;padding:6px 0;max-height:520px;overflow:auto;font-size:12px;
+ background:#000;font-family:var(--mono)}}
 .tl{{display:flex;gap:11px;align-items:baseline;padding:5px 18px;
  border-left:2px solid transparent;line-height:1.5}}
 .tl:hover{{background:rgba(10,186,181,.05)}}
-.ts{{color:var(--tif);font-variant-numeric:tabular-nums;flex:none;
- font-size:11.5px;letter-spacing:.03em}}
+.ts{{color:#00E676;font-variant-numeric:tabular-nums;flex:none;
+ font-size:11.5px;letter-spacing:.03em;text-shadow:0 0 6px rgba(0,230,118,.5)}}
 .ic{{flex:none;width:18px;text-align:center}}
-.tx{{color:var(--txt);word-break:break-word}}
-.tl.fill{{border-left-color:#3BE8A0;background:rgba(59,232,160,.05)}}
-.tl.fill .tx{{color:#8FF0C4}}
-.tl.refuse{{border-left-color:#FF5C7A}}
-.tl.refuse .tx{{color:#E28FA0}}
-.tl.skip .tx,.tl.skip .ts{{color:#4A6360}}
-.tl.intel{{border-left-color:var(--tif)}}
-.tl.intel .tx{{color:#7FA8A4}}
+.tx{{color:#00E676;word-break:break-word;text-shadow:0 0 5px rgba(0,230,118,.28)}}
+.tl.fill{{border-left-color:#39FF14;background:rgba(57,255,20,.09)}}
+.tl.fill .tx{{color:#39FF14;text-shadow:0 0 9px rgba(57,255,20,.6)}}
+.tl.refuse{{border-left-color:#FF3860}}
+.tl.refuse .tx{{color:#FF6B85}}
+.tl.skip .tx,.tl.skip .ts{{color:#1F7A3D;text-shadow:none}}
+.tl.intel{{border-left-color:#00E676}}
+.tl.intel .tx{{color:#33B36B;text-shadow:none}}
+/* A rule between 5-minute cycles — without it the log reads as one wall. */
+.tl.cyc{{border-top:1px solid #0d3a1a;margin-top:5px;padding-top:9px}}
+.tl.cyc .tx{{color:#39FF14;font-weight:500;letter-spacing:.06em;
+ text-shadow:0 0 10px rgba(57,255,20,.55)}}
 .live{{display:inline-flex;align-items:center;gap:7px;font-size:10px;
  letter-spacing:.2em;color:#3BE8A0;margin-left:12px}}
 .live b{{width:7px;height:7px;border-radius:50%;background:#3BE8A0;
  box-shadow:0 0 9px #3BE8A0;animation:p 1.6s ease-in-out infinite}}
 @keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
-.legend{{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:var(--dim2);
- padding:9px 18px;border-bottom:1px solid var(--line)}}
+.legend{{display:flex;gap:16px;flex-wrap:wrap;font-size:10.5px;color:#1F7A3D;
+ padding:9px 18px;border-bottom:1px solid #0d3a1a;background:#000}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
