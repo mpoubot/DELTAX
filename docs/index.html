@@ -62,6 +62,8 @@ td{padding:9px 10px;border-bottom:1px solid rgba(14,32,51,.6)}
 tr:hover td{background:rgba(10,186,181,.035)}
 td.num{text-align:right;color:var(--white)}
 td.empty{color:var(--dim2);text-align:center;padding:26px}
+.sub{font-size:10px;color:var(--dim2);margin-top:3px;font-weight:400;letter-spacing:.02em}
+td.gd{color:#5CCFE6} td.rd{color:#FF6B85}
 td.bar{width:38%}
 td.bar span{display:block;height:6px;background:linear-gradient(90deg,var(--bl),var(--cy));
  box-shadow:0 0 9px rgba(10,186,181,.6)}
@@ -145,8 +147,14 @@ candidate demonstrates more than a P&amp;L number can.</div>
 <table><tr><th>GATE</th><th style="text-align:right">REFUSALS</th><th></th></tr><tr><td><span class="mono cy">liquidity</span></td><td class="num">259</td><td class="bar"><span style="width:100%"></span></td></tr><tr><td><span class="mono cy">min_credit</span></td><td class="num">152</td><td class="bar"><span style="width:59%"></span></td></tr><tr><td><span class="mono cy">quote_sanity</span></td><td class="num">44</td><td class="bar"><span style="width:17%"></span></td></tr><tr><td><span class="mono cy">spread_quality</span></td><td class="num">10</td><td class="bar"><span style="width:4%"></span></td></tr><tr><td><span class="mono cy">credit_fraction</span></td><td class="num">5</td><td class="bar"><span style="width:2%"></span></td></tr></table>
 
 <h2>OPEN POSITIONS</h2><div class="rule"></div>
-<table><tr><th>SYMBOL</th><th>BIAS</th><th style="text-align:right">QTY</th>
-<th style="text-align:right">P&amp;L</th></tr><tr><td class="cy">UNH260918C00400000</td><td>—</td><td class="num">-2</td><td class="num">-160</td></tr><tr><td class="cy">UNH260918C00410000</td><td>—</td><td class="num">2</td><td class="num">-26</td></tr><tr><td class="cy">UNH260918P00370000</td><td>—</td><td class="num">2</td><td class="num">-12</td></tr><tr><td class="cy">UNH260918P00380000</td><td>—</td><td class="num">-2</td><td class="num">-230</td></tr></table>
+<div class="lead">Each row is one spread — two option contracts traded together.
+We <b>sell</b> one and <b>buy</b> a cheaper one as protection, so the loss is
+capped before the order is ever sent. We keep the money collected up front if
+the stock stays in range.</div>
+<div class="tw"><table>
+<tr><th>STOCK</th><th>WHAT WE DID</th><th class="n">SIZE</th>
+<th class="n">MONEY IN</th><th class="n">MAX LOSS</th><th class="n">P&amp;L NOW</th></tr>
+<tr><td class="cy"><b>UNH</b><div class="sub">18 Sep · 📉 bearish</div></td><td>sold the $400 call<div class="sub">bought the $410 call as protection</div></td><td class="num">2<div class="sub">contracts</div></td><td class="num">$380<div class="sub">collected up front</div></td><td class="num">$1,620<div class="sub">most it can lose</div></td><td class="num rd">-186<div class="sub">wins if stays below $400</div></td></tr><tr><td class="cy"><b>UNH</b><div class="sub">18 Sep · 📈 bullish</div></td><td>sold the $380 put<div class="sub">bought the $370 put as protection</div></td><td class="num">2<div class="sub">contracts</div></td><td class="num">$418<div class="sub">collected up front</div></td><td class="num">$1,582<div class="sub">most it can lose</div></td><td class="num rd">-242<div class="sub">wins if stays above $380</div></td></tr></table></div>
 
 <div class="two">
 <div>
@@ -179,7 +187,7 @@ candidate demonstrates more than a P&amp;L number can.</div>
 <div class="lead">Probed live at every page generation. Per the corpus, news can
 veto a trade, never originate one — a stale feed is disarmed, not trusted.</div>
 <table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
-<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 2.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 8.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 0.8h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 1.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 0.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">49</td><td>newest 8.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13946.2h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
+<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 2.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 8.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 0.8h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 1.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 0.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">49</td><td>newest 8.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13946.2h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
 
 <h2>BOOK ALLOCATION</h2><div class="rule"></div>
 <table>
@@ -241,7 +249,7 @@ Nothing summarised, nothing hidden. Refreshes with the page.</div>
 </div>
 
 <div class="foot">
-GENERATED 2026-08-31 21:36 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
+GENERATED 2026-08-31 21:37 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
 &nbsp;·&nbsp; PAPER TRADING ONLY — NO REAL CAPITAL &nbsp;·&nbsp; ACCOUNT PA3ID1B9L6BP
 </div>
 </div>
