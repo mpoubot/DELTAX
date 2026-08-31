@@ -91,7 +91,17 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # Single names are permitted only because the earnings blocklist is now wired
 # and fail-closed - blocklist.check() refuses anything it cannot positively
 # clear, so a name entering this list still has to survive the gate each cycle.
-INCOME_UNIVERSE = [
+# 31 Aug, team decision: trade UNH only for the 14:30 window.
+#
+# SPY is excluded deliberately, not by oversight. Its config FAILED our own
+# walk-forward - E +0.201 at t=3.19 against a Bonferroni threshold of 5.18 -
+# and its buffer today is 0.96% with a 19% breach probability. Across 25 Mondays
+# since March, SPY lost money in 5 weeks and produced every large loss in the
+# book; UNH lost in 2. Restore the full list once liquidity and the credit
+# surface have been re-checked with a full session of live data.
+INCOME_UNIVERSE = ["UNH"]
+
+_FULL_UNIVERSE = [
     # index and sector ETFs with wide strikes
     "SPY", "QQQ", "IWM", "DIA", "XLK", "XLV", "XLI", "SMH", "SOXX", "XOP",
     # single names: earnings verified clear of the 11 Sep expiry
