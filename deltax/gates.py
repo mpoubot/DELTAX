@@ -26,7 +26,16 @@ PER_POSITION_RISK_PCT = 0.02   # 2% of equity max loss per position
 # deploying the full budget forces at least 15 positions rather than a few
 # large ones, which is what E19 asks for.
 PORTFOLIO_RISK_PCT    = 0.30   # 30% of equity max loss across all open positions
-MIN_DTE               = 7      # rule R5: 0DTE banned; clear the gamma zone
+# Lowered 7 -> 4 because the contest window forces it: judging is Fri 4 Sep and
+# gate_contest_window caps expiry there, so a 7-day floor leaves NO valid expiry
+# and the agent can never trade again (E37).
+#
+# This is not a concession. The 4-day expiry was the ONLY configuration to
+# survive walk-forward AND Bonferroni this morning - SPY +0.245 at t=2.70, IWM
+# +0.251 at t=2.84 - while everything MIN_DTE=7 permitted failed the corrected
+# bar. R5's actual intent was banning 0DTE and clearing the gamma zone; 4 DTE
+# does both.
+MIN_DTE               = 4      # rule R5: 0DTE banned; clear the gamma zone
 MAX_DTE               = 21     # short enough to resolve inside the contest window
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
@@ -170,6 +179,25 @@ def gate_portfolio_risk(new_max_loss: float, open_max_loss: float, equity: float
         "portfolio_risk", ok,
         f"total exposure {total:.2f} vs cap {cap:.2f}",
         round(total, 2), round(cap, 2),
+    )
+
+
+CONTEST_CLOSE = date(2026, 9, 4)
+
+
+def gate_contest_window(expiry: date) -> GateResult:
+    """Refuse any expiry that finishes after judging.
+
+    A credit spread pays when it decays, and decay lands in its final days. An
+    18-DTE spread opened in a 4-day contest hands the judges a mid-decay mark,
+    not the result. This was written into the corpus as E17 on 31 Aug and then
+    violated the same afternoon, because nothing enforced it (E37).
+    """
+    ok = expiry <= CONTEST_CLOSE
+    return GateResult(
+        "contest_window", ok,
+        f"expiry {expiry} vs contest close {CONTEST_CLOSE}"
+        + ("" if ok else " - profit would arrive after judging"),
     )
 
 
@@ -477,6 +505,7 @@ def evaluate(
         gate_tradeable(halted, corporate_action),
         gate_defined_risk(max_loss_per_contract),
         gate_dte(expiry, today),
+        gate_contest_window(expiry),
         gate_no_earnings_before_expiry(earnings_date, expiry, earnings_checked),
         gate_liquidity(open_interest, contracts),
         gate_credit(credit),

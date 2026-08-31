@@ -24,7 +24,7 @@ TODAY = date(2026, 8, 31)
 def base(**kw):
     """A candidate that PASSES everything; each test breaks one thing."""
     a = dict(symbol="SPY", equity=100_000.0, max_loss_per_contract=270.0,
-             max_profit_per_contract=230.0, credit=2.30, expiry=TODAY+timedelta(days=11),
+             max_profit_per_contract=230.0, credit=2.30, expiry=TODAY+timedelta(days=4),
              today=TODAY, open_interest=5000, open_portfolio_max_loss=0.0,
              structure="credit", width=5.0, short_delta=0.20,
              worst_leg_spread_pct=0.05, quote_age_hours=0.1,
@@ -70,7 +70,7 @@ for gate, kw in [
 
 print("\n── earnings: unknown is not the same as none (E28) ──")
 from deltax.gates import gate_no_earnings_before_expiry as _eg
-_exp = TODAY + timedelta(days=11)
+_exp = TODAY + timedelta(days=4)
 check("ETF with genuinely no earnings passes", _eg(None, _exp, True).passed)
 check("FAILED lookup refuses", not _eg(None, _exp, False).passed)
 check("the two states are distinguishable",

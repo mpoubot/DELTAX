@@ -23,8 +23,26 @@ from dataclasses import dataclass
 from typing import Optional
 from deltax import execute
 
+from datetime import date, datetime, timezone, timedelta
+
 TAKE_PROFIT_FRACTION = 0.50    # E5 / E15
 TIME_STOP_DTE = 2              # gamma zone — close regardless of profit
+
+# HARD DEADLINE. The contest is judged Fri 4 Sep 11:00 ET; anything still open
+# is marked at whatever it happens to be worth, mid-decay. A position whose
+# profit arrives after that date cannot pay us, so every position closes before
+# it regardless of P&L (E37).
+CONTEST_CLOSE = date(2026, 9, 4)
+CONTEST_CLOSE_HOUR_ET = 10          # 10:00 ET, an hour before submission
+
+
+def past_contest_deadline(now: datetime | None = None) -> bool:
+    """True once the book must be flat for judging."""
+    et = timezone(timedelta(hours=-4))
+    now = (now or datetime.now(et)).astimezone(et)
+    if now.date() > CONTEST_CLOSE:
+        return True
+    return now.date() == CONTEST_CLOSE and now.hour >= CONTEST_CLOSE_HOUR_ET
 
 
 @dataclass
@@ -41,8 +59,14 @@ class Managed:
             return None
         return (self.entry_credit - self.current) / self.entry_credit
 
-    def reason(self) -> Optional[str]:
-        """Why this position should close now, or None to hold."""
+    def reason(self, now: datetime | None = None) -> Optional[str]:
+        """Why this position should close now, or None to hold.
+
+        The deadline outranks profit: a position that has not reached target by
+        judging never will, because there is no time left to reach it.
+        """
+        if past_contest_deadline(now):
+            return f"CONTEST DEADLINE — flat for judging {CONTEST_CLOSE}"
         c = self.captured
         if c is not None and c >= TAKE_PROFIT_FRACTION:
             return f"target hit — {c*100:.0f}% of credit captured"

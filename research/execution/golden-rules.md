@@ -1047,3 +1047,39 @@ sat in the book, which is most of the holding period.
 **Rule.** Any agent that both submits orders and reconciles state must reconcile
 against *submitted* and *filled*, not filled alone. The gap between them is
 exactly where a scheduled job re-enters.
+
+## E37 — The contest deadline is a gate, not a note in a document
+
+> **E17 was written at 03:40 on 31 Aug.** It said: measure the hold period you
+> can actually execute. At 14:34 the same day the agent opened an **18-day**
+> spread in a **4-day** contest. The rule existed. Nothing enforced it.
+
+**What it cost.** $814 of credit whose decay lands in days 11–18. Judging is
+Fri 4 Sep — day 4. At that point roughly **22% of the decay** has accrued, so
+the judges see a mid-decay mark of about **−$130**, not the +$814 the trade is
+built to earn. The position is not wrong; it is simply being scored before it
+can pay.
+
+**How the corpus failed.** E17 lived in a markdown file. `choose_expiry` picks
+the nearest expiry clearing liquidity; Sep 11 failed liquidity, so it fell
+through to Sep 18, and no code compared that date to the contest end. A rule
+that only a human can enforce is a rule that gets violated on a busy afternoon.
+
+**Two enforcement points now exist.**
+
+| | |
+|---|---|
+| `gate_contest_window` | refuses any expiry after **4 Sep** — nothing new can outlive judging |
+| `manage.past_contest_deadline` | forces every position flat at **10:00 ET on 4 Sep**, an hour before submission, regardless of P&L |
+
+**The forced consequence.** `MIN_DTE` had to drop 7 → 4. With judging on 4 Sep,
+a 7-day floor leaves **no valid expiry at all** and the agent can never trade
+again. That is not a concession: the 4-day expiry was the *only* configuration
+to survive both walk-forward and Bonferroni on 31 Aug — SPY +0.245 at t=2.70,
+IWM +0.251 at t=2.84 — while everything the 7-day floor permitted failed the
+corrected bar. R5's intent was banning 0DTE and clearing the gamma zone. 4 DTE
+does both.
+
+**Rule.** Any constraint that can end the run — a deadline, a capital limit, a
+regulatory window — belongs in a gate with a test, not in prose. Documentation
+records what you decided. Only code enforces it.

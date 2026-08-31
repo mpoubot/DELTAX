@@ -16,7 +16,7 @@ def check(name, cond, detail=""):
 EQUITY = 100_000.0
 TODAY = date(2026, 8, 31)
 
-def make_decision(symbol="SPY", oi=12_000, expiry=date(2026, 9, 14)):
+def make_decision(symbol="SPY", oi=12_000, expiry=date(2026, 9, 4)):
     return evaluate(
         symbol=symbol, equity=EQUITY,
         max_loss_per_contract=100.0, max_profit_per_contract=250.0,
@@ -37,7 +37,7 @@ try:
 
     print("\n── recording ──")
     e1 = led.record(make_decision("SPY"), context={"underlying_price": 645.10})
-    e2 = led.record(make_decision("SPCX", oi=6, expiry=date(2026, 9, 4)))
+    e2 = led.record(make_decision("SPCX", oi=6, expiry=date(2026, 9, 1)))
     e3 = led.record(make_decision("QQQ"))
     e4 = led.record(make_decision("IWM"))
 
