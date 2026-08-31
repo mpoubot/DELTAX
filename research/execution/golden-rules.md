@@ -717,3 +717,49 @@ fact rather than a hope.
 evidence to `execute.submit()` instead of `evaluate()` — the gate would never
 have run, exactly the failure E20 was written about. `tests/test_wiring.py`
 asserts it fires through the real path.
+
+## E27 — A leak detector must not carry the secret it detects
+
+> Hardcoding a credential in order to search for it puts that credential
+> everywhere the search code goes. Read the value at runtime; never embed it.
+
+**Evidence.** `bin/preflight.sh` checked for leaked keys with a literal grep:
+
+```
+git grep -qI "PK<the-literal-key-was-here>" ...
+```
+
+The check was correct and the intent was defensive. It still published the API
+key to a public repository, and — because git history is permanent — the key
+stayed **publicly fetchable** at commit `5335a27` after the working tree was
+cleaned. Confirmed by fetching it over plain HTTPS with no credentials.
+
+**Severity is decided by what is NOT exposed.** Alpaca requires key *and*
+secret. The secret was verified absent from the working tree and from the
+complete history across all refs, so the account was never accessible. This is
+a leak, not a breach — but the distinction is luck about which of two values
+got embedded, not a control that held.
+
+**The permanent fix is rotation, not deletion.** Removing a secret from the
+working tree does nothing; rewriting history is disruptive, breaks every clone,
+and still cannot recall what was already fetched or cached. Rotating makes the
+leaked value worthless, which is the only outcome that does not depend on
+guessing who read it.
+
+**Defence in depth now in place**
+
+| Layer | Control |
+|---|---|
+| Pre-commit | `.githooks/pre-commit` refuses credential-shaped strings and any `.env` file |
+| Push | GitHub push protection blocks secrets server-side |
+| Repository | GitHub secret scanning, enabled |
+| Storage | `.env.alpaca`, mode 600, gitignored, never tracked |
+
+**This rule caught its own documentation.** The first attempt to commit E27
+quoted the offending line verbatim, and the new pre-commit hook refused it. The
+example above is redacted because the hook would not allow it through — which
+is the control working, demonstrated on the person who wrote it.
+
+**Rule.** Any check for a secret reads it from the environment at runtime.
+Any automated job that commits stages named files only — never `git add -A`,
+which is one stray write away from publishing everything.

@@ -1,0 +1,23 @@
+#!/bin/bash
+# Refuse any commit carrying credential-shaped strings. This exists because a
+# leak-detector once hardcoded the key it was detecting and put it in a public
+# repo (E27). Belt to GitHub's push protection braces.
+FAIL=0
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$STAGED" ] && exit 0
+
+# Alpaca key shapes, plus generic secret assignments.
+if git diff --cached -U0 | grep -nE '^\+.*(PK[A-Z0-9]{18,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,})' >/dev/null; then
+  echo "BLOCKED: a credential-shaped string is in the staged diff."
+  git diff --cached -U0 | grep -nE '^\+.*(PK[A-Z0-9]{18,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9]{20,})' | cut -c1-110
+  FAIL=1
+fi
+
+# Never allow the env file itself, under any name.
+if echo "$STAGED" | grep -qE '(^|/)\.env'; then
+  echo "BLOCKED: an .env file is staged. Credentials must never be committed."
+  FAIL=1
+fi
+
+[ $FAIL -eq 1 ] && { echo; echo "Nothing was committed. Remove the secret, then commit again."; exit 1; }
+exit 0
