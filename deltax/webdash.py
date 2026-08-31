@@ -326,49 +326,52 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
  box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
-.term{{background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(0,0,0,.82) 45%),
- rgba(0,0,0,.72);
- backdrop-filter:blur(20px) saturate(115%);-webkit-backdrop-filter:blur(20px) saturate(115%);
- border:1px solid rgba(255,255,255,.16);padding:0;
- box-shadow:0 0 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.13);
+.term{{background:radial-gradient(120% 90% at 50% 0%,rgba(92,207,230,.09),transparent 62%),#000;
+ backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+ border:1px solid rgba(92,207,230,.36);padding:0;
+ box-shadow:0 0 34px rgba(92,207,230,.20),0 0 90px rgba(92,207,230,.07),
+ inset 0 1px 0 rgba(92,207,230,.28);
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
 .term .body{{margin:0;padding:12px 0;max-height:540px;overflow:auto;font-size:12.5px;
  background:transparent;font-family:var(--mono);line-height:1.6}}
 .term .body::-webkit-scrollbar{{width:9px}}
 .term .body::-webkit-scrollbar-track{{background:rgba(255,255,255,.03)}}
-.term .body::-webkit-scrollbar-thumb{{background:rgba(255,255,255,.26);border-radius:5px}}
+.term .body::-webkit-scrollbar-thumb{{background:rgba(92,207,230,.42);border-radius:5px}}
 .tl{{display:flex;gap:16px;align-items:baseline;padding:7px 22px;
  border-left:3px solid transparent;line-height:1.55}}
-.tl:hover{{background:rgba(255,255,255,.055)}}
-.ts{{color:#9AA3AD;font-variant-numeric:tabular-nums;flex:none;
+.tl:hover{{background:rgba(92,207,230,.08)}}
+.ts{{color:#5CCFE6;text-shadow:0 0 8px rgba(92,207,230,.55);font-variant-numeric:tabular-nums;flex:none;
  font-size:11.5px;letter-spacing:.04em;min-width:62px}}
 .ic{{flex:none;width:18px;text-align:center}}
-.tx{{color:#F2F4F7;word-break:break-word}}
-.tl.fill{{border-left-color:#FFFFFF;background:rgba(255,255,255,.085)}}
-.tl.fill .tx{{color:#FFFFFF;font-weight:600}}
-.tl.refuse{{border-left-color:rgba(255,255,255,.34)}}
-.tl.refuse .tx{{color:#B9C0C8}}
-.tl.skip .tx{{color:#7C858F}} .tl.skip .ts{{color:#5A626B}}
-.tl.intel{{border-left-color:rgba(255,255,255,.22)}}
-.tl.intel .tx{{color:#A6AEB7}}
+.tx{{color:#CFEAF3;word-break:break-word}}
+.tl.fill{{border-left-color:#5CCFE6;background:rgba(92,207,230,.11);
+ box-shadow:inset 0 0 26px rgba(92,207,230,.10)}}
+.tl.fill .tx{{color:#FFFFFF;font-weight:600;text-shadow:0 0 12px rgba(92,207,230,.75)}}
+.tl.refuse{{border-left-color:rgba(41,168,216,.55)}}
+.tl.refuse .tx{{color:#7FA9BC}}
+.tl.skip .tx{{color:#4E7182}} .tl.skip .ts{{color:#2F5769;text-shadow:none}}
+.tl.intel{{border-left-color:rgba(41,168,216,.40)}}
+.tl.intel .tx{{color:#8FBBCE}}
 /* Each 5-minute cycle is a block, separated by real whitespace and a rule.
    A hairline was not enough - the log still read as one wall. */
 .tl.cyc{{margin-top:22px;padding-top:17px;position:relative}}
 .tl.cyc:before{{content:"";position:absolute;left:22px;right:22px;top:0;height:1px;
- background:linear-gradient(90deg,rgba(255,255,255,.42),rgba(255,255,255,.07) 60%,transparent)}}
+ background:linear-gradient(90deg,rgba(92,207,230,.75),rgba(92,207,230,.10) 58%,transparent);
+ box-shadow:0 0 9px rgba(92,207,230,.45)}}
 .tl.cyc:first-child{{margin-top:2px;padding-top:8px}}
 .tl.cyc:first-child:before{{display:none}}
 .tl.cyc .ts{{color:#FFFFFF;font-weight:600;font-size:12px;
- background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.26);
- padding:3px 10px;border-radius:4px;min-width:auto}}
+ background:rgba(92,207,230,.14);border:1px solid rgba(92,207,230,.52);
+ padding:3px 10px;border-radius:4px;min-width:auto;
+ box-shadow:0 0 16px rgba(92,207,230,.35);text-shadow:0 0 10px rgba(92,207,230,.8)}}
 .live{{display:inline-flex;align-items:center;gap:7px;font-size:10px;
  letter-spacing:.2em;color:#3BE8A0;margin-left:12px}}
 .live b{{width:7px;height:7px;border-radius:50%;background:#3BE8A0;
  box-shadow:0 0 9px #3BE8A0;animation:p 1.6s ease-in-out infinite}}
 @keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.25}}}}
-.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#9AA3AD;
- padding:12px 22px;border-bottom:1px solid rgba(255,255,255,.14);
- background:rgba(255,255,255,.045);letter-spacing:.05em}}
+.legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:10.5px;color:#7FB8CC;
+ padding:12px 22px;border-bottom:1px solid rgba(92,207,230,.28);
+ background:rgba(92,207,230,.055);letter-spacing:.05em}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
  padding:11px 15px;margin-bottom:20px;font-size:12px;letter-spacing:.05em}}
 .foot{{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
@@ -492,7 +495,7 @@ Nothing summarised, nothing hidden. Refreshes with the page.</div>
    <span>🚫 declined by a gate</span><span>⏳ stood by — no action taken</span>
    <span>🌙 market closed</span><span>📊 account state</span>
    <span>📡 pre-market intel</span>
-   <span style="color:#FFF">newest first · all times ET</span></div>
+   <span style="color:#5CCFE6;text-shadow:0 0 8px rgba(92,207,230,.6)">newest first · all times ET</span></div>
   <div class="body">{_terminal_lines()}</div>
 </div>
 
