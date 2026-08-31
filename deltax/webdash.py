@@ -73,13 +73,13 @@ def build(account=None, positions=None, error=None) -> str:
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
-:root{{--void:#03070E;--panel:#070E1A;--line:#0E2033;--cy:#00D9FF;--bl:#1E90FF;
---txt:#B8CADA;--dim2:#54708A;--white:#EAF4FF}}
-body{{background:var(--void);color:var(--txt);
+:root{{--void:#000000;--panel:#050B0B;--line:#12302E;--cy:#0ABAB5;--bl:#3FE0DA;
+--txt:#AFC6C4;--dim2:#5B807D;--white:#EAFBFA}}
+body{{background:#000;color:var(--txt);
  font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
  letter-spacing:.02em;
- background-image:linear-gradient(rgba(0,217,255,.028) 1px,transparent 1px),
-  linear-gradient(90deg,rgba(0,217,255,.028) 1px,transparent 1px);
+ background-image:linear-gradient(rgba(10,186,181,.028) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(10,186,181,.028) 1px,transparent 1px);
  background-size:44px 44px}}
 .wrap{{max-width:1180px;margin:0 auto;padding:38px 22px 70px}}
 
@@ -87,46 +87,46 @@ body{{background:var(--void);color:var(--txt);
 .top{{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:6px}}
 .mark{{width:62px;height:62px;flex:none;position:relative;
  border:1px solid var(--cy);transform:rotate(45deg);
- box-shadow:0 0 18px rgba(0,217,255,.4),inset 0 0 18px rgba(0,217,255,.16)}}
+ box-shadow:0 0 18px rgba(10,186,181,.4),inset 0 0 18px rgba(10,186,181,.16)}}
 .mark:after{{content:"";position:absolute;inset:11px;border:1px solid var(--bl);
- box-shadow:0 0 10px rgba(30,144,255,.5)}}
+ box-shadow:0 0 10px rgba(63,224,218,.5)}}
 h1{{font-size:38px;letter-spacing:.30em;color:var(--white);font-weight:600;
- text-shadow:0 0 22px rgba(0,217,255,.55)}}
+ text-shadow:0 0 22px rgba(10,186,181,.55)}}
 h1 b{{color:var(--cy);font-weight:600}}
 .tag1{{color:var(--dim2);letter-spacing:.30em;font-size:11px;margin-top:5px}}
 .pills{{margin:16px 0 30px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}}
 .pill{{border:1px solid var(--line);color:var(--dim2);font-size:10px;
- letter-spacing:.2em;padding:4px 13px;border-radius:2px;background:rgba(0,217,255,.03)}}
-.pill.on{{border-color:var(--cy);color:var(--cy);box-shadow:0 0 12px rgba(0,217,255,.2)}}
+ letter-spacing:.2em;padding:4px 13px;border-radius:2px;background:rgba(10,186,181,.03)}}
+.pill.on{{border-color:var(--cy);color:var(--cy);box-shadow:0 0 12px rgba(10,186,181,.2)}}
 
 /* ── stats: fixed 3 columns, always symmetric ── */
 .stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:34px}}
-.stat{{background:linear-gradient(160deg,rgba(0,217,255,.05),transparent 60%),var(--panel);
+.stat{{background:linear-gradient(160deg,rgba(10,186,181,.05),transparent 60%),var(--panel);
  border:1px solid var(--line);padding:17px 19px;position:relative;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
 .stat:before{{content:"";position:absolute;left:0;top:0;width:2px;height:34px;
  background:var(--cy);box-shadow:0 0 10px var(--cy)}}
 .k{{font-size:10px;letter-spacing:.22em;color:var(--dim2)}}
 .v{{font-size:27px;color:var(--white);margin:7px 0 3px;letter-spacing:.03em;
- text-shadow:0 0 16px rgba(0,217,255,.3)}}
+ text-shadow:0 0 16px rgba(10,186,181,.3)}}
 .n{{font-size:10.5px;color:var(--dim2);letter-spacing:.06em}}
 
 /* ── sections ── */
 h2{{font-size:11px;letter-spacing:.30em;color:var(--cy);margin:38px 0 4px;
- text-shadow:0 0 14px rgba(0,217,255,.4)}}
+ text-shadow:0 0 14px rgba(10,186,181,.4)}}
 .rule{{height:1px;background:linear-gradient(90deg,var(--cy),transparent);
- margin-bottom:14px;box-shadow:0 0 8px rgba(0,217,255,.35)}}
+ margin-bottom:14px;box-shadow:0 0 8px rgba(10,186,181,.35)}}
 .lead{{color:var(--dim2);font-size:12px;margin-bottom:14px;max-width:78ch}}
 table{{width:100%;border-collapse:collapse;font-size:12.5px}}
 th{{text-align:left;color:var(--dim2);font-weight:400;font-size:10px;
  letter-spacing:.2em;padding:8px 10px;border-bottom:1px solid var(--line)}}
 td{{padding:9px 10px;border-bottom:1px solid rgba(14,32,51,.6)}}
-tr:hover td{{background:rgba(0,217,255,.035)}}
+tr:hover td{{background:rgba(10,186,181,.035)}}
 td.num{{text-align:right;color:var(--white)}}
 td.empty{{color:var(--dim2);text-align:center;padding:26px}}
 td.bar{{width:38%}}
 td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl),var(--cy));
- box-shadow:0 0 9px rgba(0,217,255,.6)}}
+ box-shadow:0 0 9px rgba(10,186,181,.6)}}
 .cy{{color:var(--cy)}} .wh{{color:var(--white)}} .gd{{color:#3BE8A0}} .rd{{color:#FF5C7A}}
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:26px}}
 .warn{{border:1px solid #8a6a12;background:rgba(138,106,18,.12);color:#F0C674;
