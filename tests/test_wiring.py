@@ -56,7 +56,9 @@ for gate, kw in [
     ("sizing",          dict(max_loss_per_contract=9_000.0)),
     # derived, so it keeps testing the gate when the cap moves (E22)
     ("portfolio_risk",  dict(open_portfolio_max_loss=100_000.0*PORTFOLIO_RISK_PCT - 50.0)),
-    ("credit_fraction", dict(credit=0.80, width=5.0, short_delta=0.20)),
+    # floor is now 85% of the MEASURED market rate (E34), so a poor fill
+    # has to be genuinely poor: 0.30/5 = 0.060 vs a 0.095 floor.
+    ("credit_fraction", dict(credit=0.90, width=20.0, short_delta=0.20)),
     ("quote_sanity",    dict(credit=-1.0)),
     ("quote_sanity",    dict(quote_age_hours=48.0)),
     ("spread_quality",  dict(worst_leg_spread_pct=0.95)),

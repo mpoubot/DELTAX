@@ -47,9 +47,9 @@ try:
           str(b["regime"]["target_short_delta"]))
     check("posture present", len(b["regime"]["posture"]) > 0)
     b3 = brief(FakeFeed(weak=BENCHMARKS), today=date(2026,8,29), check_earnings=False)
-    check("3 weak -> delta 0.20", b3["regime"]["target_short_delta"] == 0.20)
-    check("all targets sit in the backtested 0.20-0.22 band",
-          all(0.20 <= v <= 0.22 for v in TARGET_DELTA_BY_WEAK.values()),
+    check("3 weak -> delta 0.25", b3["regime"]["target_short_delta"] == 0.25)
+    check("all targets sit in the walk-forward validated 0.25-0.30 band",
+          all(0.25 <= v <= 0.30 for v in TARGET_DELTA_BY_WEAK.values()),
           str(TARGET_DELTA_BY_WEAK))
     check("3 weak -> calls only", all("call" in p for p in b3["regime"]["posture"]),
           str(b3["regime"]["posture"]))

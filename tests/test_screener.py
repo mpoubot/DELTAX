@@ -58,6 +58,15 @@ chain = {
     "PLTR260918P00180000": {"greeks": {"delta": -0.3562}, "latestQuote": {"bp": 4.61, "ap": 4.96}},
 }
 oi = {s: 5000 for s in chain}
+
+# A chain spanning 60 points so a 20-wide vertical can find its long leg.
+wide_chain = {}
+for _k in range(140, 201, 5):
+    _d = -(0.05 + (_k - 140) / 60.0 * 0.40)          # 0.05 .. 0.45 across the range
+    wide_chain[f"PLTR260918P00{_k*1000:06d}"] = {
+        "greeks": {"delta": round(_d, 4)},
+        "latestQuote": {"bp": round(1.0 + (_k - 140) * 0.14, 2),
+                        "ap": round(1.06 + (_k - 140) * 0.14, 2)}}
 c = select_vertical(chain, side="put", target_delta=0.30, width=5.0, oi_by_symbol=oi)
 check("short strike nearest 0.30 delta = 177.5", c["short"]["strike"] == 177.5, str(c["short"]["strike"]))
 check("long leg one width below = 172.5", c["long"]["strike"] == 172.5, str(c["long"]["strike"]))
@@ -105,7 +114,10 @@ class FakeFeed:
         return {s: (snap(99, 100) if s in self.weak else snap(101, 100)) for s in syms}
     def option_chain(self, underlying, **kw):
         self.chain_calls.append((underlying, kw.get("option_type")))
-        return chain
+        # Widths moved to 10-20 points (E34), so the end-to-end fixture needs a
+        # chain that actually spans one. The five-strike `chain` above stays as
+        # the unit fixture for select_vertical.
+        return wide_chain
     def option_contracts(self, underlying, **kw):
         return [{"symbol": s, "open_interest": 5000} for s in chain]
 

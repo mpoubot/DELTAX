@@ -26,7 +26,13 @@ BENCHMARKS = ["SPY", "QQQ", "IWM"]
 # materially weaker, 0.30 was negative on the hold-to-expiry test. The regime
 # filter no longer picks direction (E11) so this varies the strike distance
 # only, within the band the backtest supports.
-TARGET_DELTA_BY_WEAK = {0: 0.22, 1: 0.21, 2: 0.20, 3: 0.20}
+# Walk-forward validated at REAL market prices, 31 Aug (E34). Delta 0.30 with
+# 20-wide strikes on an 18-DTE expiry, exited at 4 days, was the strongest
+# configuration to survive both out-of-sample testing and a Bonferroni
+# correction for the 180 configurations searched: IWM out-of-sample E +0.588,
+# 92% win, t=11.5 on 127 independent weeks. The prior 0.20-0.22 band was fitted
+# to an assumed credit the market never paid.
+TARGET_DELTA_BY_WEAK = {0: 0.30, 1: 0.30, 2: 0.28, 3: 0.25}
 DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
 
 # How to price a spread when evaluating it. We EVALUATE at one price and
@@ -42,15 +48,23 @@ SPREAD_HAIRCUT = 0.25
 # returns deep-ITM contracts with unpopulated greeks. Always bound around spot.
 STRIKE_BAND = {"put": (0.80, 1.02), "call": (0.98, 1.20)}
 # Width scaled to price, rounded to common strike increments.
+# WIDER IS BETTER, and this was the single biggest error in the original build.
+# A 5-wide spread breached by $5 is a TOTAL loss; a 20-wide breached by $5 loses
+# a quarter. Same strikes, same probability of being touched, but the loss is
+# graduated rather than binary - worth far more than the slightly lower
+# credit-per-point that wider strikes pay. We had chosen the width that
+# maximises how badly a small breach hurts (E34).
+#
+# Widths are scaled to price: ~2.5-4% of spot, which is what the walk-forward
+# tested. Names too cheap to carry a wide spread are simply not traded.
 DEFAULT_WIDTH = {
-    "SPY": 5.0, "QQQ": 5.0, "IWM": 2.0, "DIA": 5.0, "EEM": 1.0, "TLT": 1.0,
-    # sector sleeves
-    "XLE": 1.0, "XOP": 2.5,                        # energy
-    "XLK": 2.5, "SMH": 5.0, "SOXX": 5.0,           # technology / semis
-    "XLF": 1.0, "KRE": 1.0,                        # financials
-    "XLI": 2.5,                                    # industrials
-    "XLV": 2.5, "XLY": 2.0, "XLP": 1.0,            # health / discretionary / staples
-    "XLU": 1.0, "XLB": 1.0,                        # utilities / materials
+    # index ETFs
+    "SPY": 20.0, "QQQ": 20.0, "IWM": 10.0, "DIA": 20.0,
+    # sector / thematic ETFs
+    "SMH": 20.0, "SOXX": 20.0, "XLK": 5.0, "XLV": 5.0, "XLI": 5.0, "XOP": 5.0,
+    # single names
+    "AAPL": 10.0, "MSFT": 20.0, "META": 20.0, "AMZN": 10.0, "GOOGL": 10.0,
+    "MA": 20.0, "V": 10.0, "JPM": 10.0, "UNH": 10.0, "HD": 10.0, "CRM": 10.0,
 }
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no

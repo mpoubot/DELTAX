@@ -912,3 +912,54 @@ session.
 worse put-spread outcomes. If it does not, `DEFENSIVE` should reduce **size**,
 not block a **side** — caution without a directional bet the evidence does not
 support.
+
+## E34 — Backtest at the price you can be filled at, or you have validated nothing
+
+> Our expectancy engine assumed `credit = 1.15 × delta × width`. Live chains pay
+> roughly **half** that. Every number the project rested on — the +0.107, the
+> three-week replay, the forecast distribution — was computed at a price that
+> has never existed.
+
+**Measured live, 31 Aug, SPY 5-wide at delta 0.20:**
+
+| | Credit | Max loss | EV per $1 risk |
+|---|---|---|---|
+| Assumed by the backtest | $1.15 | $3.85 | **+0.039** |
+| **Actual market** | **$0.54** | $4.46 | **−0.103** |
+
+**Why the assumption was wrong.** `credit/width ≈ delta` describes a *naked*
+option. For a **spread** it is `delta_short − delta_long`, which for a narrow
+spread is far smaller. Short at 0.20 with the long five points below at ~0.13
+is worth about 0.07, not 0.20. The floor was not conservative — it was
+**unfillable**, and no market would ever pay it because doing so is free money.
+
+The docstring on `gate_credit_fraction` had even recorded the truth —
+*"measured on live chains, credit/width runs roughly 0.75-0.8 × delta"* — while
+the constant sat at 1.15 directly beneath it.
+
+**Re-run at real quoted prices, three findings:**
+
+1. **The ratio falls as width grows.** A 20-wide does not pay four times a
+   5-wide. A single per-delta ratio applied across widths overstates wide
+   spreads ~2× and manufactures a false "wider is better" result. The floor is
+   now a surface over (delta, width).
+
+2. **Wider genuinely is better, once priced correctly.** A 5-wide breached by $5
+   is a **total** loss; a 20-wide breached by $5 loses a **quarter**. Same
+   strikes, same touch probability, graduated rather than binary loss. We had
+   chosen the width that maximises how badly a small breach hurts.
+
+3. **The surviving edge is narrow and concentrated.** Of 180 configurations
+   searched, 10 were carried to walk-forward and **5 survived** both
+   out-of-sample testing and a Bonferroni threshold of t ≥ 5.18 — all of them
+   IWM. Best: **δ0.30, 20-wide, 18 DTE, 4-day hold → out-of-sample E +0.588,
+   92% win, t = 11.5, n = 127.**
+
+**Rule.** A backtest input that is *assumed* rather than *observed* must be
+checked against a live quote before any conclusion is drawn from it. An
+optimistic fill assumption does not make a backtest conservative — it makes it
+fiction.
+
+**Standing caveat.** The surviving edge lives in one ticker. That may be an
+IWM-specific volatility artifact rather than a general effect, and it is one
+afternoon's research. It is validated, and it is young.

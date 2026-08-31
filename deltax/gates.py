@@ -39,7 +39,25 @@ MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the tr
 # See backtest/condor_expectancy.py. This makes the gate STRICTER - fewer
 # trades pass, which is the correct direction when the alternative is
 # knowingly trading a negative-expectancy structure.
-CREDIT_DELTA_MULTIPLE = 1.15   # credit structures: credit/width >= 1.15 x short delta
+# MEASURED credit/width from live chains, 31 Aug 2026 (SPY/QQQ/IWM, Sep 11 and
+# Sep 18 expiries). The old constant demanded 1.15 x delta, which the market has
+# never paid: a 5-wide at delta 0.20 quotes ~0.11, not 0.23. That floor was not
+# conservative, it was UNFILLABLE - and because the backtest used it as the
+# assumed fill, the entire +0.107 expectancy was computed on a price that does
+# not exist (E34).
+#
+# Note the ratio FALLS as width grows: a 20-wide does not pay four times a
+# 5-wide, so this is a surface over (delta, width), not one number.
+CREDIT_SURFACE = {
+    (0.15, 5): 0.076, (0.15, 10): 0.066, (0.15, 20): 0.046,
+    (0.20, 5): 0.112, (0.20, 10): 0.095, (0.20, 20): 0.066,
+    (0.30, 5): 0.180, (0.30, 10): 0.150, (0.30, 20): 0.106,
+    (0.40, 5): 0.234, (0.40, 10): 0.172, (0.40, 20): 0.127,
+}
+# Accept a fill at or above this share of the measured market rate. Below it the
+# quote is materially worse than the market and should be refused; at 1.0 we
+# would refuse every ordinary fill, which is the mistake being corrected.
+CREDIT_MARKET_FRACTION = 0.85
 MIN_CREDIT_FRACTION   = 0.20   # fallback floor when short delta is unavailable
 MAX_SPREAD_PCT        = 0.15   # worst leg's bid/ask spread as a fraction of its mid
 MAX_QUOTE_AGE_HOURS   = 1.0    # stale quotes cannot be priced or calibrated against
@@ -215,6 +233,25 @@ def gate_spread_quality(worst_leg_spread_pct: Optional[float]) -> GateResult:
     )
 
 
+def market_credit_ratio(delta: float, width: float) -> float:
+    """What credit/width the market actually pays here, interpolated.
+
+    Bilinear over the measured surface, clamped to its edges. Returns a RATE,
+    not a floor - the gate discounts it by CREDIT_MARKET_FRACTION.
+    """
+    ds = sorted({d for d, _ in CREDIT_SURFACE})
+    ws = sorted({w for _, w in CREDIT_SURFACE})
+    d = min(max(delta, ds[0]), ds[-1])
+    w = min(max(width, ws[0]), ws[-1])
+    d0 = max([x for x in ds if x <= d]); d1 = min([x for x in ds if x >= d])
+    w0 = max([x for x in ws if x <= w]); w1 = min([x for x in ws if x >= w])
+    td = 0.0 if d1 == d0 else (d - d0) / (d1 - d0)
+    tw = 0.0 if w1 == w0 else (w - w0) / (w1 - w0)
+    a = CREDIT_SURFACE[(d0, w0)] * (1 - tw) + CREDIT_SURFACE[(d0, w1)] * tw
+    b = CREDIT_SURFACE[(d1, w0)] * (1 - tw) + CREDIT_SURFACE[(d1, w1)] * tw
+    return a * (1 - td) + b * td
+
+
 def gate_credit_fraction(credit: float, width: float,
                          short_delta: Optional[float] = None) -> GateResult:
     """Credit structures: is the premium fair for the risk actually taken?
@@ -238,8 +275,10 @@ def gate_credit_fraction(credit: float, width: float,
         floor = MIN_CREDIT_FRACTION
         basis = f"flat floor {floor:.2f} (no delta)"
     else:
-        floor = CREDIT_DELTA_MULTIPLE * abs(short_delta)
-        basis = f"{CREDIT_DELTA_MULTIPLE} x delta {abs(short_delta):.3f} = {floor:.3f}"
+        mkt = market_credit_ratio(abs(short_delta), width)
+        floor = CREDIT_MARKET_FRACTION * mkt
+        basis = (f"{CREDIT_MARKET_FRACTION:.0%} of measured market "
+                 f"{mkt:.3f} (δ{abs(short_delta):.2f}, {width:g}-wide) = {floor:.3f}")
     ok = frac >= floor
     return GateResult(
         "credit_fraction", ok,
