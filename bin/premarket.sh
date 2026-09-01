@@ -20,7 +20,7 @@ mkdir -p logs
 STAMP=$(date -u +%FT%TZ)
 {
   echo "──────── PRE-MARKET $STAMP ────────"
-  for stage in rss daily earnings morning; do
+  for stage in rss daily blocklist morning; do
     echo "── $stage"
     # macOS has no coreutils timeout; guard with a background wait instead so a
     # hung feed can never wedge the whole pre-market window.

@@ -99,6 +99,38 @@ python3 -c "import deltax.run,deltax.gates,deltax.screener,deltax.execute,deltax
 rm -rf logs/preflight && python3 -m deltax.run >/dev/null 2>&1 && ok "dry run completes" "exit 0" || warn "dry run" "non-zero (market closed is normal)"
 python3 -m deltax.ledger logs 2>/dev/null | grep -q "intact" && ok "ledger chain" "intact" || warn "ledger chain" "no entries yet"
 
+# E49: the blocklist silently aged past its limit because the stage meant to
+# rebuild it was a no-op. Freshness is a preflight condition, not a hope.
+BL=$(python3 - <<'PYEOF' 2>/dev/null
+import sys; sys.path.insert(0,".")
+from datetime import date
+from deltax.blocklist import load, age_hours
+from deltax.screener import INCOME_UNIVERSE
+from deltax.blocklist import check
+d = load()
+if not d: print("MISSING"); raise SystemExit
+a = age_hours(d)
+bad = [s for s in INCOME_UNIVERSE if not check(s, date(2026, 9, 4))[0]]
+print(f"{a:.1f}|{d.get('expiry')}|{len(bad)}|{','.join(bad)}")
+PYEOF
+)
+if [ "$BL" = "MISSING" ] || [ -z "$BL" ]; then
+  bad "earnings blocklist" "absent — every name fails closed"
+else
+  BL_AGE=${BL%%|*}; BL_REST=${BL#*|}; BL_EXP=${BL_REST%%|*}
+  BL_R2=${BL_REST#*|}; BL_NBAD=${BL_R2%%|*}; BL_BAD=${BL_R2#*|}
+  if [ "$(echo "$BL_AGE < 20" | bc -l)" = "1" ]; then
+    ok "earnings blocklist fresh" "${BL_AGE}h old, covers to ${BL_EXP}"
+  else
+    bad "earnings blocklist stale" "${BL_AGE}h old — limit 20h"
+  fi
+  if [ "$BL_NBAD" = "0" ]; then
+    ok "universe clears earnings" "all tradeable"
+  else
+    warn "universe partly blocked" "$BL_NBAD blocked: $BL_BAD"
+  fi
+fi
+
 echo; echo "── 5. schedule ──"
 crontab -l 2>/dev/null | grep -q deltax-cron && ok "cron installed" "*/5 * * * *" || no "cron" "not installed"
 pgrep -x cron >/dev/null && ok "cron daemon" "running" || no "cron daemon" "stopped"
