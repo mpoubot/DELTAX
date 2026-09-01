@@ -21,7 +21,14 @@ import json
 import os
 import subprocess
 
-COMPETITION_ACCOUNT = "PA3ID1B9L6BP"
+# The account this agent is allowed to trade. Pinned so a stray credential can
+# never route an order to the wrong place - but read from the environment so
+# swapping the paper account does not silently halt every order with an
+# "account mismatch" that looks like the bot dying (E40).
+#
+# Set DELTAX_ACCOUNT in .env.alpaca when the paper account changes. Unset, it
+# keeps the original competition account.
+COMPETITION_ACCOUNT = os.environ.get("DELTAX_ACCOUNT", "PA3ID1B9L6BP")
 ORDERS_ALLOWED_ENV = "DELTAX_ORDERS_ALLOWED"
 
 
