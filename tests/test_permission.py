@@ -44,7 +44,18 @@ d = recommend_state(Evidence(**{**OK, "drawdown_pct": DD_PAST}))
 check(f"drawdown past backtested worst ({DD_PAST}%) -> HALT", d.state == HALT, d.state)
 d = recommend_state(Evidence(**{**OK, "drawdown_pct": DD_NEAR}))
 check(f"drawdown approaching limit ({DD_NEAR}%) -> CAUTION", d.state == CAUTION, d.state)
+# E44: this bare -10.0 floor was nearly loosened to -3.0 on the strength of the
+# worst WEEK. The invariant that actually matters is the ratio to the measured
+# cumulative DRAWDOWN (-2.38% on the live basket at the pessimistic IV/RV), so
+# both failure modes are named here rather than left to a magic number.
+MEASURED_DRAWDOWN_PCT = -2.38
 check("halt threshold tracks the deployed risk budget", DD_HALT <= -10.0, str(DD_HALT))
+check("halt is far enough out not to fire on ordinary variance",
+      DD_HALT <= MEASURED_DRAWDOWN_PCT * 3,
+      f"{DD_HALT} is only {DD_HALT/MEASURED_DRAWDOWN_PCT:.1f}x measured drawdown")
+check("halt is tight enough to still be reachable in a short contest",
+      DD_HALT > -30.0 * 0.5,
+      f"{DD_HALT} vs -30% theoretical max loss at full deployment")
 
 print("\n── daily loss limit (shock filter) ──")
 d = recommend_state(Evidence(**{**OK, "daily_loss_pct": DAILY_LOSS_LIMIT_PCT - 0.5}))

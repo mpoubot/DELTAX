@@ -1326,3 +1326,28 @@ relationship needs its own assertion — `gate_dte_vs_time_stop()` — because
 neither module's tests can see it. MIN_DTE raised to 3.
 
 **Consequence.** 1 Sep is the **last day** a position can be opened and held.
+
+## E46 — A kill switch calibrated to a dead backtest is not a kill switch
+
+`max_backtested_drawdown_pct = -20.0` was set from the backtest E44
+invalidated. Against the rebuilt numbers it was **8× the real drawdown** —
+mathematically unable to fire inside a three-day contest. An inert guard reads
+as protection on every dashboard and in every review.
+
+The first correction was worse. I re-derived it from the worst **week** (−505,
+−0.5%) and set −3.0%, which is **1.3×** the measured figure: ordinary variance
+would have halted the contest on day one. The existing test caught it.
+
+The correct input is the worst cumulative **peak-to-trough drawdown** of the
+equity curve, which is **−2.38%** on the live basket at the pessimistic IV/RV
+1.00 — not the worst single week. −10.0% is ~4.2× that, and a third of the
+−30% theoretical loss at full deployment.
+
+**Rule.** Every threshold derived from a backtest carries a dependency on that
+backtest. When a backtest is invalidated, **enumerate its dependents** — they
+do not announce themselves, and they keep displaying green. Size a drawdown
+limit from a drawdown, never from a single period's loss.
+
+**Enforcement.** `test_permission.py` now asserts the *ratio* to the measured
+drawdown in both directions — too loose to fire, and too tight not to — instead
+of a bare magic number that carried no reasoning.

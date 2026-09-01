@@ -199,7 +199,8 @@ def test_e42_submit_refuses_while_suspended():
     hid an AttributeError in the guard itself. No escape hatch here."""
     import deltax.gates as g
     from deltax.execute import submit, ExecutionRefused
-    assert g.TRADING_SUSPENDED, "E42 stand-down must be active"
+    was = g.TRADING_SUSPENDED
+    g.TRADING_SUSPENDED = True          # prove the MECHANISM, not today's state
     legs = [{"symbol": "SPY260904P00760000", "side": "sell", "ratio": 1},
             {"symbol": "SPY260904P00740000", "side": "buy",  "ratio": 1}]
     try:
@@ -210,11 +211,16 @@ def test_e42_submit_refuses_while_suspended():
     except Exception as e:
         check("E42 submit refused while suspended", False,
               f"wrong exception {type(e).__name__}: {e}")
+    finally:
+        g.TRADING_SUSPENDED = was
 
 
 def test_e42_guard_survives_dry_run_false():
     """dry_run=False must refuse too - that is the path that sends real orders."""
+    import deltax.gates as g
     from deltax.execute import submit, ExecutionRefused
+    was = g.TRADING_SUSPENDED
+    g.TRADING_SUSPENDED = True
     legs = [{"symbol": "SPY260904P00760000", "side": "sell", "ratio": 1}]
     try:
         submit(legs=legs, qty=1, limit_price=1.50, dry_run=False)
@@ -223,12 +229,20 @@ def test_e42_guard_survives_dry_run_false():
         check("E42 live path refused", True, "refused")
     except Exception as e:
         check("E42 live path refused", False, f"{type(e).__name__}: {e}")
+    finally:
+        g.TRADING_SUSPENDED = was
 
 
 def test_e42_screening_still_runs():
     """The stand-down must not blind the agent - it still evaluates and logs."""
     import deltax.gates as g
     check("E42 gate exists", hasattr(g, "gate_trading_enabled"), "present")
+    was = g.TRADING_SUSPENDED
+    g.TRADING_SUSPENDED = False
+    check("gate passes when trading is enabled", g.gate_trading_enabled().passed)
+    g.TRADING_SUSPENDED = True
+    check("gate fails when the stand-down is armed", not g.gate_trading_enabled().passed)
+    g.TRADING_SUSPENDED = was
     body = open("deltax/gates.py").read().split("def evaluate(")[1].split("\ndef ")[0]
     check("E42 evaluate() still gates normally",
           "gate_trading_enabled()" not in body, "not short-circuited")

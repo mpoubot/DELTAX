@@ -60,7 +60,15 @@ class Evidence:
     # breaker that only fires once the entire budget is gone is not a circuit
     # breaker. -20% stops us with a third of the risk budget still unspent and
     # 80% of the account intact. CAUTION fires at 60% of this, i.e. -12%.
-    max_backtested_drawdown_pct: float = -20.0  # S5 kill-switch threshold
+    # E44: recalibrated against a MEASURED figure. -20.0 came from the
+    # backtest E44 invalidated and was inert (8x the real drawdown). A first
+    # attempt at -3.0 was worse: it was sized off the worst WEEK (-505) rather
+    # than the worst cumulative DRAWDOWN, leaving it at 1.3x measured, where
+    # ordinary variance would trip it. The rebuilt backtest's worst
+    # peak-to-trough on the live basket is -2.38% (at the pessimistic IV/RV
+    # 1.00), so -10.0 is ~4.2x measured: far enough out not to fire on noise,
+    # and a third of the -30% theoretical loss at full deployment.
+    max_backtested_drawdown_pct: float = -10.0  # S5 kill-switch threshold
     market_open: Optional[bool] = None
 
 

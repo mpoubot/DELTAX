@@ -70,14 +70,15 @@ check("pin looks like an Alpaca paper account",
 check("pin follows DELTAX_ACCOUNT when set",
       __import__("os").environ.get("DELTAX_ACCOUNT", COMPETITION_ACCOUNT) == COMPETITION_ACCOUNT)
 
-# ---- restore, and prove the stand-down still bites on this exact path -------
-_g.TRADING_SUSPENDED = _E42_WAS
+# ---- prove the stand-down still bites on this exact path, then restore ------
+_g.TRADING_SUSPENDED = True
 try:
     submit(LEGS, 2, 1.55, dry_run=True)
     check("E42 stand-down blocks this file's own submit path", False, "RETURNED")
 except ExecutionRefused as e:
     check("E42 stand-down blocks this file's own submit path",
           "SUSPENDED" in str(e), "refused")
+_g.TRADING_SUSPENDED = _E42_WAS
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

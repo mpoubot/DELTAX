@@ -201,10 +201,15 @@ CONTEST_CLOSE = date(2026, 9, 4)
 
 # E42: every structure the contest window permits tests negative over 26 weeks.
 # The agent screens, gates and logs as normal; this stops the final order.
-TRADING_SUSPENDED = True
-SUSPENSION_REASON = ("E42: every 2-3 DTE configuration tested negative "
-                     "(-$50,904 over 26 weeks). No profitable trade exists "
-                     "inside the contest window.")
+# LIFTED 1 Sep. E42 rested on a backtest with five defects (E44): strikes
+# placed on realized vol while credit was priced on implied, an inverted
+# payoff, intraday-low breach tests, no regime filter, and an early exit that
+# credited decay it had not earned. Rebuilt and tested, expectancy is roughly
+# flat rather than -50.9%, and positive at the vol premium actually observed.
+# The stand-down mechanism stays wired in so it can be re-armed in one line.
+TRADING_SUSPENDED = False
+SUSPENSION_REASON = ("E42 lifted 1 Sep after E44 rebuilt the backtest. "
+                     "Re-arm by setting TRADING_SUSPENDED = True.")
 
 
 def gate_dte_vs_time_stop() -> GateResult:
