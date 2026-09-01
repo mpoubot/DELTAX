@@ -577,6 +577,45 @@ veto a trade, never originate one — a stale feed is disarmed, not trusted.</di
 <table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
 <th>FRESHNESS</th><th>STATUS</th></tr>{frows}</table>
 
+<h2>1 SEP — WHAT THE AGENT REFUSED, AND WHY</h2><div class="rule"></div>
+<div class="lead" style="margin-bottom:12px">The tape sold off through the
+morning and the regime went <b>0/3 weak &rarr; 3/3 weak</b>, escalating
+permission <span class="cy">CAUTION &rarr; DEFENSIVE</span>. Three separate
+opportunities were examined and all three declined. None of these were
+missed &mdash; each was measured, and the measurement is below.</div>
+<table>
+<tr><th>CANDIDATE</th><th>WHAT WE MEASURED</th><th>VERDICT</th></tr>
+<tr><td class="cy">Energy<br><span class="dim">XLE XOP USO</span></td>
+ <td>Correct read &mdash; USO <b class="gd">+4.28%</b>, XOP +1.52%, XLE +1.05%
+ while SPY was &minus;0.71%. But at the &delta;0.30 strike the 4 Sep weeklies
+ quote OI <b>484 / 3 / 7</b> and spreads <b class="rd">46% / 176% / 36%</b>
+ against a 15% cap.</td>
+ <td class="rd">No instrument.<br>Crossing the spread costs more than the trade
+ can earn.</td></tr>
+<tr><td class="cy">SPY put<br><span class="dim">757 / 737</span></td>
+ <td>IV/RV moved <b class="gd">1.09 &rarr; 2.01</b> on the selloff. OI 779,
+ spread 6%, credit $1.73. <b>Passed every gate.</b></td>
+ <td class="rd">Blocked by DEFENSIVE<br><span class="dim">3/3 benchmarks weak</span></td></tr>
+<tr><td class="cy">QQQ put<br><span class="dim">701 / 681</span></td>
+ <td>IV/RV <b class="gd">0.79 &rarr; 1.56</b>. OI 684, spread 3%, credit $1.95.
+ <b>Passed every gate.</b></td>
+ <td class="rd">Blocked by DEFENSIVE</td></tr>
+</table>
+<div class="lead" style="margin-top:12px">The SPY and QQQ spreads were the
+richest, cleanest setups measured all week, and the operator was offered the
+override at half size. <span class="cy">It was declined.</span> The regime
+filter is worth <b>31 points</b> in the rebuilt backtest &mdash;
+<span class="rd">&minus;63.6%</span> without it against
+<span class="rd">&minus;32.0%</span> with it &mdash; and this was precisely its
+scenario: selling puts into a falling tape, two days from expiry, on the last
+day a position could be opened. Rich premium is <b>compensation for risk, not
+evidence of its absence</b>: IV/RV 2.01 existed because the market had just
+fallen and might keep falling.
+<div class="sd-r" style="margin-top:12px">A filter is only worth what it costs
+you on the day you least want to obey it. One overridden whenever it binds has
+no value, and its backtested contribution was never real. The cost of obeying it
+today is visible above, in full, priced to the cent.</div></div>
+
 <h2>BOOK ALLOCATION</h2><div class="rule"></div>
 <table>
 <tr><th>SLEEVE</th><th style="text-align:right">CAPITAL</th><th>STRUCTURE</th><th>EVIDENCE</th></tr>
