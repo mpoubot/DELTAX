@@ -150,3 +150,46 @@ the organisers. Checking the actual requirements settled it in a minute.
 orders, the expiry error, the −$428 — is what D-07 and E37 describe. Those
 entries keep the old ID deliberately, as do the frozen deck versions. A ledger
 that rewrites itself is not a ledger.
+
+---
+
+## D-10 🔴 Traded on a structure that had never been backtested at its real price
+**31 Aug 2026** · *bad decision, caught before it cost money*
+
+The agent was configured, armed and cron-scheduled to trade a 4 Sep expiry with
+14 names on Tuesday morning. Preflight was green, 431 tests passed, the account
+was funded and the dashboard was live. **Nobody had backtested that exact
+configuration.** Prior results came from other universes, other expiries, and —
+before E34 — a credit the market never actually paid.
+
+Running it returned **&minus;$50,904 (&minus;50.9%)** over 26 weeks.
+
+**Why it happened.** Readiness was measured by whether the machinery worked, not
+by whether the trade made money. Every green light was about plumbing: tests,
+gates, cron, credentials, dashboards. The one question that mattered — *does
+this specific configuration have positive expectancy at prices we can actually
+fill?* — had no check attached to it.
+
+**How to avoid it.** A configuration is not tradeable because it passes gates.
+It is tradeable when **that exact configuration**, at real market credit, shows
+positive expectancy out of sample. Backtest the thing you are about to run, not
+a relative of it.
+
+## D-11 🟢 Stood down instead of trading anyway
+**1 Sep 2026** · *good decision*
+
+With three days left, a fresh $100,000 and a live dashboard, the evidence said
+every structure the deadline permits loses money. The temptation was to shrink
+the universe until a green number appeared — the sweep offered several.
+
+Those green rows were an artifact: they priced 11-day strike distances at
+3-day-option credit. On live chains the 4 Sep expiry places its &delta;0.30
+strike 0.64% from spot for $1.64, versus 0.90% and $2.37 at 11 days. Closer to
+the money **and** paid less. There is no version of that trade that works.
+
+**Why it was right.** When every permitted configuration tests negative, the
+finding is *there is no trade* — not *keep sweeping until one row turns green*.
+Capital preserved at $100,000 beats a backtested &minus;50%.
+
+**How to apply it.** Sweeping parameters until something passes is searching for
+noise. If the honest answer is "don't trade", say it and enforce it in code.

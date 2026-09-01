@@ -1220,3 +1220,67 @@ Three faults, all from the same root:
 every fixed deadline it operates under, on every day it will run — not on the
 day it is written. And a restriction scoped to one session needs an expiry date
 in the comment that sets it.
+
+## E42 — The only expiry the deadline allows is the one that loses money
+
+> Backtesting **tomorrow's exact configuration** — Tue entry, Sep 4 expiry,
+> δ0.30, 14 names, real market credit — returns **−$50,904 (−50.9%)** over 26
+> weeks at a 46% win rate. Not marginal. Half the account.
+
+**It is not the universe size.** Every 3-DTE configuration is negative:
+
+| Names | δ0.15 | δ0.20 | δ0.30 |
+|---|---|---|---|
+| 2 | −7,988 | −8,310 | −8,977 |
+| 4 | −9,544 | −9,399 | −8,649 |
+| 6 | −15,527 | −17,503 | −18,347 |
+| 14 | −44,928 | −49,078 | **−50,904** |
+
+**The cause, measured on live chains.** Strike distance scales with √time, and a
+3-day option places its δ0.30 strike **0.64%** from spot against **0.90%** for an
+11-day one — while paying **$1.64 against $2.37** on the same 20-wide. Thirty
+percent closer to the money for thirty percent less premium. SPY's ordinary
+daily range is 0.6–0.7%, so that buffer is about one session.
+
+**The bind.** `gate_contest_window` (E37) permits only the 4 Sep expiry, because
+anything later is marked mid-decay at judging. The single expiry the deadline
+allows is the single structure the evidence rejects. Both gates are correct;
+together they leave no profitable trade.
+
+**Rule.** When every configuration a constraint permits tests negative, the
+answer is not to relax the constraint or to keep sweeping parameters until one
+row turns green. It is that **there is no trade**, and standing down preserves
+the capital that a forced trade would spend.
+
+**Consequence.** Trading is suspended for the remainder of the contest unless a
+structure is found that is positive at 2–3 DTE. Capital preserved at $100,000
+beats a backtested −50%.
+
+## E43 — Three green checks that proved nothing
+
+Enforcing the E42 stand-down took four attempts, and the first three all
+reported success:
+
+1. **`_g.ok` on a `GateResult` that has `.passed`.** The guard would have
+   raised `AttributeError`, not refused.
+2. **The test called `submit()` with invented kwargs** (`symbol=`, `limit=`),
+   got `TypeError`, and an `except TypeError` branch *counted that as a
+   refusal*. The guard was never once executed.
+3. **The tests sat after the summary `print`.** They ran; their results were
+   never counted. (Same shape as E40.)
+4. **The arguments were swapped.** This file's helper is
+   `check(label, condition, detail)`; I passed `check(condition, label, …)`,
+   so the condition slot always held a non-empty string. Output read
+   `✓ True`. The tests passed unconditionally and would have passed with the
+   stand-down entirely removed.
+
+Every stage was green. The stand-down was unenforced the whole time.
+
+**Rule.** A test that has never been observed to fail is not evidence. Before
+trusting a new guard, **mutate the condition it guards and watch the test go
+red.** Green on its own only proves the assertion ran, not that it discriminates.
+
+**Enforcement added.** `check()` now raises `TypeError` unless it is given
+`(str, bool, …)`, so the swap cannot recur silently. `tests/test_meta.py`
+scans every test file for tests defined after the summary print. Both are
+permanent; neither depends on anyone remembering this.

@@ -114,7 +114,18 @@ git log -1 --format=%H >/dev/null 2>&1 && ok "rule provenance" "commit $(git log
 echo
 echo "══════════════════════════════════════════════════════════════════════════"
 printf "  \033[1m%d passed · %d warnings · %d BLOCKING\033[0m\n" $P $W $F
-if [ $F -gt 0 ]; then echo -e "  \033[31m⛔ NOT CLEARED TO TRADE\033[0m"; else
-  echo -e "  \033[32m✅ CLEARED — agent may trade at the open\033[0m"; fi
+# E42: a green preflight must never read as "go" while the stand-down is on.
+SUSPENDED=$(python3 -c "import sys;sys.path.insert(0,'.');import deltax.gates as g;print('1' if g.TRADING_SUSPENDED else '0')" 2>/dev/null || echo "?")
+if [ $F -gt 0 ]; then
+  echo -e "  \033[31m⛔ NOT CLEARED TO TRADE\033[0m"
+elif [ "$SUSPENDED" = "1" ]; then
+  echo -e "  \033[33m◆ SYSTEMS GREEN — BUT TRADING IS SUSPENDED (E42)\033[0m"
+  echo -e "  \033[33m  Every 2-3 DTE structure the contest window allows tests\033[0m"
+  echo -e "  \033[33m  negative (-\$50,904 / 26wk). No orders will be placed.\033[0m"
+elif [ "$SUSPENDED" = "?" ]; then
+  echo -e "  \033[31m⛔ CANNOT READ STAND-DOWN STATE — treating as NOT CLEARED\033[0m"
+else
+  echo -e "  \033[32m✅ CLEARED — agent may trade at the open\033[0m"
+fi
 echo "══════════════════════════════════════════════════════════════════════════"
 exit $F

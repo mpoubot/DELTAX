@@ -5,6 +5,13 @@ from deltax.execute import (Leg, build_mleg_args, build_close_args,
                             orders_enabled, submit, ExecutionRefused,
                             COMPETITION_ACCOUNT)
 
+# E42: the stand-down blocks every submit() by design. This file tests the
+# order-construction mechanics beneath it, so it lifts the flag deliberately
+# and restores it below. test_gates.py owns proving the stand-down works.
+import deltax.gates as _g
+_E42_WAS = _g.TRADING_SUSPENDED
+_g.TRADING_SUSPENDED = False
+
 passed = failed = 0
 def check(n, c, d=""):
     global passed, failed
@@ -62,6 +69,15 @@ check("pin looks like an Alpaca paper account",
       COMPETITION_ACCOUNT)
 check("pin follows DELTAX_ACCOUNT when set",
       __import__("os").environ.get("DELTAX_ACCOUNT", COMPETITION_ACCOUNT) == COMPETITION_ACCOUNT)
+
+# ---- restore, and prove the stand-down still bites on this exact path -------
+_g.TRADING_SUSPENDED = _E42_WAS
+try:
+    submit(LEGS, 2, 1.55, dry_run=True)
+    check("E42 stand-down blocks this file's own submit path", False, "RETURNED")
+except ExecutionRefused as e:
+    check("E42 stand-down blocks this file's own submit path",
+          "SUSPENDED" in str(e), "refused")
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

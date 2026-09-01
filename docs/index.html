@@ -1,6 +1,22 @@
-<title>DELTAX — Autonomous Options Agent</title>
+wrote docs/index.html (33,662 bytes)
+Agent</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+.sd{border:1px solid #6B5A1E;background:linear-gradient(180deg,#161200,#0B0900);
+border-left:3px solid #E8B42B;padding:18px 20px;margin:0 0 18px}
+.sd-h{color:#F0C44C;font-weight:700;letter-spacing:.14em;font-size:12px;
+margin-bottom:10px}
+.sd-b{color:#AFC6C4;font-size:13px;line-height:1.65}
+.sd-b b{color:#EAFBFA}
+.sd-n{color:#FF6B6B!important;font-size:15px}
+.sd-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+gap:8px;margin:12px 0}
+.sd-g div{border:1px solid #2A2409;background:#0D0B02;padding:8px 10px}
+.sd-g span{display:block;color:#5B807D;font-size:10px;letter-spacing:.1em;
+text-transform:uppercase}
+.sd-g b{color:#FF8A8A;font-family:inherit;font-size:14px}
+.sd-r{margin-top:12px;padding-top:12px;border-top:1px solid #2A2409;
+color:#8FA9A7;font-size:12.5px;line-height:1.6}
 :root{--void:#000000;--panel:#050B0B;--line:#12302E;--cy:#0ABAB5;--bl:#3FE0DA;
 --txt:#AFC6C4;--dim2:#5B807D;--white:#EAFBFA}
 body{background:#000;color:var(--txt);
@@ -137,6 +153,30 @@ td.bar span{display:block;height:6px;background:linear-gradient(90deg,var(--bl),
   <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
   <span class="pill">ALPACA PAPER</span><span class="pill">366 TESTS</span><span class="pill">MIT</span>
 </div>
+<div class="sd">
+<div class="sd-h">◆ TRADING SUSPENDED &nbsp;—&nbsp; NO ORDERS WILL BE PLACED</div>
+<div class="sd-b">Backtesting the exact configuration scheduled for this week
+&mdash; entry Tuesday, expiry <b>4&nbsp;Sep</b>, 14 names, priced at
+<b>real market credit</b> &mdash; returned <b class="sd-n">&minus;$50,904
+(&minus;50.9%)</b> over 26 weeks at a 46% weekly win rate.
+<div class="sd-g">
+<div><span>2 names</span><b>&minus;8,977</b></div>
+<div><span>4 names</span><b>&minus;8,649</b></div>
+<div><span>6 names</span><b>&minus;18,347</b></div>
+<div><span>14 names</span><b>&minus;50,904</b></div>
+</div>
+It is not the universe size &mdash; <b>every</b> configuration tests negative.
+The cause is measured on live chains: a 4&nbsp;Sep option places its
+&delta;0.30 strike <b>0.64%</b> from spot and pays <b>$1.64</b>, against
+<b>0.90%</b> and <b>$2.37</b> for an 11-day one. Thirty percent closer to the
+money for thirty percent less premium &mdash; and SPY&rsquo;s ordinary daily
+range is 0.6&ndash;0.7%, so that buffer is about one session.
+<div class="sd-r">The contest deadline permits only the 4&nbsp;Sep expiry.
+That is the one structure the evidence rejects. Capital is held at
+<b>$100,000</b> rather than spent on a trade with measured negative
+expectancy. The agent continues to screen, gate and log every cycle; the
+refusal is enforced in code at the order boundary, not by convention.</div>
+</div></div>
 
 <div class="stats"><div class="stat "><div class="k">ACCOUNT</div><div class="v">PA397N6FXXIE</div><div class="n">Alpaca paper · competition</div></div><div class="stat big"><div class="k">EQUITY</div><div class="v">$100,000</div><div class="n">live read</div></div><div class="stat big pos"><div class="k">P&amp;L</div><div class="v">+0.00</div><div class="n">+0.00% of $100,000 start</div></div><div class="stat "><div class="k">CASH</div><div class="v">$100,000</div><div class="n">uncommitted</div></div><div class="stat "><div class="k">OPEN POSITIONS</div><div class="v">0</div><div class="n">flat</div></div><div class="stat "><div class="k">DECISIONS LOGGED</div><div class="v">4</div><div class="n">every evaluation</div></div><div class="stat "><div class="k">REFUSED</div><div class="v">4</div><div class="n">100% of candidates screened</div></div></div>
 
@@ -187,7 +227,7 @@ the stock stays in range.</div>
 <div class="lead">Probed live at every page generation. Per the corpus, news can
 veto a trade, never originate one — a stale feed is disarmed, not trusted.</div>
 <table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
-<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 5.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 11.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 4.7h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 3.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 3.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 1.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">50</td><td>newest 12.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13950.1h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
+<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 5.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 11.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 4.7h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 4.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 3.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 1.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">50</td><td>newest 12.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13950.1h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
 
 <h2>BOOK ALLOCATION</h2><div class="rule"></div>
 <table>
@@ -249,7 +289,7 @@ Nothing summarised, nothing hidden. Refreshes with the page.</div>
 </div>
 
 <div class="foot">
-GENERATED 2026-09-01 01:30 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
+GENERATED 2026-09-01 01:31 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
 &nbsp;·&nbsp; PAPER TRADING ONLY — NO REAL CAPITAL &nbsp;·&nbsp; ACCOUNT PA397N6FXXIE
 </div>
 </div>

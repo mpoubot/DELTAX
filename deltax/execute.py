@@ -116,6 +116,13 @@ def submit(legs: list, qty: int, limit_price: float, *, ledger=None,
     Returns a record dict either way. Refusals raise ExecutionRefused, which
     is recorded before it propagates.
     """
+    # E42: hard stand-down. Every 2-3 DTE structure the contest window permits
+    # tested negative over 26 weeks (-$50,904). This is the one boundary every
+    # order crosses, so the rule is enforced here rather than only in markdown.
+    from deltax.gates import gate_trading_enabled
+    _g = gate_trading_enabled()
+    if not _g.passed:
+        raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
     args = build_mleg_args(legs, qty, limit_price)
     record = {
         "action": "submit",

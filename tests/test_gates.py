@@ -23,6 +23,11 @@ passed = failed = 0
 
 def check(name, cond, detail=""):
     global passed, failed
+    # E42: swapped args made three tests vacuous - the condition slot held a
+    # non-empty string, so they passed unconditionally. Never again.
+    if not isinstance(name, str) or not isinstance(cond, (bool, type(None))):
+        raise TypeError(f"check(label:str, cond:bool, detail) - got "
+                        f"({type(name).__name__}, {type(cond).__name__})")
     if cond:
         passed += 1; print(f"  ✓ {name}")
     else:
@@ -178,5 +183,52 @@ d = evaluate(symbol="XLK", equity=EQUITY, structure="credit", width=3.0,
 check("broken quote fails first, before economic gates",
       d.decision == Decision.REFUSE and d.failed_gate == "quote_sanity", str(d.failed_gate))
 
+# ---- E42: the stand-down is enforced in code, not just documented ----------
+def test_e42_submit_refuses_while_suspended():
+    """Calls submit() with its REAL signature. An earlier version of this test
+    passed wrong kwargs, got TypeError, and counted that as a refusal - which
+    hid an AttributeError in the guard itself. No escape hatch here."""
+    import deltax.gates as g
+    from deltax.execute import submit, ExecutionRefused
+    assert g.TRADING_SUSPENDED, "E42 stand-down must be active"
+    legs = [{"symbol": "SPY260904P00760000", "side": "sell", "ratio": 1},
+            {"symbol": "SPY260904P00740000", "side": "buy",  "ratio": 1}]
+    try:
+        submit(legs=legs, qty=1, limit_price=1.50, dry_run=True)
+        check("E42 submit refused while suspended", False, "submit RETURNED")
+    except ExecutionRefused as e:
+        check("E42 submit refused while suspended", "SUSPENDED" in str(e), str(e)[:55])
+    except Exception as e:
+        check("E42 submit refused while suspended", False,
+              f"wrong exception {type(e).__name__}: {e}")
+
+
+def test_e42_guard_survives_dry_run_false():
+    """dry_run=False must refuse too - that is the path that sends real orders."""
+    from deltax.execute import submit, ExecutionRefused
+    legs = [{"symbol": "SPY260904P00760000", "side": "sell", "ratio": 1}]
+    try:
+        submit(legs=legs, qty=1, limit_price=1.50, dry_run=False)
+        check("E42 live path refused", False, "LIVE submit RETURNED")
+    except ExecutionRefused:
+        check("E42 live path refused", True, "refused")
+    except Exception as e:
+        check("E42 live path refused", False, f"{type(e).__name__}: {e}")
+
+
+def test_e42_screening_still_runs():
+    """The stand-down must not blind the agent - it still evaluates and logs."""
+    import deltax.gates as g
+    check("E42 gate exists", hasattr(g, "gate_trading_enabled"), "present")
+    body = open("deltax/gates.py").read().split("def evaluate(")[1].split("\ndef ")[0]
+    check("E42 evaluate() still gates normally",
+          "gate_trading_enabled()" not in body, "not short-circuited")
+
+
+test_e42_submit_refuses_while_suspended()
+test_e42_guard_survives_dry_run_false()
+test_e42_screening_still_runs()
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
+

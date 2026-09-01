@@ -195,6 +195,25 @@ def gate_portfolio_risk(new_max_loss: float, open_max_loss: float, equity: float
 CONTEST_CLOSE = date(2026, 9, 4)
 
 
+# E42: every structure the contest window permits tests negative over 26 weeks.
+# The agent screens, gates and logs as normal; this stops the final order.
+TRADING_SUSPENDED = True
+SUSPENSION_REASON = ("E42: every 2-3 DTE configuration tested negative "
+                     "(-$50,904 over 26 weeks). No profitable trade exists "
+                     "inside the contest window.")
+
+
+def gate_trading_enabled() -> GateResult:
+    """A deliberate, documented stand-down - not a fault.
+
+    Deliberately NOT part of evaluate(): the agent must keep screening, gating
+    and logging so the stand-down stays visible and reversible. Enforcement
+    lives at execute.submit(), the single boundary every order crosses.
+    """
+    return GateResult("suspended", not TRADING_SUSPENDED,
+                      SUSPENSION_REASON if TRADING_SUSPENDED else "trading enabled")
+
+
 def gate_contest_window(expiry: date) -> GateResult:
     """Refuse any expiry that finishes after judging.
 

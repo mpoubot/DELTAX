@@ -341,9 +341,53 @@ def build(account=None, positions=None, error=None) -> str:
     warn = (f'<div class="warn">LIVE ACCOUNT UNREADABLE — {error}. '
             f'Figures omitted rather than estimated.</div>') if error else ""
 
+    # E42 — the stand-down is the single most important thing on this page.
+    from deltax.gates import TRADING_SUSPENDED
+    standdown = ""
+    if TRADING_SUSPENDED:
+        standdown = """<div class="sd">
+<div class="sd-h">◆ TRADING SUSPENDED &nbsp;—&nbsp; NO ORDERS WILL BE PLACED</div>
+<div class="sd-b">Backtesting the exact configuration scheduled for this week
+&mdash; entry Tuesday, expiry <b>4&nbsp;Sep</b>, 14 names, priced at
+<b>real market credit</b> &mdash; returned <b class="sd-n">&minus;$50,904
+(&minus;50.9%)</b> over 26 weeks at a 46% weekly win rate.
+<div class="sd-g">
+<div><span>2 names</span><b>&minus;8,977</b></div>
+<div><span>4 names</span><b>&minus;8,649</b></div>
+<div><span>6 names</span><b>&minus;18,347</b></div>
+<div><span>14 names</span><b>&minus;50,904</b></div>
+</div>
+It is not the universe size &mdash; <b>every</b> configuration tests negative.
+The cause is measured on live chains: a 4&nbsp;Sep option places its
+&delta;0.30 strike <b>0.64%</b> from spot and pays <b>$1.64</b>, against
+<b>0.90%</b> and <b>$2.37</b> for an 11-day one. Thirty percent closer to the
+money for thirty percent less premium &mdash; and SPY&rsquo;s ordinary daily
+range is 0.6&ndash;0.7%, so that buffer is about one session.
+<div class="sd-r">The contest deadline permits only the 4&nbsp;Sep expiry.
+That is the one structure the evidence rejects. Capital is held at
+<b>$100,000</b> rather than spent on a trade with measured negative
+expectancy. The agent continues to screen, gate and log every cycle; the
+refusal is enforced in code at the order boundary, not by convention.</div>
+</div></div>"""
+
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.sd{{border:1px solid #6B5A1E;background:linear-gradient(180deg,#161200,#0B0900);
+border-left:3px solid #E8B42B;padding:18px 20px;margin:0 0 18px}}
+.sd-h{{color:#F0C44C;font-weight:700;letter-spacing:.14em;font-size:12px;
+margin-bottom:10px}}
+.sd-b{{color:#AFC6C4;font-size:13px;line-height:1.65}}
+.sd-b b{{color:#EAFBFA}}
+.sd-n{{color:#FF6B6B!important;font-size:15px}}
+.sd-g{{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+gap:8px;margin:12px 0}}
+.sd-g div{{border:1px solid #2A2409;background:#0D0B02;padding:8px 10px}}
+.sd-g span{{display:block;color:#5B807D;font-size:10px;letter-spacing:.1em;
+text-transform:uppercase}}
+.sd-g b{{color:#FF8A8A;font-family:inherit;font-size:14px}}
+.sd-r{{margin-top:12px;padding-top:12px;border-top:1px solid #2A2409;
+color:#8FA9A7;font-size:12.5px;line-height:1.6}}
 :root{{--void:#000000;--panel:#050B0B;--line:#12302E;--cy:#0ABAB5;--bl:#3FE0DA;
 --txt:#AFC6C4;--dim2:#5B807D;--white:#EAFBFA}}
 body{{background:#000;color:var(--txt);
@@ -480,6 +524,7 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
   <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
   <span class="pill">ALPACA PAPER</span><span class="pill">366 TESTS</span><span class="pill">MIT</span>
 </div>
+{standdown}
 {warn}
 <div class="stats">{stats}</div>
 

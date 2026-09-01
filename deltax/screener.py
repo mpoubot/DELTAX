@@ -94,6 +94,11 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # Restored 1 Sep. The UNH-only restriction was scoped to Monday's 14:30 window;
 # on a fresh account with three sessions left, a one-name universe whose Sep 4
 # chain does not qualify means the agent cannot trade at all.
+# SUSPENDED 1 Sep (E42). Every configuration the contest deadline permits tests
+# NEGATIVE over 26 weeks at real market credit - the 4 Sep expiry places strikes
+# 0.64% from spot for 30% less credit than an 11-day one, and SPY's ordinary
+# daily range is 0.6-0.7%. Restore only if a structure is found that is positive
+# at 2-3 DTE. The names below stay so the agent keeps screening and logging.
 INCOME_UNIVERSE = [
     # index and sector ETFs with wide strikes
     "SPY", "QQQ", "IWM", "DIA", "XLK", "XLV", "XLI", "SMH", "SOXX", "XOP",
