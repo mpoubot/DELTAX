@@ -6,14 +6,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from deltax.gates import (
     evaluate, size_from_risk, Decision,
-    PER_POSITION_RISK_PCT, PORTFOLIO_RISK_PCT, CREDIT_DELTA_MULTIPLE,
+    PER_POSITION_RISK_PCT, PORTFOLIO_RISK_PCT,
+    CREDIT_SURFACE, CREDIT_MARKET_FRACTION, market_credit_ratio,
     gate_expectancy, gate_dte, gate_liquidity, gate_reward_risk,
     gate_portfolio_risk, gate_defined_risk, gate_no_earnings_before_expiry,
 )
 
 EQUITY = 100_000.0
 TODAY = date(2026, 8, 31)
-GOOD_EXPIRY = date(2026, 9, 14)   # 14 DTE — inside the band
+# E37 caps every expiry at the contest close (4 Sep), and MIN_DTE is 4, so
+# 4 Sep is now the ONLY date satisfying both gates. The old 14-DTE fixture is
+# refused by contest_window before any other gate is reached.
+GOOD_EXPIRY = date(2026, 9, 4)    # 4 DTE — the only expiry inside both gates
 
 passed = failed = 0
 
@@ -65,7 +69,7 @@ check("within portfolio cap accepted", gate_portfolio_risk(1000, CAP - 2000, EQU
 check("breaching portfolio cap rejected", not gate_portfolio_risk(1000, CAP - 500, EQUITY).passed)
 
 print("\n── earnings veto ──")
-check("earnings before expiry vetoes", not gate_no_earnings_before_expiry(date(2026, 9, 5), GOOD_EXPIRY).passed)
+check("earnings before expiry vetoes", not gate_no_earnings_before_expiry(date(2026, 9, 2), GOOD_EXPIRY).passed)
 check("earnings after expiry allowed", gate_no_earnings_before_expiry(date(2026, 10, 1), GOOD_EXPIRY).passed)
 check("no earnings scheduled allowed", gate_no_earnings_before_expiry(None, GOOD_EXPIRY).passed)
 
@@ -114,20 +118,37 @@ d = evaluate(
 check("OTM credit spread now TRADES", d.decision == Decision.TRADE, d.failed_gate or "")
 check("credit_fraction gate ran", any(g.gate == "credit_fraction" for g in d.gates))
 check("reward_risk gate NOT applied to credit", not any(g.gate == "reward_risk" for g in d.gates))
-# thin credit rejected: $5 wide, $0.90 credit = 18% of width
+# Thin credit rejected. It must clear MIN_CREDIT ($0.75) so that
+# credit_fraction is the gate that actually fires: $10 wide at δ0.30 has a
+# measured floor of 0.85 x 0.150 x 10 = $1.275, so $1.00 passes the flat floor
+# and fails the market-relative one.
 d = evaluate(
-    symbol="SPY", equity=EQUITY, structure="credit", width=5.0,
-    max_loss_per_contract=410.0, max_profit_per_contract=90.0,
-    credit=0.90, expiry=GOOD_EXPIRY, today=TODAY, open_interest=12_000,
+    symbol="SPY", equity=EQUITY, structure="credit", width=10.0,
+    max_loss_per_contract=900.0, max_profit_per_contract=100.0,
+    credit=1.00, expiry=GOOD_EXPIRY, today=TODAY, open_interest=12_000,
     short_delta=0.30,
 )
-check("credit below 0.9 x delta refused", d.decision == Decision.REFUSE and d.failed_gate == "credit_fraction")
-check("delta-relative floor: 0.20 delta needs 23% of width",
-      gate_credit_fraction(1.20, 5.0, 0.20).passed and not gate_credit_fraction(1.10, 5.0, 0.20).passed)
-check("delta-relative floor: 0.35 delta needs 40.25% of width",
-      gate_credit_fraction(2.05, 5.0, 0.35).passed and not gate_credit_fraction(1.95, 5.0, 0.35).passed)
+check("credit below the measured market floor refused",
+      d.decision == Decision.REFUSE and d.failed_gate == "credit_fraction",
+      f"{d.decision}/{d.failed_gate}")
+# Floor = CREDIT_MARKET_FRACTION x the MEASURED market rate (E34), not a
+# multiple of delta. At δ0.20 on a 5-wide the market pays 0.112 of width, so the
+# floor is 0.85 x 0.112 x 5 = $0.476 — an ordinary fill clears it, a poor one does not.
+_f20 = CREDIT_MARKET_FRACTION * market_credit_ratio(0.20, 5.0) * 5.0
+check("floor tracks the measured market rate at delta 0.20",
+      gate_credit_fraction(_f20 * 1.15, 5.0, 0.20).passed
+      and not gate_credit_fraction(_f20 * 0.80, 5.0, 0.20).passed)
+_f35 = CREDIT_MARKET_FRACTION * market_credit_ratio(0.35, 5.0) * 5.0
+check("and at delta 0.35, where the market pays more",
+      gate_credit_fraction(_f35 * 1.15, 5.0, 0.35).passed
+      and not gate_credit_fraction(_f35 * 0.80, 5.0, 0.35).passed)
+check("a richer delta demands a higher floor", _f35 > _f20)
 check("floor is backtested breakeven, not a guess",
-      abs(CREDIT_DELTA_MULTIPLE - 1.15) < 1e-9)
+      # E34 replaced the 1.15 x delta floor with a MEASURED surface: the old
+      # constant demanded a credit the market never pays. The floor is now a
+      # discount on what live chains actually quote.
+      abs(market_credit_ratio(0.20, 5.0) - CREDIT_SURFACE[(0.20, 5.0)]) < 1e-9
+      and 0.5 < CREDIT_MARKET_FRACTION < 1.0)
 check("sign of delta is irrelevant (puts are negative)",
       gate_credit_fraction(1.20, 5.0, -0.20).passed)
 check("no delta -> flat fallback floor 0.20",

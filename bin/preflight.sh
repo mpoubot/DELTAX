@@ -33,7 +33,11 @@ A=$(alpaca account get --quiet 2>/dev/null)
 echo "$A" | grep -q "PA3ID1B9L6BP" && ok "competition account" "PA3ID1B9L6BP" || no "competition account" "WRONG ACCOUNT"
 echo "$A" | grep -q '"status": *"ACTIVE"' && ok "account status" "ACTIVE" || no "account status" "not active"
 EQ=$(echo "$A"|python3 -c "import sys,json;print(json.load(sys.stdin).get('equity'))" 2>/dev/null)
-[ "$EQ" = "100000" ] && ok "starting equity" "\$100,000 untouched" || warn "starting equity" "$EQ"
+if [ "$EQ" = "100000" ]; then
+  ok "equity" "\$100,000 — untouched"
+else
+  warn "equity" "$(python3 -c "print(f'\${float('$EQ'):,.2f}  ({float('$EQ')-100000:+,.2f} vs start)')" 2>/dev/null || echo "$EQ")"
+fi
 echo "$A" | grep -q '"options_trading_level": *3' && ok "options level" "3 (spreads permitted)" || no "options level" "insufficient for spreads"
 
 echo; echo "── 3. autonomous execution ──"
@@ -59,12 +63,25 @@ sys.exit(0 if TAKE_PROFIT_FRACTION==0.50 and TIME_STOP_DTE==2 else 1)" 2>/dev/nu
 grep -q "place_exit" deltax/run.py && ok "exits placed at fill" "E5 wired into run.py" || no "exits NOT wired" "agent would never close"
 
 echo; echo "── 4. agent ──"
-TP=0; TF=0
+# A file that produces no summary line used to make this arithmetic throw and
+# silently truncate the total - it reported 111 of 380 while still printing a
+# tick. A verification script that under-counts is worse than none, so a file
+# that yields no result is now a FAILURE, not a zero.
+TP=0; TF=0; TSILENT=0
 for t in tests/*.py; do
-  R=$(python3 "$t" 2>&1|grep -oE "[0-9]+ passed, [0-9]+ failed")
-  TP=$((TP+$(echo "$R"|grep -oE "^[0-9]+"))); TF=$((TF+$(echo "$R"|grep -oE "[0-9]+ failed"|grep -oE "^[0-9]+")))
+  R=$(python3 "$t" 2>&1 | grep -oE "[0-9]+ passed, [0-9]+ failed" | tail -1)
+  P=$(echo "$R" | grep -oE "^[0-9]+")
+  F=$(echo "$R" | grep -oE "[0-9]+ failed" | grep -oE "^[0-9]+")
+  if [ -z "$P" ]; then TSILENT=$((TSILENT+1)); continue; fi
+  TP=$((TP + P)); TF=$((TF + ${F:-0}))
 done
-[ "$TF" = "0" ] && ok "test suite" "$TP passed, 0 failed" || no "test suite" "$TF FAILING"
+if [ "$TSILENT" != "0" ]; then
+  no "test suite" "$TSILENT file(s) produced no result - cannot verify"
+elif [ "$TF" != "0" ]; then
+  no "test suite" "$TF FAILING"
+else
+  ok "test suite" "$TP passed, 0 failed across $(ls tests/*.py | wc -l | tr -d ' ') files"
+fi
 python3 -c "import deltax.run,deltax.gates,deltax.screener,deltax.execute,deltax.permission,deltax.ledger" 2>/dev/null && ok "all modules import" "clean" || no "module import" "BROKEN"
 rm -rf logs/preflight && python3 -m deltax.run >/dev/null 2>&1 && ok "dry run completes" "exit 0" || warn "dry run" "non-zero (market closed is normal)"
 python3 -m deltax.ledger logs 2>/dev/null | grep -q "intact" && ok "ledger chain" "intact" || warn "ledger chain" "no entries yet"

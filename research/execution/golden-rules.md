@@ -1148,3 +1148,39 @@ names in a drawdown is proportionally more loss, not less.
 
 **Consequence.** Exits-first is adopted; it is strictly better under either
 universe. The ten-name universe is **not** adopted on this evidence.
+
+## E40 — A verification script that under-counts is worse than none
+
+> Preflight reported **"✅ test suite — 111 passed, 0 failed"** and cleared the
+> agent to trade. The real number was 380. `test_gates.py` — **48 tests, the
+> largest file and the one covering every risk gate** — had been crashing on
+> import for hours and preflight showed green throughout.
+
+**The mechanism.** The counter summed `$((TP + $(...)))` per file. A file that
+produced no summary line substituted an empty string, the arithmetic threw, and
+the loop carried on with a truncated total. Bash printed one line of stderr that
+scrolled past between two ticks.
+
+**The import broke at E34.** Replacing `CREDIT_DELTA_MULTIPLE` with a measured
+`CREDIT_SURFACE` left `test_gates.py` importing a name that no longer existed.
+Every subsequent "380 tests green" in this session was **332 tests green and one
+file silently absent** — including the runs that cleared live trading.
+
+**The fix is the principle.** A file producing no result is now a **FAILURE**,
+not a zero:
+
+```
+❌ test suite   1 file(s) produced no result - cannot verify
+```
+
+Absence of evidence must read as absence of evidence. This is **E28** applied to
+our own tooling — the same "nothing found" versus "could not look" confusion,
+one level up, in the script whose entire job is to catch it.
+
+**What it had been hiding.** Once the file ran again: four fixtures asserting
+against a credit floor E34 removed, one expiry E37 made impossible, and an
+earnings date that stopped being before the expiry when the expiry moved. All
+correct failures. All invisible for hours.
+
+**Rule.** Any script that aggregates a result must fail loudly on a missing
+input. A green tick over a partial count is a lie told confidently.
