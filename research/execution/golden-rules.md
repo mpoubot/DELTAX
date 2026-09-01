@@ -1381,3 +1381,24 @@ must be static, it needs a test that fails when the underlying number moves.
 **Rule.** Never publish an allocation for an engine that does not exist. "$10,000
 crypto" with no crypto engine is not a plan on a dashboard — it is a false
 statement about the system's behaviour.
+
+**Correction, same night.** My first fix labelled both sleeves "not built", and
+Pautax rejected it: *"What do you mean not built? Like, we built this stuff."*
+Correct. What exists:
+
+- **Crypto** — the venue was screened **exhaustively**, not skipped: 73 listed
+  pairs → 33 tradeable → 22 with usable history. **0 of 22** significant at 95%,
+  0 past Bonferroni, median win rate 43.8%. The in-band rate is **80–85%**,
+  better than SPY's 75%, so the condor premise holds — there is simply no listed
+  crypto option on this venue to sell it with. That is a **finding**, and a
+  strong one.
+- **Stocks** — *Alyrise*, a 14-page engine specification by **Ilze Rosicka
+  (Elsa)**, plus AURA Equity Lab (Matin) as a second track, both with a
+  pre-committed validation bar. Held at $0 because it is stocks-only by design
+  and the contest requires options in every strategy.
+
+**Rule.** "Not built" and "deliberately excluded on evidence" are opposite
+statements about a team's work. Writing the first when the second is true
+discards the reasoning that produced the decision — and here it did that on a
+public page, over a named teammate's contribution. State *why* a sleeve is
+unfunded, and name the evidence.

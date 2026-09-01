@@ -584,17 +584,28 @@ veto a trade, never originate one — a stale feed is disarmed, not trusted.</di
  <td>Vertical credit spreads · <b>4 names</b> (SPY QQQ IWM SMH)</td>
  <td>rebuilt after E44 — expectancy ~flat, positive at observed IV/RV</td></tr>
 <tr><td class="cy">STOCKS</td><td class="num">$0</td>
- <td>Excluded — no proven edge at a 3-day hold</td>
- <td class="rd">not built</td></tr>
+ <td><b>Alyrise</b> &mdash; authoritative stock engine, spec&#39;d by Ilze Rosicka
+ (Elsa), 14pp. Second track: AURA Equity Lab (Matin).</td>
+ <td>specified, not funded this week &mdash; stocks-only by design, and the
+ contest requires options in <i>every</i> strategy</td></tr>
 <tr><td class="cy">CRYPTO</td><td class="num">$0</td>
- <td>Screened 22 pairs, 0 significant</td>
- <td class="rd">engine not built</td></tr>
+ <td>Venue screened <b>exhaustively</b>: 73 pairs listed &rarr; 33 tradeable
+ &rarr; 22 with usable history</td>
+ <td><b>0 of 22</b> significant at 95%, 0 past Bonferroni, median win rate
+ <span class="rd">43.8%</span> &mdash; and Alpaca lists no crypto options</td></tr>
 </table>
-<div class="lead" style="margin-top:11px">An earlier version of this table showed
-$60,000 in stocks and $10,000 in crypto against engines that were never written,
-and described the options book as &ldquo;17 names, validated walk-forward&rdquo;.
-Neither was true. Capital is <span class="cy">100% cash</span> outside the
-options sleeve.</div>
+<div class="lead" style="margin-top:11px">Both sleeves read $0 by
+<span class="cy">decision</span>, not by omission. Crypto&#39;s in-band rate is
+<b>80&ndash;85%</b> across every pair &mdash; better than SPY&#39;s 75% &mdash; so the
+condor premise holds there; there is simply no listed instrument on this venue to
+sell that band with. The edge is visible and unreachable. Alyrise is a complete
+engine specification awaiting its pre-committed validation bar (OOS PF &gt; 1.10,
+&gt;50% of folds positive); it is stocks-only and cannot carry an options
+submission alone. An earlier version of this table showed
+<span class="rd">$60,000</span> in stocks and <span class="rd">$10,000</span> in
+crypto as if both were running, and called the options book &ldquo;17 names,
+validated walk-forward&rdquo;. Capital this week is
+<span class="cy">100% cash outside the options sleeve</span>.</div>
 
 <h2>BACKTEST — REBUILT 1 SEP</h2><div class="rule"></div>
 <div class="lead" style="margin-bottom:11px">The three-week table that stood here
