@@ -29,8 +29,20 @@ else
 fi
 
 echo; echo "── 2. account ──"
+PYBIN=/opt/homebrew/bin/python3
 A=$(alpaca account get --quiet 2>/dev/null)
-echo "$A" | grep -q "PA3ID1B9L6BP" && ok "competition account" "PA3ID1B9L6BP" || no "competition account" "WRONG ACCOUNT"
+# The check that matters is not "is it this literal account" but "do the keys
+# open the account execution is pinned to". Hardcoding the ID meant switching
+# accounts blocked preflight on a label rather than a real fault (E40).
+PINNED="${DELTAX_ACCOUNT:-PA3ID1B9L6BP}"
+LIVE=$(echo "$A" | "$PYBIN" -c "import sys,json;print(json.load(sys.stdin).get('account_number',''))" 2>/dev/null)
+if [ -n "$LIVE" ] && [ "$LIVE" = "$PINNED" ]; then
+  ok "account matches execution pin" "$LIVE"
+elif [ -n "$LIVE" ]; then
+  no "account mismatch" "keys open $LIVE, execution pinned to $PINNED - run bin/switch-account.sh"
+else
+  no "account unreachable" "no account number returned"
+fi
 echo "$A" | grep -q '"status": *"ACTIVE"' && ok "account status" "ACTIVE" || no "account status" "not active"
 EQ=$(echo "$A"|python3 -c "import sys,json;print(json.load(sys.stdin).get('equity'))" 2>/dev/null)
 if [ "$EQ" = "100000" ]; then

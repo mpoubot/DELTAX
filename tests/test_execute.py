@@ -53,7 +53,15 @@ try:
     check("live submit refused without env switch", False)
 except ExecutionRefused as e:
     check("live submit refused without env switch", "DELTAX_ORDERS_ALLOWED" in str(e))
-check("competition account pinned", COMPETITION_ACCOUNT == "PA3ID1B9L6BP")
+# E40: the pin follows DELTAX_ACCOUNT so switching the paper account does not
+# halt every order. What must hold is that a pin EXISTS and is well-formed —
+# not that it equals one particular account we may no longer be trading.
+check("an account pin exists", bool(COMPETITION_ACCOUNT))
+check("pin looks like an Alpaca paper account",
+      COMPETITION_ACCOUNT.startswith("PA") and len(COMPETITION_ACCOUNT) >= 10,
+      COMPETITION_ACCOUNT)
+check("pin follows DELTAX_ACCOUNT when set",
+      __import__("os").environ.get("DELTAX_ACCOUNT", COMPETITION_ACCOUNT) == COMPETITION_ACCOUNT)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

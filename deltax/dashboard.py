@@ -72,7 +72,9 @@ def render(positions, *, equity, start_equity, day_pnl, permission,
            risk_used, risk_cap, banner=None) -> str:
     L=[]; W=78
     L.append(f"{BOLD}╔{'═'*W}╗{RESET}")
-    hdr=f" DELTAX  ·  {datetime.now():%a %d %b %H:%M}  ·  account PA3ID1B9L6BP"
+    import os as _os
+    _acct = _os.environ.get("DELTAX_ACCOUNT", "PA3ID1B9L6BP")
+    hdr=f" DELTAX  ·  {datetime.now():%a %d %b %H:%M}  ·  account {_acct}"
     L.append(f"{BOLD}║{hdr:<{W}}║{RESET}")
     L.append(f"{BOLD}╚{'═'*W}╝{RESET}")
     if banner: L.append(f"{YEL}{banner}{RESET}")
