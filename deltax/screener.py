@@ -65,7 +65,12 @@ DEFAULT_WIDTH = {
     # single names
     "AAPL": 10.0, "MSFT": 20.0, "META": 20.0, "AMZN": 10.0, "GOOGL": 10.0,
     "MA": 20.0, "V": 10.0, "JPM": 10.0, "UNH": 10.0, "HD": 10.0, "CRM": 10.0,
-}
+# E51: XLF/XLE/KRE were added to the universe in E50 without widths and fell
+# through to the 10.0 default. On a $57 ETF a 10-wide spans a 17% move: it
+# quoted $0.17 against a $1.27 requirement and could never pass. Width must
+# scale with price, not be a constant - these sit at ~2.5-3% of spot, matching
+# what SPY/QQQ/IWM already use.
+                 "XLF": 2.0, "XLE": 2.0, "KRE": 2.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
