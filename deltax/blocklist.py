@@ -110,3 +110,46 @@ def check(symbol: str, expiry: date, data: Optional[dict] = None) -> tuple:
     if symbol in (data.get("clear") or []):
         return True, "earnings window clear of expiry"
     return False, f"{symbol} absent from blocklist - never checked, blocked"
+
+
+def main(argv=None) -> int:
+    """Rebuild the blocklist for the trading universe. E49.
+
+    Nothing in the pipeline used to do this. `premarket.sh` ran a stage called
+    "earnings", but deltax/earnings.py has no __main__ - it imported, exited 0,
+    and wrote nothing, so the stage reported success over work that never
+    happened and the file aged out at 20h with no one told.
+    """
+    import sys
+    from datetime import timedelta
+    from deltax.screener import INCOME_UNIVERSE, DEFAULT_WIDTH
+    from deltax.gates import CONTEST_CLOSE
+
+    argv = sys.argv[1:] if argv is None else argv
+    expiry = CONTEST_CLOSE
+    for a in argv:
+        if a.startswith("--expiry="):
+            expiry = date.fromisoformat(a.split("=", 1)[1])
+    # Cover the traded names plus every name the screener could reach, so the
+    # file stays valid if the universe is widened mid-week.
+    symbols = sorted(set(INCOME_UNIVERSE) | set(DEFAULT_WIDTH))
+    print(f"blocklist: building for {len(symbols)} symbols, expiry {expiry}")
+    data = build(symbols, expiry)
+    path = write(data)
+    age = age_hours(data)
+    print(f"  wrote {path}")
+    print(f"  checked {data['n_checked']}  blocked {len(data['blocked'])}  "
+          f"clear {len(data['clear'])}  errors {len(data['errors'])}")
+    if data["blocked"]:
+        for s, why in sorted(data["blocked"].items())[:12]:
+            print(f"    BLOCK {s:<6} {why[:60]}")
+    print(f"  age now {age:.2f}h" if age is not None else "  age unknown")
+    # Fail loudly if the rebuild did not actually produce a usable file.
+    if age is None or age > 1.0:
+        print("  FATAL: rebuild did not refresh the file", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

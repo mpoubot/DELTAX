@@ -24,11 +24,16 @@ from deltax.feeds import AlpacaFeed
 from deltax.ledger import Ledger
 from deltax.screener import (
     directional_bias,INCOME_UNIVERSE, DEFAULT_WIDTH, TARGET_DELTA_BY_WEAK,
+                             rank_by_vol_premium, vol_premium,
                              assess_regime, select_vertical, choose_expiry,
                              BENCHMARKS)
 from deltax.gates import evaluate, MIN_DTE, MAX_DTE
 
-MAX_CONCURRENT = 5          # E12: satellite budget redeployed to income
+# E50: four concurrent positions, chosen from eight ranked candidates. E44
+# measured that a capped-payoff short-premium book gets WORSE with more names -
+# each one adds breach risk without adding upside - so the cap holds the tail
+# while the ranking improves what fills it.
+MAX_CONCURRENT = 4
 
 
 def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
@@ -132,7 +137,20 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     exits_placed = []
     news_checked = {}      # symbol -> verdict, one fetch per name per cycle
 
-    for symbol in INCOME_UNIVERSE:
+    # E50: richest variance premium first. run.py used to walk the list in the
+    # order it was typed and stop at the cap, so capital went to whichever name
+    # came first rather than whichever paid most. Advisory only - every gate
+    # still runs on every candidate, and an unmeasurable name keeps its place.
+    from deltax.feeds import latest_price as _px
+    from deltax.gates import CONTEST_CLOSE as _RANK_EXPIRY
+    try:
+        _spots = {s: _px(feed.snapshots([s]).get(s) or {}) for s in INCOME_UNIVERSE}
+        _ordered = rank_by_vol_premium(feed, INCOME_UNIVERSE,
+                                       str(_RANK_EXPIRY), _spots)
+    except Exception:
+        _ordered = list(INCOME_UNIVERSE)
+
+    for symbol in _ordered:
         if len(traded) >= MAX_CONCURRENT:
             break
         spot = (feed.snapshots([symbol]).get(symbol) or {})

@@ -95,6 +95,13 @@ class AlpacaFeed:
         d = self._run(args)
         return d.get("snapshots", d)
 
+    def daily_bars(self, symbol: str, start: str, end: str, limit: int = 60) -> list:
+        """Daily bars. E50: needed for realized vol, which nothing fetched before."""
+        payload = self._run(["data", "bars", "--symbol", symbol,
+                             "--timeframe", "1Day", "--start", start, "--end", end,
+                             "--limit", str(limit), "--feed", "iex"])
+        return (payload or {}).get("bars") or []
+
     def option_contracts(self, underlying: str, **kw) -> list:
         """Contract reference data — carries open_interest, which the chain does not."""
         args = ["option", "contracts", "--underlying-symbols", underlying]

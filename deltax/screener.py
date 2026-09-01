@@ -94,13 +94,21 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # Restored 1 Sep. The UNH-only restriction was scoped to Monday's 14:30 window;
 # on a fresh account with three sessions left, a one-name universe whose Sep 4
 # chain does not qualify means the agent cannot trade at all.
+# E50: eight ETF CANDIDATES, at most MAX_CONCURRENT traded, ordered by live
+# IV/RV. Widening the candidate list does not widen the tail: the concurrency
+# cap fixes how many positions exist, and ranking decides which. All eight are
+# ETFs, so the earnings gate is satisfied without the SEC lookup that has never
+# worked (E49). Measured this morning: KRE 1.82, XLF 1.69, XLE 1.68, XOP 1.62
+# against SPY 1.08, IWM 1.15, SMH 0.70, QQQ 0.66 - the old book averaged 0.94,
+# i.e. selling premium BELOW realised risk.
+#
 # E44: four names, not fourteen. The payoff is CAPPED at the take-profit, so
 # each extra name adds breach risk without adding upside - diversification is
 # strictly negative for a capped-payoff short-premium book. Measured: 14 names
 # -11.7%, 6 names -1.4%, this basket +3.1%. Chosen from six candidates and
 # positive under BOTH the pessimistic (IV/RV 1.15) and observed (1.45) vol
 # assumptions, which is the property that matters - the margin itself is noise.
-INCOME_UNIVERSE = ["SPY", "QQQ", "IWM", "SMH"]
+INCOME_UNIVERSE = ["SPY", "QQQ", "IWM", "SMH", "XLF", "XLE", "XOP", "KRE"]
 
 
 @dataclass
@@ -408,3 +416,65 @@ def screen_income_book(feed, ledger, *, equity: float, today: date,
         results.append((cand, decision))
 
     return {"regime": regime, "results": results, "committed_max_loss": committed}
+
+
+def realized_vol_20(feed, symbol: str, today: Optional[date] = None) -> Optional[float]:
+    """Annualised 20-session realized vol from daily closes. None if unusable."""
+    from math import log, sqrt
+    from statistics import stdev
+    from datetime import timedelta
+    today = today or date.today()
+    try:
+        bars = feed.daily_bars(symbol, str(today - timedelta(days=75)), str(today), 80)
+    except Exception:
+        return None
+    closes = [b.get("c") for b in bars if b.get("c")]
+    if len(closes) < 22:
+        return None
+    rets = [log(closes[i] / closes[i - 1]) for i in range(len(closes) - 20, len(closes))]
+    try:
+        return stdev(rets) * sqrt(252)
+    except Exception:
+        return None
+
+
+def vol_premium(feed, symbol: str, expiry: str, spot: float) -> Optional[float]:
+    """Live IV/RV for the d0.30 put. None when it cannot be measured.
+
+    E50: this is the only input the rebuilt backtest showed actually moves the
+    result (-4.0% at IV/RV 1.00 vs +2.1% at 1.45). Selling a name below 1.0
+    means collecting less premium than the realised risk being taken on.
+    """
+    try:
+        rv = realized_vol_20(feed, symbol)
+        if not rv or rv <= 0:
+            return None
+        chain = feed.option_chain(symbol, option_type="put",
+                                  expiry_gte=expiry, expiry_lte=expiry,
+                                  strike_gte=round(spot * 0.85, 2),
+                                  strike_lte=round(spot * 1.02, 2))
+        cand = [v for v in chain.values() if (v.get("greeks") or {}).get("delta")]
+        if not cand:
+            return None
+        node = min(cand, key=lambda v: abs(abs(v["greeks"]["delta"]) - 0.30))
+        iv = node.get("impliedVolatility") or 0
+        return (iv / rv) if iv > 0 else None
+    except Exception:
+        return None                      # never let a ranking failure stop a cycle
+
+
+def rank_by_vol_premium(feed, symbols: list, expiry: str, spots: dict) -> list:
+    """Richest premium first. Unmeasurable names keep their place at the back.
+
+    E50: run.py used to walk INCOME_UNIVERSE in list order and stop at
+    MAX_CONCURRENT, so capital went to whichever name was typed first rather
+    than to whichever name paid most. Ordering is advisory - every gate still
+    runs on every candidate; this only decides who gets looked at first.
+    """
+    scored, unscored = [], []
+    for s in symbols:
+        px = spots.get(s)
+        r = vol_premium(feed, s, expiry, px) if px else None
+        (scored if r is not None else unscored).append((s, r))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [s for s, _ in scored] + [s for s, _ in unscored]

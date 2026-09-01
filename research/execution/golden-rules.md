@@ -1425,3 +1425,55 @@ inputs — here, `INCOME_UNIVERSE` — never from a parallel constant list.
 
 **Rule.** Dead code that computes a trading decision is not inert; it is a wrong
 answer waiting for someone to call it.
+
+## E49 — The pre-market "earnings" stage did nothing, successfully
+
+`premarket.sh` runs four stages and logs `exit=0` for each. One of them is
+`python3 -m deltax.earnings`. **`deltax/earnings.py` has no `__main__` block.**
+It imported, exited 0, and wrote nothing — every fifteen minutes, all morning,
+for the whole project.
+
+Nothing else rebuilt the blocklist either: `blocklist.py` owns `build()` and
+`write()` and had no entrypoint. The file on disk was written **by hand on
+31 Aug** and quietly aged past its 20-hour limit, at which point every
+single-stock name failed closed.
+
+Worse, `DELTAX_SEC_UA` was **never set anywhere** — documented as required in
+`DATA-FEEDS.md`, absent from every environment. So the SEC earnings gate has
+never once completed a lookup. It has always failed closed. That is the correct
+direction to fail, and it means the single-stock capability has never existed.
+
+**Rule.** An exit code describes whether a process ran, not whether it did
+anything. A scheduled stage must assert its own *output* — freshness, row
+count, a written file — and fail loudly when it produced none. `deltax.blocklist`
+now has a `main()` that returns non-zero if the file it just wrote is not fresh.
+
+**Rule.** A required environment variable that nothing checks at startup is a
+feature that does not exist. Preflight, not documentation, is where that belongs.
+
+## E50 — Capital went to whichever name was typed first
+
+`run.py` walked `INCOME_UNIVERSE` in list order and stopped at
+`MAX_CONCURRENT`. Selection was therefore **alphabetical accident**, not
+economics.
+
+Measured this morning, the book chosen by 26-week backtest averaged **IV/RV
+0.94** — QQQ 0.66, SMH 0.70. Below 1.0 means collecting *less premium than the
+realised risk being taken on*. The rebuilt backtest is −4.0% at IV/RV 1.00 and
++2.1% at 1.45, so the book was sitting under its own break-even input while
+every gate showed green.
+
+Available at the same moment: KRE 1.82, XLF 1.69, XLE 1.68, XOP 1.62.
+
+**Change.** Eight ETF candidates, ranked by live IV/RV, `MAX_CONCURRENT` cut
+5 → 4. Widening the candidate list does not widen the tail — the cap fixes how
+many positions exist; the ranking only decides which. ETFs throughout, so the
+earnings gate is satisfied without the SEC lookup that has never worked (E49).
+
+**Honesty about its status.** This is a *mechanism* argument, not a backtested
+one: historical IV is not available through the bars API, so IV/RV ranking
+cannot be tested over the sample. What is measured is that the result rises
+monotonically with IV/RV, and that today's book sat below 1.0. Basket ranking by
+backtest was separately shown to be **noise** — the same baskets reverse sign
+between Monday and Tuesday entry — which is precisely why selection should rest
+on a live price, not on 26 weeks of curve-fitting.

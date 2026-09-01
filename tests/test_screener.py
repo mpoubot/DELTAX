@@ -198,5 +198,43 @@ check("noise ABOVE vwap is equally ignored", _all(1000.04, 1000.0).weak_count ==
 check("missing data still fails closed at 3/3",
       assess_regime({b: {} for b in BENCHMARKS}).weak_count == 3)
 
+
+print("\n── E50: vol-premium ranking ──")
+from deltax.screener import rank_by_vol_premium, vol_premium, realized_vol_20
+
+class _FakeFeed:
+    """IV/RV is controllable per symbol; one symbol is deliberately broken."""
+    def __init__(self, table): self.table = table
+    def daily_bars(self, sym, start, end, limit=60):
+        if sym == "BOOM": raise RuntimeError("feed down")
+        import math
+        step = self.table.get(sym, {}).get("rv", 0.20) / (252 ** 0.5)
+        return [{"c": 100.0 * math.exp(step * (1 if i % 2 else -1) * i * 0.01)}
+                for i in range(30)]
+    def option_chain(self, sym, **kw):
+        if sym == "BOOM": raise RuntimeError("feed down")
+        iv = self.table.get(sym, {}).get("iv")
+        if iv is None: return {}
+        return {"X": {"greeks": {"delta": -0.30}, "impliedVolatility": iv}}
+
+tbl = {"RICH": {"iv": 0.60}, "MID": {"iv": 0.30}, "POOR": {"iv": 0.10}, "NOCHAIN": {}}
+ff = _FakeFeed(tbl)
+spots = {s: 100.0 for s in ("RICH", "MID", "POOR", "NOCHAIN", "BOOM")}
+order = rank_by_vol_premium(ff, ["POOR", "NOCHAIN", "RICH", "BOOM", "MID"],
+                            "2026-09-04", spots)
+check("richest premium is ranked first", order[0] == "RICH", str(order))
+check("poorest measurable ranks below richer ones",
+      order.index("POOR") > order.index("MID"), str(order))
+check("unmeasurable names fall to the back",
+      set(order[-2:]) == {"NOCHAIN", "BOOM"}, str(order))
+check("ranking never drops a candidate", len(order) == 5 and set(order) == {
+      "POOR", "NOCHAIN", "RICH", "BOOM", "MID"}, str(order))
+check("a broken feed yields None, not an exception",
+      vol_premium(ff, "BOOM", "2026-09-04", 100.0) is None)
+check("realized vol survives a broken feed",
+      realized_vol_20(ff, "BOOM") is None)
+check("ranking with no spots keeps every name",
+      len(rank_by_vol_premium(ff, ["RICH", "MID"], "2026-09-04", {})) == 2)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
