@@ -581,45 +581,64 @@ veto a trade, never originate one — a stale feed is disarmed, not trusted.</di
 <table>
 <tr><th>SLEEVE</th><th style="text-align:right">CAPITAL</th><th>STRUCTURE</th><th>EVIDENCE</th></tr>
 <tr><td class="cy">OPTIONS</td><td class="num">$30,000 risk</td>
- <td>Iron condors · 17 names</td><td class="gd">validated, walk-forward</td></tr>
-<tr><td class="cy">STOCKS</td><td class="num">$60,000</td>
- <td>Covered calls</td><td>compliant; edge unproven at 4-day hold</td></tr>
-<tr><td class="cy">CRYPTO</td><td class="num">$10,000</td>
- <td>Spot — no crypto options on venue</td>
- <td class="rd">0 of 22 pairs significant</td></tr>
+ <td>Vertical credit spreads · <b>4 names</b> (SPY QQQ IWM SMH)</td>
+ <td>rebuilt after E44 — expectancy ~flat, positive at observed IV/RV</td></tr>
+<tr><td class="cy">STOCKS</td><td class="num">$0</td>
+ <td>Excluded — no proven edge at a 3-day hold</td>
+ <td class="rd">not built</td></tr>
+<tr><td class="cy">CRYPTO</td><td class="num">$0</td>
+ <td>Screened 22 pairs, 0 significant</td>
+ <td class="rd">engine not built</td></tr>
 </table>
+<div class="lead" style="margin-top:11px">An earlier version of this table showed
+$60,000 in stocks and $10,000 in crypto against engines that were never written,
+and described the options book as &ldquo;17 names, validated walk-forward&rdquo;.
+Neither was true. Capital is <span class="cy">100% cash</span> outside the
+options sleeve.</div>
 
-<h2>BACKTEST — LAST THREE WEEKS</h2><div class="rule"></div>
+<h2>BACKTEST — REBUILT 1 SEP</h2><div class="rule"></div>
+<div class="lead" style="margin-bottom:11px">The three-week table that stood here
+(<span class="gd">+8,394, +8.39%</span>) was computed at credits the market never
+pays, by a backtest since found to carry five defects (E44). It has been removed
+rather than restated &mdash; every figure in it was wrong. Below is the rebuilt
+result on the live 4-name basket, over 26 weeks, priced at real market credit.</div>
 <table>
-<tr><th>WEEK</th><th style="text-align:right">OPTIONS</th><th style="text-align:right">STOCKS</th>
-<th style="text-align:right">CRYPTO</th><th style="text-align:right">TOTAL</th></tr>
-<tr><td>10–14 Aug</td><td class="num gd">+3,737</td><td class="num rd">−279</td>
- <td class="num rd">−77</td><td class="num gd">+3,382</td></tr>
-<tr><td>17–21 Aug</td><td class="num rd">−1,728</td><td class="num gd">+494</td>
- <td class="num gd">+3,037</td><td class="num gd">+1,803</td></tr>
-<tr><td>24–28 Aug</td><td class="num gd">+2,998</td><td class="num gd">+322</td>
- <td class="num rd">−110</td><td class="num gd">+3,210</td></tr>
-<tr><td class="wh">TOTAL</td><td class="num gd">+5,007</td><td class="num gd">+537</td>
- <td class="num gd">+2,850</td><td class="num gd wh">+8,394 &nbsp;(+8.39%)</td></tr>
+<tr><th>IV/RV ASSUMPTION</th><th style="text-align:right">26-WEEK TOTAL</th>
+<th style="text-align:right">WORST WEEK</th><th style="text-align:right">MAX DRAWDOWN</th></tr>
+<tr><td>1.00 &nbsp;<span class="dim">no vol premium at all</span></td>
+ <td class="num">+13</td><td class="num rd">&minus;982</td><td class="num rd">&minus;2.38%</td></tr>
+<tr><td>1.15 &nbsp;<span class="dim">pessimistic</span></td>
+ <td class="num gd">+1,459</td><td class="num rd">&minus;768</td><td class="num rd">&minus;1.56%</td></tr>
+<tr><td>1.30</td><td class="num gd">+2,445</td><td class="num rd">&minus;616</td>
+ <td class="num rd">&minus;1.00%</td></tr>
+<tr><td class="wh">1.45 &nbsp;<span class="dim">measured today</span></td>
+ <td class="num gd wh">+3,142</td><td class="num rd">&minus;505</td>
+ <td class="num rd">&minus;0.60%</td></tr>
 </table>
-<div class="lead" style="margin-top:11px">Simulated on real historical prices with credit at
-the gate's <span class="cy">minimum</span> — real fills would do better; no commissions charged —
-they would do worse. The crypto figure is almost entirely one week of XRP and is
-<span class="rd">not repeatable</span>.</div>
+<div class="lead" style="margin-top:11px">Roughly <span class="cy">flat</span> &mdash;
+not a loser, not an edge. It is positive across every vol assumption tested, which
+is the property that matters; the margin itself is inside the noise. Chosen from
+six candidate baskets, so treat the ranking with suspicion and the
+<span class="cy">bounded downside</span> as the reason to run it.</div>
 
 <h2>OUTCOME DISTRIBUTION — NOT A PREDICTION</h2><div class="rule"></div>
 <table>
 <tr><th>PERCENTILE</th><th style="text-align:right">RESULT</th><th>READING</th></tr>
-<tr><td>p5</td><td class="num rd">−2,374</td><td>very bad week</td></tr>
-<tr><td>p25</td><td class="num">+275</td><td>poor</td></tr>
-<tr><td class="wh">p50 — MEDIAN</td><td class="num gd wh">+2,144</td><td>typical</td></tr>
-<tr><td>p75</td><td class="num gd">+3,264</td><td>good</td></tr>
-<tr><td>p95</td><td class="num gd">+4,656</td><td>very good</td></tr>
+<tr><td>p5</td><td class="num rd">&minus;371</td><td>very bad week</td></tr>
+<tr><td>p25</td><td class="num">&minus;173</td><td>poor</td></tr>
+<tr><td class="wh">p50 — MEDIAN</td><td class="num wh">+186</td><td>typical</td></tr>
+<tr><td>p75</td><td class="num gd">+419</td><td>good</td></tr>
+<tr><td>p95</td><td class="num gd">+468</td><td>very good</td></tr>
 </table>
-<div class="lead" style="margin-top:11px">136 comparable weeks at today's volatility regime.
-Positive in <span class="gd">80%</span> of them. We cannot forecast direction — five directional
-strategies were tested and all five failed. This says where weeks like this one have
-<span class="cy">landed</span>, and the contest gets exactly one draw.</div>
+<div class="lead" style="margin-top:11px">26 weeks on the live 4-name basket at
+the vol premium measured today, priced at real market credit. Positive in
+<span class="cy">65%</span> of them. An earlier version of this table
+claimed a median of <span class="rd">+2,144</span> and a p95 of
+<span class="rd">+4,656</span>; those came from a 17-name book priced at credits
+the market never pays, and were wrong by roughly an order of magnitude. We cannot
+forecast direction &mdash; five directional strategies were tested and all five
+failed. This says where weeks like this one have landed, and the contest gets
+<span class="cy">exactly one draw</span>.</div>
 
 <h2>LIVE TERMINAL — EVERYTHING THE AGENT DID
  <span class="live"><b></b>STREAMING</span></h2><div class="rule"></div>

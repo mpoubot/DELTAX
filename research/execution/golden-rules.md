@@ -1351,3 +1351,33 @@ limit from a drawdown, never from a single period's loss.
 **Enforcement.** `test_permission.py` now asserts the *ratio* to the measured
 drawdown in both directions — too loose to fire, and too tight not to — instead
 of a bare magic number that carried no reasoning.
+
+## E47 — The dashboard kept publishing the numbers E44 killed
+
+Four hours after writing E46 — *when a backtest is invalidated, enumerate its
+dependents* — the public dashboard was still serving all of them:
+
+| claim on the live page | reality |
+|---|---|
+| "Iron condors · 17 names · validated, walk-forward" | 4 names; that validation is what E44 destroyed |
+| "STOCKS $60,000 · Covered calls" | stocks excluded, no engine ever written |
+| "CRYPTO $10,000" | `rss.py`: *"crypto engine not built yet"* |
+| "LAST THREE WEEKS +8,394 (+8.39%)" | computed at credits the market never pays |
+| "median +2,144 · p95 +4,656 · positive 80%" | real: **+186 / +468 / 65%** — off by an order of magnitude |
+
+I wrote the rule and then failed to apply it to the most public artefact we
+have. The allocation table described a three-sleeve system where two sleeves
+did not exist, on a URL built for judges to read.
+
+**Why it survived.** Every one of those numbers was *hard-coded HTML*. Nothing
+imported them, no test referenced them, and no gate could see them. They were
+outside the system that checks the system.
+
+**Rule.** A published claim is a dependent of the analysis that produced it.
+Derive displayed figures from the code that computes them, or the page becomes
+a museum of superseded beliefs that still looks authoritative. Where a figure
+must be static, it needs a test that fails when the underlying number moves.
+
+**Rule.** Never publish an allocation for an engine that does not exist. "$10,000
+crypto" with no crypto engine is not a plan on a dashboard — it is a false
+statement about the system's behaviour.
