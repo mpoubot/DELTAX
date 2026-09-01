@@ -1,7 +1,7 @@
 # DELTAX — Complete Rule Set
 
 **For team evaluation before the Monday pre-registration freeze.**
-Updated 2026-08-29 · 91 unit tests green · account `PA3ID1B9L6BP` ($100,000)
+Updated 2026-08-29 · 91 unit tests green · account `PA397N6FXXIE` ($100,000)
 
 Three layers: **gates** (code the agent enforces), **strategy** (what it trades),
 **research** (where the rules came from). Only the first layer can stop a trade.

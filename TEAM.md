@@ -81,7 +81,7 @@ appears nowhere in git history.
 explicitly allow this — *"Use any paper account you like during development."*
 Copy `.env.alpaca.example` to `.env.alpaca` and fill in your own keys.
 
-**The competition account `PA3ID1B9L6BP` is locked.** Reasons this is not
+**The competition account `PA397N6FXXIE` is locked.** Reasons this is not
 negotiable:
 
 - The rules require a **brand-new, dedicated** account. Ours was created

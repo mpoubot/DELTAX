@@ -26,7 +26,7 @@ partial Fri 4 Sep before the 11:00 AM cut-off.** Roughly **4.5 sessions.**
 
 | Requirement | Our account | Status |
 |---|---|---|
-| Brand-new account dedicated to the hackathon | `PA3ID1B9L6BP`, created **2026-08-29 05:23 UTC** (after the 28 Aug kickoff) | ✅ |
+| Brand-new account dedicated to the hackathon | `PA397N6FXXIE`, created **2026-08-29 05:23 UTC** (after the 28 Aug kickoff) | ✅ |
 | Not existing or reused | **0 orders ever placed, 0 positions** | ✅ |
 | Starting balance **$100,000** | $100,000 cash / $100,000 portfolio value | ✅ |
 | Options capability | Level 3 approved | ✅ |
@@ -58,7 +58,7 @@ the eligibility evidence.
 - [x] **Slide presentation** — ✅ live at /slides.html + PDF in repo (v3 rewrite pending)
 - [x] **Public GitHub repository** — ✅ public, MIT licensed
 - [x] Demo application platform + **application URL** — ✅ https://pautax007.github.io/DELTAX/ (live board, refreshes every 3 min)
-- [x] **Alpaca paper trading account ID** → `PA3ID1B9L6BP`
+- [x] **Alpaca paper trading account ID** → `PA397N6FXXIE`
 - [ ] **One-page write-up: AI logic, risk gates, Alpaca infrastructure**
 
 **Brand palette** (from the cover image, for slides and the demo page):

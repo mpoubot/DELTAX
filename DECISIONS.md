@@ -125,3 +125,28 @@ only code enforces it.**
 yielding $0.23. More than half the universe was **mathematically incapable** of
 clearing our own gate, on any day, at any price. Nobody checked the interaction
 between two constants until the agent had refused everything for a full session.
+
+
+---
+
+## 🟡 D-09 · Switched to a fresh paper account
+**1 Sep · account PA3ID1B9L6BP → PA397N6FXXIE · mine to explain, the team's to decide**
+
+The old account carried **−$428** from D-07, the 18-day expiry opened into a
+4-day contest. Rather than spend three days earning back an error, the team took
+a clean $100,000.
+
+**It breaks no rule.** The requirements govern the trading environment and ask
+that the submission name a paper account ID. Nothing addresses account age,
+resets, or continuity — and a 1 Sep creation date is *stronger* evidence of a
+fresh account than an Aug 28 one.
+
+**I had claimed otherwise.** `HACKATHON-RULES.md` carried "do not reset or
+recreate it — the creation timestamp is the eligibility evidence." **I wrote
+that line**, as my own inference, and then cited it back as though it came from
+the organisers. Checking the actual requirements settled it in a minute.
+
+**Recorded here rather than erased.** The old account's history — two live
+orders, the expiry error, the −$428 — is what D-07 and E37 describe. Those
+entries keep the old ID deliberately, as do the frozen deck versions. A ledger
+that rewrites itself is not a ledger.

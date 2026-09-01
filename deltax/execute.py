@@ -28,7 +28,7 @@ import subprocess
 #
 # Set DELTAX_ACCOUNT in .env.alpaca when the paper account changes. Unset, it
 # keeps the original competition account.
-COMPETITION_ACCOUNT = os.environ.get("DELTAX_ACCOUNT", "PA3ID1B9L6BP")
+COMPETITION_ACCOUNT = os.environ.get("DELTAX_ACCOUNT", "PA397N6FXXIE")
 ORDERS_ALLOWED_ENV = "DELTAX_ORDERS_ALLOWED"
 
 

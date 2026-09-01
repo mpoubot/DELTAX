@@ -11,7 +11,7 @@ its own. This page is the pre-flight record.
 | Section | Result |
 |---|---|
 | Infrastructure | Alpaca CLI · Python 3.14 · credentials mode 600, gitignored, absent from tracked files |
-| Account | `PA3ID1B9L6BP` · ACTIVE · $100,000 untouched · options level 3 |
+| Account | `PA397N6FXXIE` · ACTIVE · $100,000 untouched · options level 3 |
 | Autonomous execution | Orders **enabled** · `--live` passed · `--force` never passed · paper only |
 | Order safety | Every order pinned to one account; a mismatch is refused |
 | Exits | GTC at 50% of credit, **rested at fill** · 2-DTE time stop |

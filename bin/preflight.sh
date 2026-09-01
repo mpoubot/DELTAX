@@ -34,7 +34,7 @@ A=$(alpaca account get --quiet 2>/dev/null)
 # The check that matters is not "is it this literal account" but "do the keys
 # open the account execution is pinned to". Hardcoding the ID meant switching
 # accounts blocked preflight on a label rather than a real fault (E40).
-PINNED="${DELTAX_ACCOUNT:-PA3ID1B9L6BP}"
+PINNED="${DELTAX_ACCOUNT:-PA397N6FXXIE}"
 LIVE=$(echo "$A" | "$PYBIN" -c "import sys,json;print(json.load(sys.stdin).get('account_number',''))" 2>/dev/null)
 if [ -n "$LIVE" ] && [ "$LIVE" = "$PINNED" ]; then
   ok "account matches execution pin" "$LIVE"

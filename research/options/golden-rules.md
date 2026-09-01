@@ -239,7 +239,7 @@ Ordered by (multi-source support × testability):
 6. **Premium-yield vs IV sanity check** — does an unusually rich premium predict
    worse forward outcomes? Tests our SIRI inference directly.
 
-**Data available:** Alpaca paper account `PA3ID1B9L6BP`, options level 3.
+**Data available:** Alpaca paper account `PA397N6FXXIE`, options level 3.
 Everything in tiers 2–4 is unvalidated until it clears this queue.
 
 ---

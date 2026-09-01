@@ -49,5 +49,5 @@ crypto perpetuals) is excluded; its process layer is implemented in
 - **High win rate is not an edge.** Every commercial source optimized for it and
   none measured the tail. This is exactly how the TSLA playbook failed.
 
-**Target:** Alpaca paper account `PA3ID1B9L6BP`, options level 3.
+**Target:** Alpaca paper account `PA397N6FXXIE`, options level 3.
 Nothing is adopted. Everything is queued.

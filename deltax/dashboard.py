@@ -73,7 +73,7 @@ def render(positions, *, equity, start_equity, day_pnl, permission,
     L=[]; W=78
     L.append(f"{BOLD}╔{'═'*W}╗{RESET}")
     import os as _os
-    _acct = _os.environ.get("DELTAX_ACCOUNT", "PA3ID1B9L6BP")
+    _acct = _os.environ.get("DELTAX_ACCOUNT", "PA397N6FXXIE")
     hdr=f" DELTAX  ·  {datetime.now():%a %d %b %H:%M}  ·  account {_acct}"
     L.append(f"{BOLD}║{hdr:<{W}}║{RESET}")
     L.append(f"{BOLD}╚{'═'*W}╝{RESET}")

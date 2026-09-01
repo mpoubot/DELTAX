@@ -206,4 +206,4 @@ in band, which is the fallback working).
 - [ ] Demo video, slides, cover image, one-page write-up
 - [ ] Alpaca Finance contacted re: three-way prize split
 - [ ] Each teammate uses their **own** paper account. The competition account
-      `PA3ID1B9L6BP` is locked to one designated runner.
+      `PA397N6FXXIE` is locked to one designated runner.

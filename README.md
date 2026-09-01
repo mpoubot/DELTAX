@@ -32,7 +32,7 @@ Validation bar     OOS PF > 1.10 AND >50% folds positive · no post-holdout tuni
 |---|---|
 | Research corpus (10 videos, 3 team packs, 9+ viewpoints) | ✅ `research/` |
 | Risk gate module + 29 unit tests | ✅ `deltax/gates.py` |
-| Alpaca CLI wired (paper), account verified | ✅ `PA3ID1B9L6BP`, $100k, options L3 |
+| Alpaca CLI wired (paper), account verified | ✅ `PA397N6FXXIE`, $100k, options L3 |
 | Decision logger · chain screener · backtest harness | 🔜 next |
 | Pre-registration commit | ⏰ **before Mon 31 Aug, 09:30 ET** |
 | Flatten + submit, repo → public | ⏰ **Fri 4 Sep, before 11:00 ET** |

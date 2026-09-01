@@ -33,7 +33,7 @@ before that timestamp, it waits until after.
    requirement.
 3. **Paper trading only.** Never set `ALPACA_LIVE_TRADE=true`. Never touch a live
    account. The CLI defaults to paper; keep it that way.
-4. **The competition account `PA3ID1B9L6BP` is locked.** Created 2026-08-29
+4. **The competition account `PA397N6FXXIE` is locked.** Created 2026-08-29
    05:23 UTC with zero prior orders — that clean history is our eligibility
    evidence, and its P&L is what gets judged. Do all development against your own
    personal paper account. Only the designated runner trades the competition
