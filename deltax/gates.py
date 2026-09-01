@@ -45,7 +45,11 @@ PORTFOLIO_RISK_PCT    = 0.30   # 30% of equity max loss across all open position
 # what was measured. A Thursday entry would be 1 DTE - untested, maximum gamma,
 # and correctly refused. R5's intent was banning 0DTE and clearing the gamma
 # zone; a 2-day floor still does both.
-MIN_DTE               = 2      # rule R5: 0DTE banned; clear the gamma zone
+# E45: MIN_DTE must stay STRICTLY above manage.TIME_STOP_DTE. At MIN_DTE == 2
+# a position opened on 2 Sep is instantly eligible for the 2-DTE time stop -
+# opened and closed on the same cycle, paying the spread twice for nothing.
+# Enforced by gate_dte_vs_time_stop() below, not by this comment.
+MIN_DTE               = 3      # rule R5: 0DTE banned; clear the gamma zone
 MAX_DTE               = 21     # short enough to resolve inside the contest window
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
@@ -201,6 +205,15 @@ TRADING_SUSPENDED = True
 SUSPENSION_REASON = ("E42: every 2-3 DTE configuration tested negative "
                      "(-$50,904 over 26 weeks). No profitable trade exists "
                      "inside the contest window.")
+
+
+def gate_dte_vs_time_stop() -> GateResult:
+    """E45: refuse to open anything the exit engine would close immediately."""
+    from deltax.manage import TIME_STOP_DTE
+    ok = MIN_DTE > TIME_STOP_DTE
+    return GateResult("dte_vs_time_stop", ok,
+                      f"MIN_DTE={MIN_DTE} vs TIME_STOP_DTE={TIME_STOP_DTE}"
+                      + ("" if ok else " - would open then instantly time-stop"))
 
 
 def gate_trading_enabled() -> GateResult:
@@ -533,6 +546,7 @@ def evaluate(
         gate_quote_sanity(credit, structure, quote_age_hours),
         gate_tradeable(halted, corporate_action),
         gate_defined_risk(max_loss_per_contract),
+        gate_dte_vs_time_stop(),
         gate_dte(expiry, today),
         gate_contest_window(expiry),
         gate_no_earnings_before_expiry(earnings_date, expiry, earnings_checked),

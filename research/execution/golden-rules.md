@@ -1284,3 +1284,45 @@ red.** Green on its own only proves the assertion ran, not that it discriminates
 `(str, bool, …)`, so the swap cannot recur silently. `tests/test_meta.py`
 scans every test file for tests defined after the summary print. Both are
 permanent; neither depends on anyone remembering this.
+
+## E44 — The backtest that suspended trading had five bugs
+
+The 31 Aug run returned **−$50,904** and triggered the E42 stand-down. Rebuilt
+as `research/backtest/weekly.py` with tests, every defect found:
+
+| | defect | effect |
+|---|---|---|
+| B1 | strike placed on **realized** vol, credit priced from **implied** | strikes 33% too close (IV/RV measured 1.45) — manufactured breaches |
+| B2 | clean trade earned `0.5·credit`, breach-and-recover earned `credit` | breaching paid **double** |
+| B3 | breach tested on intraday low, loss taken from the close | a wick that recovered was scored as a breach |
+| B4 | no regime filter, puts only | not the strategy — "always long, 14×". Worth **31 points**: −63.6% vs −32.0% |
+| B5 | early exit credited full decay | closing before expiry buys back **intrinsic + remaining time value** |
+
+**Corrected result: roughly flat.** −2.2% (4 names) to +1.7% (2 names) over 26
+weeks, swinging on the vol premium: −4.0% at IV/RV 1.00, +2.1% at 1.45.
+
+**Rule.** A backtest is code and gets the same scrutiny as the trading path —
+tests, review, and a check that it models what the live system *actually does*.
+B5 alone moved the answer from +8.7% to −1.4%. Suspending trading on an
+unreviewed one-pass script was the same mistake as trading on one.
+
+**Second rule.** The live exit engine closes at `TIME_STOP_DTE`, so the true
+hold is **1 day**, not the 3 the backtest assumed. Backtest the system you have,
+not the strategy you described.
+
+## E45 — MIN_DTE and TIME_STOP_DTE overlapped
+
+`MIN_DTE = 2` (set by E41) let a position **open** at 2 DTE.
+`TIME_STOP_DTE = 2` **closes** anything at ≤ 2 DTE.
+
+A position opened 2 Sep for a 4 Sep expiry would be opened and time-stopped on
+the same cycle — paying the bid-ask spread twice for nothing. Both constants
+were individually defensible and separately tested; the contradiction lived
+only in the gap between them.
+
+**Rule.** Entry and exit thresholds are one system. Any constant that admits a
+position must be strictly beyond the constant that ejects it, and that
+relationship needs its own assertion — `gate_dte_vs_time_stop()` — because
+neither module's tests can see it. MIN_DTE raised to 3.
+
+**Consequence.** 1 Sep is the **last day** a position can be opened and held.

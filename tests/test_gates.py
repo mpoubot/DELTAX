@@ -10,7 +10,7 @@ from deltax.gates import (
     CREDIT_SURFACE, CREDIT_MARKET_FRACTION, market_credit_ratio,
     gate_expectancy, gate_dte, gate_liquidity, gate_reward_risk,
     gate_portfolio_risk, gate_defined_risk, gate_no_earnings_before_expiry,
-)
+    gate_dte_vs_time_stop, MIN_DTE)
 
 EQUITY = 100_000.0
 TODAY = date(2026, 8, 31)
@@ -49,10 +49,19 @@ check("40% win rate with 3:1 payoff PASSES", r.passed, f"E={r.observed}")
 
 print("\n── DTE band (rule R5: no 0DTE) ──")
 check("0DTE rejected", not gate_dte(TODAY, TODAY).passed)
-# E41 lowered MIN_DTE to 2 so a Sep 4 expiry stays reachable through the
-# contest. 2 DTE is now the floor and is accepted; 1 DTE is the gamma zone.
+# E41 lowered MIN_DTE to 2 so a Sep 4 expiry stayed reachable. E45 raised it
+# back to 3: at 2, an opened position was instantly eligible for the 2-DTE time
+# stop - opened and closed on the same cycle. The floor must stay STRICTLY above
+# TIME_STOP_DTE, which is the invariant asserted below.
 check("1 DTE rejected — gamma zone", not gate_dte(date(2026, 9, 1), TODAY).passed)
-check("2 DTE accepted — the floor", gate_dte(date(2026, 9, 2), TODAY).passed)
+check("2 DTE rejected — the exit engine would close it on arrival",
+      not gate_dte(date(2026, 9, 2), TODAY).passed)
+check("3 DTE accepted — the floor", gate_dte(date(2026, 9, 3), TODAY).passed)
+
+from deltax.manage import TIME_STOP_DTE as _TS
+check("E45 MIN_DTE stays strictly above TIME_STOP_DTE", MIN_DTE > _TS,
+      f"MIN_DTE={MIN_DTE} TIME_STOP_DTE={_TS}")
+check("E45 gate refuses when that invariant breaks", gate_dte_vs_time_stop().passed)
 check("4 DTE accepted", gate_dte(GOOD_EXPIRY, TODAY).passed)
 check("45 DTE rejected (won't resolve in window)", not gate_dte(date(2026, 10, 15), TODAY).passed)
 
