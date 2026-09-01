@@ -66,7 +66,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 "skipped": f"{perm.state}: {perm.reasons[0]}"}
 
     gte = str(today.fromordinal(today.toordinal() + MIN_DTE))
-    lte = str(today.fromordinal(today.toordinal() + MAX_DTE))
+    # Never search past the contest close. choose_expiry takes the nearest
+    # qualifying expiry, so an unbounded window finds Sep 11 or Sep 18, builds a
+    # candidate, and only then has it refused by gate_contest_window - a wasted
+    # chain query and a refusal that reads like a data problem (E41).
+    from deltax.gates import CONTEST_CLOSE as _CC
+    _far = today.fromordinal(today.toordinal() + MAX_DTE)
+    lte = str(min(_far, _CC))
 
     # What do we ALREADY hold? Without this, every cycle believes the book is
     # empty and re-opens the same positions - 96 times a day on the live

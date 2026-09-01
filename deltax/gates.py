@@ -35,7 +35,17 @@ PORTFOLIO_RISK_PCT    = 0.30   # 30% of equity max loss across all open position
 # +0.251 at t=2.84 - while everything MIN_DTE=7 permitted failed the corrected
 # bar. R5's actual intent was banning 0DTE and clearing the gamma zone; 4 DTE
 # does both.
-MIN_DTE               = 4      # rule R5: 0DTE banned; clear the gamma zone
+# 4 -> 2. MIN_DTE=4 was set on 31 Aug when the 4 Sep expiry was exactly 4 days
+# out. From 1 Sep it is 3 days, from 2 Sep it is 2 - so a floor of 4 combined
+# with gate_contest_window left NO valid expiry for the rest of the contest and
+# the agent would have sat out every remaining session (E41).
+#
+# 2 is the lowest floor that stays defensible. The walk-forward tested a 4-day
+# Mon->Fri hold; a Tue->Fri entry is 3 days and Wed->Fri is 2, both close to
+# what was measured. A Thursday entry would be 1 DTE - untested, maximum gamma,
+# and correctly refused. R5's intent was banning 0DTE and clearing the gamma
+# zone; a 2-day floor still does both.
+MIN_DTE               = 2      # rule R5: 0DTE banned; clear the gamma zone
 MAX_DTE               = 21     # short enough to resolve inside the contest window
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg

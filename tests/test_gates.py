@@ -44,8 +44,11 @@ check("40% win rate with 3:1 payoff PASSES", r.passed, f"E={r.observed}")
 
 print("\n── DTE band (rule R5: no 0DTE) ──")
 check("0DTE rejected", not gate_dte(TODAY, TODAY).passed)
-check("2 DTE rejected", not gate_dte(date(2026, 9, 2), TODAY).passed)
-check("14 DTE accepted", gate_dte(GOOD_EXPIRY, TODAY).passed)
+# E41 lowered MIN_DTE to 2 so a Sep 4 expiry stays reachable through the
+# contest. 2 DTE is now the floor and is accepted; 1 DTE is the gamma zone.
+check("1 DTE rejected — gamma zone", not gate_dte(date(2026, 9, 1), TODAY).passed)
+check("2 DTE accepted — the floor", gate_dte(date(2026, 9, 2), TODAY).passed)
+check("4 DTE accepted", gate_dte(GOOD_EXPIRY, TODAY).passed)
 check("45 DTE rejected (won't resolve in window)", not gate_dte(date(2026, 10, 15), TODAY).passed)
 
 print("\n── liquidity (the SPCX case) ──")

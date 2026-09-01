@@ -1184,3 +1184,39 @@ correct failures. All invisible for hours.
 
 **Rule.** Any script that aggregates a result must fail loudly on a missing
 input. A green tick over a partial count is a lie told confidently.
+
+## E41 — A floor and a ceiling that pass today can deadlock tomorrow
+
+> `MIN_DTE = 4` was set on 31 Aug, the day the 4 Sep expiry was **exactly** four
+> days out. From 1 Sep it is three days, from 2 Sep it is two. Combined with
+> `gate_contest_window`, the agent had **no valid expiry for any remaining
+> session** — it would have sat out the entire rest of the contest, refusing
+> everything with a gate name that reads like a data problem.
+
+**Found by rehearsing tomorrow, not by testing today.** Every test passed. The
+deadlock only appears when the calendar moves, and nothing in the suite advances
+the clock.
+
+Three faults, all from the same root:
+
+1. **The floor did not account for time passing.** `MIN_DTE` is relative to
+   today; `CONTEST_CLOSE` is absolute. A relative floor under an absolute
+   ceiling closes a little further every day until it shuts. Lowered to **2** —
+   the lowest floor that keeps R5's intent (0DTE banned, gamma zone cleared)
+   while leaving Tue and Wed entries reachable. A Thursday entry would be 1 DTE,
+   untested and maximum gamma, and stays refused.
+
+2. **The search window ignored the ceiling.** `lte` was `today + MAX_DTE`, so
+   `choose_expiry` found 11 Sep or 18 Sep, built a full candidate, queried the
+   chain — and only then had it refused. Now capped at `CONTEST_CLOSE`, so it
+   never looks at an expiry it cannot use.
+
+3. **A temporary universe restriction outlived its purpose.** The universe had
+   been cut to `["UNH"]` for one specific Monday window. Its 4 Sep chain does
+   not qualify, so a one-name universe meant zero tradeable names. Restored to
+   21; **14 clear a Sep 4 chain**.
+
+**Rule.** Any constraint expressed relative to *now* must be re-checked against
+every fixed deadline it operates under, on every day it will run — not on the
+day it is written. And a restriction scoped to one session needs an expiry date
+in the comment that sets it.
