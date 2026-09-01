@@ -9,7 +9,8 @@ ok(){ printf "  \033[32m✅\033[0m %-46s %s\n" "$1" "$2"; P=$((P+1)); }
 no(){ printf "  \033[31m❌\033[0m %-46s %s\n" "$1" "$2"; F=$((F+1)); }
 warn(){ printf "  \033[33m⚠️ \033[0m %-46s %s\n" "$1" "$2"; W=$((W+1)); }
 echo "╔══════════════════════════════════════════════════════════════════════════╗"
-echo "║  DELTAX PREFLIGHT — Monday 31 Aug 2026, 09:30 ET                        ║"
+HDR="  DELTAX PREFLIGHT — $(TZ=America/New_York date '+%A %-d %b %Y, %H:%M') ET"
+printf "║%s%*s║\n" "$HDR" $((74 - ${#HDR})) ""
 echo "╚══════════════════════════════════════════════════════════════════════════╝"
 
 echo; echo "── 1. infrastructure ──"

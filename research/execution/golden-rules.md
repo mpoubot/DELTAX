@@ -1402,3 +1402,26 @@ statements about a team's work. Writing the first when the second is true
 discards the reasoning that produced the decision — and here it did that on a
 public page, over a named teammate's contribution. State *why* a sleeve is
 unfunded, and name the evidence.
+
+## E48 — The morning brief announced two names; the agent traded four
+
+`posture()` returned a hardcoded `[("SPY","put"), ("QQQ","put")]` and read only
+`BENCHMARKS`. It had no knowledge that `INCOME_UNIVERSE` existed. Meanwhile
+`run.py` looped over `INCOME_UNIVERSE` and evaluated **every name on both
+sides** — 8 candidates, not 2.
+
+The brief feeds the public dashboard. It was telling the team and the judges
+something the agent did not do.
+
+**It was harmless only by accident.** `posture()` also backs
+`screen_income_book()`, which would have constrained the book to two names —
+that function simply is not on the live path, and nothing said so. Had `run.py`
+been wired to it instead, the universe work of E44 would have been silently
+discarded.
+
+**Rule.** A reporting function that derives the same decision the engine derives
+is a second implementation, and it will drift. Report *from* the engine's
+inputs — here, `INCOME_UNIVERSE` — never from a parallel constant list.
+
+**Rule.** Dead code that computes a trading decision is not inert; it is a wrong
+answer waiting for someone to call it.

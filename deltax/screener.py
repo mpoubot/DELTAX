@@ -151,22 +151,34 @@ def assess_regime(snapshots: dict) -> RegimeState:
 
 
 def posture(regime: RegimeState) -> list:
-    """Regime -> which credit verticals to nominate.
+    """Regime -> which credit verticals to nominate, across the REAL universe.
 
     An iron condor is expressed as two independent verticals so each side is
     sized and gated on its own rather than as one opaque 4-leg block.
+
+    E48: this used to hardcode [("SPY","put"), ("QQQ","put")] and read only
+    BENCHMARKS, so the morning brief announced two names while run.py went on
+    to evaluate every name in INCOME_UNIVERSE on both sides. The brief feeds
+    the public dashboard, so it was telling the team and the judges something
+    the agent did not do. It now enumerates the universe that actually trades.
     """
-    strong = [s for s in BENCHMARKS if s not in regime.weak_symbols]
+    names = list(INCOME_UNIVERSE)
+    if not names:
+        return []
+    weak = [s for s in regime.weak_symbols if s in names]
     if regime.weak_count == 0:
-        return [("SPY", "put"), ("QQQ", "put")]
-    if regime.weak_count == 1:
-        best = strong[0] if strong else "SPY"
-        others = [s for s in BENCHMARKS if s != best]
-        return [(best, "put")] + [(s, side) for s in others[:1] for side in ("put", "call")]
-    if regime.weak_count == 2:
-        weakest = regime.weak_symbols[0]
-        return [(weakest, "call")] + [(s, side) for s in strong[:1] for side in ("put", "call")]
-    return [(s, "call") for s in regime.weak_symbols[:2]]
+        return [(s, "put") for s in names]
+    if regime.weak_count >= 3:
+        return [(s, "call") for s in names]
+    # Mixed tape: sell calls on what is weak, puts on what is not, so each
+    # vertical leans with the symbol rather than against it.
+    out = [(s, "call") for s in weak]
+    out += [(s, "put") for s in names if s not in weak]
+    if not any(sd == "call" for _, sd in out):
+        out.append((regime.weak_symbols[0], "call"))
+    if not any(sd == "put" for _, sd in out):
+        out.append((names[0], "put"))
+    return out
 
 
 def _dte(expiry: str, today: date) -> int:
