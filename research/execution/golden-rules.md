@@ -1477,3 +1477,58 @@ monotonically with IV/RV, and that today's book sat below 1.0. Basket ranking by
 backtest was separately shown to be **noise** — the same baskets reverse sign
 between Monday and Tuesday entry — which is precisely why selection should rest
 on a live price, not on 26 weeks of curve-fitting.
+
+## E52 — Energy was the right read and the wrong instrument
+
+On 1 Sep energy was the only sector green while the tape sold off: USO **+4.28%**,
+XOP +1.52%, XLE +1.05%, PXE +3.47%, against SPY −0.71% and SMH −2.22%. A 4% move
+in crude on a red equity day is a supply or geopolitical signal, not rotation.
+The observation was correct.
+
+**The 4 Sep weeklies could not express it.** Measured at the δ0.30 strike:
+
+| | OI | spread | credit |
+|---|---|---|---|
+| XLE put 64/62 | 484 | 46% | $0.17 |
+| XOP put 189/184 | 3 | 176% | $0.27 |
+| USO put 137/133 | 7 | 36% | $0.47 |
+
+Against floors of OI ≥ 500, spread ≤ 15%, credit ≥ $0.75. The spreads are 2–12×
+the cap: crossing them costs more than the trade can earn. Sector-ETF weeklies
+carry their open interest at round strikes and monthly expiries, not at the
+delta we trade on a Friday weekly.
+
+**Rule.** A directional read and a tradeable structure are separate questions,
+and the second is settled by the order book, not by conviction. Screen the
+instrument before committing to the thesis.
+
+**Two measurement errors made while checking this, both mine.** `openInterest`
+is absent from the *chain snapshot* and reads 0 there — OI lives on the
+*contracts* endpoint. And `option_contracts` defaults to `limit=100`, so an
+unfiltered call silently truncates and reports zeros for strikes it never
+fetched. The live path is correct on both counts (it passes `limit=1000` with
+strike bounds); only my diagnostics were wrong. **A diagnostic that reads a
+different source than the engine will invent bugs the engine does not have —
+and hide the ones it does.**
+
+## E53 — The best-priced trade of the week was the one we refused
+
+Re-measuring after the selloff, SPY's vol premium had moved **1.09 → 2.01** and
+QQQ's **0.79 → 1.56**: IV spiked with the decline while realized vol had not yet
+caught up. Both put spreads passed **every** gate — OI 779/684, spreads 6%/3%,
+credit $1.73/$1.95. It was the richest, cleanest setup measured all week.
+
+`DEFENSIVE` blocked it, because the regime was 3/3 weak.
+
+Pautax was offered the override at half size and **declined it**.
+
+**Why that is the right answer.** The regime filter is worth **31 points** in the
+rebuilt backtest — −63.6% without it against −32.0% with it — and this was
+precisely its scenario: selling puts into a falling tape, two days from expiry,
+on the last day a position could be opened. Rich premium is *compensation for
+risk*, not evidence of its absence; IV/RV 2.01 existed because the market had
+just fallen and might keep falling.
+
+**Rule.** A filter is only worth what it costs you on the day you least want to
+obey it. One that is overridden whenever it binds has no value, and its
+backtested contribution was never real.
