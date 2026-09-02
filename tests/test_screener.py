@@ -201,7 +201,7 @@ check("missing data still fails closed at 3/3",
 
 print("\n── E50: vol-premium ranking ──")
 from deltax.screener import rank_by_vol_premium, vol_premium, realized_vol_20
-from deltax.screener import _as_int, LAST_UNREADABLE_OI
+from deltax.screener import _as_int, LAST_UNREADABLE_OI, search_vertical
 
 class _FakeFeed:
     """IV/RV is controllable per symbol; one symbol is deliberately broken."""
@@ -298,6 +298,61 @@ check("E92 max profit and max loss sum to the width",
       abs((_narrow["max_profit_per_contract"] + _narrow["max_loss_per_contract"])
           - 2.5 * 100) < 1e-9,
       str(_narrow["max_profit_per_contract"] + _narrow["max_loss_per_contract"]))
+
+print("\n-- E95: search the chain, do not guess one structure --")
+# select_vertical takes the single strike nearest target delta and the single
+# strike a width away. If that pair quotes badly the whole symbol is lost for
+# the cycle even when the same expiry holds structures that pass every gate.
+# Measured live, the point pick nominated QQQ puts at OI 226 (below the 500
+# floor) and QQQ calls at a 17% spread (above the 15% cap), while the search
+# found OI 507 and a 10% spread at a better credit on the SAME chain.
+#
+# Build a chain where the nearest-delta strike is deliberately the bad one:
+# 177.5 sits closest to 0.30 delta but quotes 1.00/2.00 (67% spread), while
+# 175.0 is inside the band, quotes tightly, and is liquid.
+_trap = {
+ "PLTR260918P00165000": {"greeks": {"delta": -0.1600}, "latestQuote": {"bp": 1.00, "ap": 1.04}},
+ "PLTR260918P00170000": {"greeks": {"delta": -0.2000}, "latestQuote": {"bp": 1.50, "ap": 1.54}},
+ "PLTR260918P00175000": {"greeks": {"delta": -0.2600}, "latestQuote": {"bp": 3.18, "ap": 3.28}},
+ "PLTR260918P00177500": {"greeks": {"delta": -0.3050}, "latestQuote": {"bp": 1.00, "ap": 2.00}},
+}
+_oi_all = {s: 5000 for s in _trap}
+_point = select_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                         oi_by_symbol=_oi_all, pricing="worst")
+check("E95 the point pick lands on the 0.305-delta strike",
+      _point["short"]["strike"] == 177.5, str(_point["short"]["strike"]))
+check("E95 and that strike quotes badly (67% spread)",
+      _point["worst_leg_spread_pct"] > 0.15, str(_point["worst_leg_spread_pct"]))
+_found = search_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                         oi_by_symbol=_oi_all, pricing="worst")
+check("E95 the search finds a tradeable structure instead", _found is not None)
+check("E95 it avoids the wide-quoting strike",
+      _found["short"]["strike"] != 177.5, str(_found["short"]["strike"]))
+check("E95 and respects the spread cap",
+      _found["worst_leg_spread_pct"] <= 0.15, str(_found["worst_leg_spread_pct"]))
+check("E95 the short leg stays inside the R3 delta band",
+      0.15 <= _found["short"]["delta"] <= 0.35, str(_found["short"]["delta"]))
+check("E95 it is a genuine credit spread", 0 < _found["credit"] < _found["width"],
+      f'{_found["credit"]} / {_found["width"]}')
+check("E95 payoff arithmetic still holds",
+      abs(_found["max_loss_per_contract"]
+          - (_found["width"] - _found["credit"]) * 100) < 1e-9)
+
+# an illiquid chain must yield NOTHING - the search never relaxes the floor
+_illiquid_oi = {s: 10 for s in _trap}
+check("E95 below the OI floor the search returns None",
+      search_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=_illiquid_oi, pricing="worst") is None)
+# a chain where every quote is wide must yield NOTHING
+_wide_only = {k: {"greeks": v["greeks"],
+                  "latestQuote": {"bp": 1.00, "ap": 2.00}} for k, v in _trap.items()}
+check("E95 when every quote is wide the search returns None",
+      search_vertical(_wide_only, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=_oi_all, pricing="worst") is None)
+check("E95 a sub-floor credit is rejected",
+      search_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=_oi_all, pricing="worst",
+                      min_credit=99.0) is None)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

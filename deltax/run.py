@@ -29,6 +29,7 @@ from deltax.screener import (
                              assess_regime, select_vertical, choose_expiry,
                              BENCHMARKS)
 from deltax.gates import evaluate, MIN_DTE, MAX_DTE
+from deltax import gates as _G
 
 # E50: four concurrent positions, chosen from eight ranked candidates. E44
 # measured that a capped-payoff short-premium book gets WORSE with more names -
@@ -724,10 +725,30 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                                       strike_gte=klo, strike_lte=khi)
             if not chain:
                 continue
-            cand = select_vertical(chain, side=side, target_delta=target,
-                                   width=DEFAULT_WIDTH.get(symbol, 5.0),
-                                   oi_by_symbol=oi)
+            # E95: search the chain instead of guessing one structure. The old
+            # call took the single strike nearest target delta and the single
+            # strike a width away; if that pair quoted badly the whole symbol
+            # was lost for the cycle, even when the same expiry held a dozen
+            # structures that pass every gate. Measured live: the point pick
+            # nominated QQQ puts at OI 226 (below the 500 floor) and QQQ calls
+            # at a 17% spread (above the 15% cap) while the search found OI 507
+            # and a 10% spread at a better credit, on the same chain.
+            from deltax.screener import search_vertical as _search
+            cand = _search(chain, side=side, target_delta=target,
+                           width=DEFAULT_WIDTH.get(symbol, 5.0),
+                           oi_by_symbol=oi,
+                           max_spread_pct=_G.MAX_SPREAD_PCT,
+                           min_credit=_G.MIN_CREDIT)
             if not cand:
+                # A genuine "nothing here is tradeable" - record it rather than
+                # skipping in silence, so an empty cycle can be told apart from
+                # a broken one (E84/E88).
+                ledger.record_raw({"action": "no_tradeable_structure",
+                                   "symbol": symbol, "side": side,
+                                   "expiry": expiry_str,
+                                   "note": "no (short,long) pair in the delta band "
+                                           "cleared the OI floor and spread cap"})
+                refused.append((symbol, side, "no_tradeable_structure"))
                 continue
             dec = evaluate(
                 symbol=symbol, equity=equity,

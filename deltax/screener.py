@@ -235,6 +235,105 @@ def _price_credit(short: dict, long_leg: dict, mode: str) -> float:
     return mid - SPREAD_HAIRCUT * combined
 
 
+def search_vertical(chain: dict, *, side: str, target_delta: float, width: float,
+                    oi_by_symbol: dict, pricing: str = None,
+                    max_spread_pct: float = 0.15,
+                    min_credit: float = 0.75) -> Optional[dict]:
+    """Search the chain for the best TRADEABLE vertical, instead of guessing one.
+
+    E95. select_vertical() makes a single point pick: the one strike nearest
+    target delta, then the one strike a width away. It never looks at anything
+    else, so if that particular pair happens to quote badly the whole symbol is
+    refused for the cycle - even when the same expiry holds dozens of structures
+    that would pass every gate. Across 972 logged candidates that produced 3
+    trades: they were not 972 candidates, they were 972 single guesses.
+
+    This enumerates every (short, long) pair that is actually eligible -
+    R3 delta band, real two-sided quotes, both legs above the open-interest
+    floor - and keeps the ones whose quotes can survive the hard microstructure
+    gates. Among those it maximises credit per dollar of risk, NET of the
+    round-trip cost of crossing both books, which is the quantity the strategy
+    actually earns:
+
+        score = (credit - roundtrip) / width
+
+    Nothing here relaxes a gate. It changes only WHICH candidate is nominated;
+    evaluate() still runs the full stack on whatever this returns. A symbol that
+    genuinely has no tradeable structure still returns None.
+    """
+    pricing = pricing or PRICING_MODE
+    rows = []
+    for sym, c in chain.items():
+        d, (bid, ask) = feeds.delta(c), feeds.quote(c)
+        if d is None or bid is None or ask is None or bid <= 0:
+            continue
+        strike = _strike_from(sym)
+        if strike is None:
+            continue
+        rows.append({"symbol": sym, "strike": strike, "delta": abs(d),
+                     "bid": bid, "ask": ask})
+    if not rows:
+        return None
+
+    lo, hi = DELTA_BAND
+    liquid = lambda r: oi_by_symbol.get(r["symbol"], 0) >= MIN_OPEN_INTEREST
+    shorts = [r for r in rows if lo <= r["delta"] <= hi and liquid(r)]
+    if not shorts:
+        return None
+
+    # A long leg must be further OTM than the short, and close enough to the
+    # requested width that the structure is still the one we intended to trade.
+    tol = max(1.0, width * 0.5)
+    best = None
+    for sh in shorts:
+        want = sh["strike"] - width if side == "put" else sh["strike"] + width
+        for lg in rows:
+            if lg is sh or not liquid(lg):
+                continue
+            if side == "put" and lg["strike"] >= sh["strike"]:
+                continue
+            if side == "call" and lg["strike"] <= sh["strike"]:
+                continue
+            if abs(lg["strike"] - want) > tol:
+                continue
+            w = abs(sh["strike"] - lg["strike"])
+            if w <= 0:
+                continue
+            credit = _price_credit(sh, lg, pricing)
+            if credit <= 0 or credit >= w:        # not a credit spread
+                continue
+            if credit < min_credit:
+                continue
+            worst = max(filter(None, [spread_pct(sh["bid"], sh["ask"]),
+                                      spread_pct(lg["bid"], lg["ask"])]),
+                        default=None)
+            if worst is None or worst > max_spread_pct:
+                continue
+            roundtrip = ((sh["ask"] - sh["bid"]) + (lg["ask"] - lg["bid"]))
+            # net edge per dollar of risk - what the structure actually pays
+            score = (credit - roundtrip) / w
+            if score <= 0:
+                continue
+            cand = {
+                "structure": "credit", "side": side,
+                "short": sh, "long": lg, "width": w, "credit": credit,
+                "max_loss_per_contract": (w - credit) * 100,
+                "max_profit_per_contract": credit * 100,
+                "worst_leg_spread_pct": worst,
+                "roundtrip_cost": roundtrip,
+                "open_interest": min(oi_by_symbol.get(sh["symbol"], 0),
+                                     oi_by_symbol.get(lg["symbol"], 0)),
+                "expiry": parse_expiry(sh["symbol"]),
+                "score": score,
+                "delta_distance": abs(sh["delta"] - target_delta),
+            }
+            # Best net edge; ties broken toward the requested delta.
+            key = (-score, cand["delta_distance"])
+            if best is None or key < (-best["score"], best["delta_distance"]):
+                best = cand
+    return best
+
+
 def select_vertical(chain: dict, *, side: str, target_delta: float, width: float,
                     oi_by_symbol: dict, pricing: str = None) -> Optional[dict]:
     """Pick the short strike nearest target delta, then the long leg one width away.
@@ -258,7 +357,21 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
     if not eligible:
         return None
 
-    short = min(eligible, key=lambda r: abs(r["delta"] - target_delta))
+    # E94: THE THROUGHPUT BOTTLENECK. oi_by_symbol was used only to REPORT open
+    # interest at the bottom of this function - never to choose a strike. So the
+    # short leg was picked purely on delta distance, which repeatedly landed on
+    # an odd strike carrying almost no open interest, and gate_liquidity then
+    # refused it. Across 972 logged candidates that produced 640 liquidity
+    # refusals and 3 trades, while the SAME expiry held 95 SPY strikes above the
+    # 500 floor (760 alone has 38,335) sitting a fraction of a delta away.
+    #
+    # The floor is not the problem and is not touched: this picks the nearest
+    # target-delta strike FROM the liquid ones, and falls back to the old
+    # behaviour when none qualify, so it can only ever nominate a better
+    # candidate. Every gate still runs on whatever comes out.
+    _liquid = [r for r in eligible
+               if oi_by_symbol.get(r["symbol"], 0) >= MIN_OPEN_INTEREST]
+    short = min(_liquid or eligible, key=lambda r: abs(r["delta"] - target_delta))
     # Long leg: prefer the exact width, but accept the nearest liquid strike
     # within a tolerance rather than abandoning an otherwise good candidate.
     want = short["strike"] - width if side == "put" else short["strike"] + width
@@ -271,7 +384,13 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
                      else (r["strike"] > short["strike"]))]
         if not near:
             return None
-        longs = [min(near, key=lambda r: abs(r["strike"] - want))]
+        # E94: the comment above has always said "nearest LIQUID strike", but
+        # nothing here consulted open interest. gate_liquidity scores the
+        # structure on min(short OI, long OI), so an illiquid long leg refuses
+        # the trade just as surely as an illiquid short one.
+        _near_liquid = [r for r in near
+                        if oi_by_symbol.get(r["symbol"], 0) >= MIN_OPEN_INTEREST]
+        longs = [min(_near_liquid or near, key=lambda r: abs(r["strike"] - want))]
     long_leg = longs[0]
     width = abs(short["strike"] - long_leg["strike"])   # actual, not requested
 
