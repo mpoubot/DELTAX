@@ -124,5 +124,18 @@ check("sells the high strike", lg[1].symbol.endswith("00145000") and lg[1].side 
 check("legs open positions",
       all(l.to_dict()["position_intent"].endswith("_to_open") for l in lg))
 
+print("\n── E63: exits and flatten are wired as CLOSING orders ──")
+_run = open("deltax/run.py").read()
+_exe = open("deltax/execute.py").read()
+check("submit() supports close=True", "close: bool = False" in _exe)
+check("close path uses build_close_args", "build_close_args(legs, qty, limit_price) if close" in _exe)
+check("catalyst exit submits close=True", "close=True,\n                            context={\"strategy\": \"E58 catalyst exit\"" in _run
+      or ('close=True' in _run and 'E58 catalyst exit' in _run))
+check("Thursday flatten exists at <=1 DTE", "E63 Thursday flatten" in _run and "_dte <= 1" in _run)
+check("flatten limit floors at 0.05", "max(0.05" in _run)
+check("only OPENING orders block an add-on", "_to_close" in _run and "def _opens" in _run)
+check("flatten stop is clean control flow, not an error",
+      "except StopIteration" in _run)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

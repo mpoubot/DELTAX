@@ -158,11 +158,60 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 from deltax.feeds import (previous_close as _pc,
                                           latest_price as _lp,
                                           intraday_vwap as _vw)
-                _pending_uso = any(
-                    str(_o.get("symbol", "")).startswith(_u)
-                    or any(str(_l.get("symbol", "")).startswith(_u)
-                           for _l in (_o.get("legs") or []))
-                    for _o in feed.open_orders())
+
+                # E63: the DETERMINISTIC Thursday flatten. The sweep passes
+                # dte=None so the time stop never fires there, and manage()
+                # only records closes - it does not submit them. This is the
+                # enforcement of "never hold through NFP Friday": at <= 1 DTE,
+                # close the spread at a conservative live limit and stop.
+                _dte = (_cat.EXPIRY - today).days
+                if _dte <= 1:
+                    try:
+                        _vq = _cat.price_vertical(feed)
+                        # closing collects the spread's bid side: long bid
+                        # minus short ask, floored so a broken quote cannot
+                        # produce a nonsense limit.
+                        _lb = 0.0; _sa = 0.0
+                        _chz = feed.option_chain(_u, option_type="call",
+                            expiry_gte=str(_cat.EXPIRY), expiry_lte=str(_cat.EXPIRY),
+                            strike_gte=_cat.LONG_STRIKE - 1,
+                            strike_lte=_cat.SHORT_STRIKE + 1)
+                        _lqz = (_chz.get(_vq.long_symbol) or {}).get("latestQuote") or {}
+                        _sqz = (_chz.get(_vq.short_symbol) or {}).get("latestQuote") or {}
+                        _lb = _lqz.get("bp") or 0.0
+                        _sa = _sqz.get("ap") or 0.0
+                        _close_limit = max(0.05, round(_lb - _sa - 0.03, 2))
+                        _held_qty = 0
+                        for _p_ in feed.positions():
+                            if _p_.get("symbol") == _vq.long_symbol:
+                                _held_qty = int(abs(float(_p_.get("qty") or 0)))
+                        if _held_qty >= 1:
+                            _rec = execute.submit(
+                                _cat.legs_for(_vq), _held_qty, _close_limit,
+                                dry_run=dry_run, close=True,
+                                context={"strategy": "E63 Thursday flatten",
+                                         "dte": _dte})
+                            ledger.record_raw(_rec)
+                            catalyst_result = {"flattened": _held_qty,
+                                               "limit": _close_limit,
+                                               "result": _rec.get("result")}
+                            _added = True      # suppresses the skip record
+                    except Exception as _fe:
+                        ledger.record_raw({"action": "catalyst_flatten_failed",
+                                           "error": f"{type(_fe).__name__}: {str(_fe)[:120]}"})
+                    # at <= 1 DTE never consider adding, whatever happened above
+                    raise StopIteration
+
+                # E63: only orders that OPEN positions block an add-on. The
+                # resting *_to_close exit must not - it rests for the whole
+                # life of the position and would make escalation dead code.
+                def _opens(_o):
+                    _lgs = _o.get("legs") or [_o]
+                    return any(str(_l.get("symbol", "")).startswith(_u)
+                               and not str(_l.get("position_intent", "")
+                                           ).endswith("_to_close")
+                               for _l in _lgs)
+                _pending_uso = any(_opens(_o) for _o in feed.open_orders())
                 _sn = feed.snapshots([_u]).get(_u) or {}
                 _on, _why = _cat.catalyst_active(_pc(_sn), _lp(_sn))
                 if not _pending_uso and _on:
@@ -233,6 +282,8 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                                            "posterior": _post.p, "band": _band,
                                            "committed": _committed_uso,
                                            "added": _added})
+            except StopIteration:
+                pass                     # E63 flatten path: clean stop, not a failure
             except Exception as _ae:
                 ledger.record_raw({"action": "catalyst_addon_failed",
                                    "error": f"{type(_ae).__name__}: {str(_ae)[:120]}"})
@@ -346,10 +397,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                     # Exit rests immediately, exactly as the income book does:
                     # a target that needs someone awake is not a target (E5).
                     if str(_rec.get("result", "")).startswith(("SUBMITTED", "DRY_RUN")):
+                        # E63: the exit is a CLOSING order - close=True flips
+                        # the entry legs, stamps *_to_close, and rests GTC so
+                        # it survives into Thursday. A raw-leg exit carried
+                        # *_to_open intents and died at the day's end.
                         _ex = execute.submit(
-                            [execute.Leg(_v.short_symbol, "buy", 1),
-                             execute.Leg(_v.long_symbol, "sell", 1)],
-                            _v.contracts, _v.exit_limit, dry_run=dry_run,
+                            _legs, _v.contracts, _v.exit_limit,
+                            dry_run=dry_run, close=True,
                             context={"strategy": "E58 catalyst exit",
                                      "target_multiple": _cat.TARGET_MULTIPLE})
                         ledger.record_raw(_ex)

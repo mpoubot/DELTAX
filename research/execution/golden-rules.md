@@ -1802,3 +1802,34 @@ expiries. A `limit` parameter is a correctness boundary, not a performance knob.
 **Special rule for this position.** Sep 4 is NFP Friday. The 1-DTE time stop
 closes the book Thursday, so the position cannot hold through the print; the
 resting 2× exit may end it sooner. Friday-morning risk is structurally excluded.
+
+## E63 — "Make it bulletproof" found the exit that didn't exist
+
+The sign-off audit hunted bugs in the code written TONIGHT, not in the old
+green tests. Three found, all in the catalyst path, one critical:
+
+1. **The position had no working exit.** `manage()` only *records* closes — it
+   has never submitted one; the resting GTC order is the only real exit any
+   position has. The catalyst exit was submitted as raw legs, which stamped
+   `*_to_open` intents and defaulted to day-only lifetime. It would have died
+   at Wednesday's close, leaving the spread to ride through NFP Friday — the
+   exact scenario every summary promised was impossible. Fixed:
+   `execute.submit(close=True)` routes through `build_close_args` (flipped
+   sides, `*_to_close`, GTC). Verified in the ledger.
+2. **The Thursday time stop was a promise, not code.** The sweep passes
+   `dte=None`, so `TIME_STOP_DTE` never fires. Replaced with a deterministic
+   flatten in the catalyst block: at ≤ 1 DTE, close the whole spread at a
+   conservative live limit (long bid − short ask − buffer, floored at $0.05).
+   Simulated for both Thursday and Friday: fires at 50 × $1.74.
+3. **The escalation add-on was dead code.** The pending-order guard counted the
+   resting exit as a blocking order, and an exit rests for the position's whole
+   life. Only `*_to_open` orders block now; simulated both ways.
+
+**Rule.** "All tests green" measures the code you tested, not the code you
+wrote tonight. A sign-off audit reads tonight's diff and asks of each promise
+in the summaries: *where is the line that does this?* Three promises had no
+line.
+
+**Rule.** A system whose closes are records and whose exits are resting orders
+has exactly one exit mechanism. Anything that weakens a resting order — wrong
+intent, day tif, wrong sign — silently removes the only exit there is.

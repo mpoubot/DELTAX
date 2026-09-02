@@ -110,8 +110,15 @@ def orders_enabled() -> bool:
 
 
 def submit(legs: list, qty: int, limit_price: float, *, ledger=None,
-           context: Optional[dict] = None, dry_run: bool = True) -> dict:
+           context: Optional[dict] = None, dry_run: bool = True,
+           close: bool = False) -> dict:
     """Submit a multi-leg order, or describe what would be submitted.
+
+    close=True builds a CLOSING order from the ORIGINAL entry legs:
+    build_close_args flips the sides, stamps *_to_close intents, and rests it
+    GTC. E63: the catalyst exit was first submitted as raw legs - which
+    carried *_to_open intents and day-only lifetime, leaving the position
+    with no working exit at all. Closing orders must go through this path.
 
     Returns a record dict either way. Refusals raise ExecutionRefused, which
     is recorded before it propagates.
@@ -123,12 +130,15 @@ def submit(legs: list, qty: int, limit_price: float, *, ledger=None,
     _g = gate_trading_enabled()
     if not _g.passed:
         raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
-    args = build_mleg_args(legs, qty, limit_price)
+    args = (build_close_args(legs, qty, limit_price) if close
+            else build_mleg_args(legs, qty, limit_price))
     record = {
-        "action": "submit",
+        "action": "submit_close" if close else "submit",
         "qty": qty,
         "limit_price": round(limit_price, 2),
-        "legs": [l.to_dict() for l in legs],
+        # record the legs AS SUBMITTED - for a close that means flipped sides
+        # and *_to_close intents, not the entry legs that were passed in
+        "legs": json.loads(args[args.index("--legs") + 1]),
         "command": "alpaca " + " ".join(args),
         "dry_run": dry_run,
         "context": context or {},
