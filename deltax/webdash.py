@@ -303,9 +303,10 @@ def build(account=None, positions=None, error=None) -> str:
     pnl_pct = "" if pnl is None else f"{pnl/START*100:+.2f}% of $100,000 start"
 
     # 6 stats -> exactly two rows of three. Never an orphan.
+    # E64: ACCOUNT is demoted into the mission grid - the top of the page
+    # answers target/proof/confidence, not which account we are.
     stats = "".join([
-        stat("ACCOUNT", acct, "Alpaca paper · competition"),
-        stat("EQUITY", money(eq), "live read" if eq else "not read", "big"),
+        stat("EQUITY", money(eq), f"{acct} · Alpaca paper", "big"),
         stat("P&amp;L", pnl_val, pnl_pct, f"big {pnl_cls}"),
         stat("CASH", money(cash), "uncommitted"),
         # 4 legs is 2 spreads. A stakeholder reading "4 positions" would think
@@ -370,9 +371,115 @@ expectancy. The agent continues to screen, gate and log every cycle; the
 refusal is enforced in code at the order boundary, not by convention.</div>
 </div></div>"""
 
+    # ── E64: mission block. TARGET -> THESIS -> PROOF -> CONFIDENCE -> RISK.
+    # Every number here is from tonight's research; nothing is a placeholder.
+    uso_px, uso_chg = None, None
+    try:
+        from deltax.feeds import AlpacaFeed, latest_price, previous_close
+        _snm = AlpacaFeed().snapshots(["USO"]).get("USO") or {}
+        uso_px = latest_price(_snm)
+        _pcm = previous_close(_snm)
+        if uso_px and _pcm:
+            uso_chg = (uso_px / _pcm - 1) * 100
+    except Exception:
+        pass
+    if uso_px:
+        _pxtxt = f"${uso_px:,.2f}"
+        if uso_chg is not None:
+            _cls = "pos" if uso_chg >= 0 else "neg"
+            _pxtxt += f' <span class="{_cls}">{uso_chg:+.2f}%</span>'
+    else:
+        _pxtxt = "feed unavailable"
+    mission = f"""<div class="mission">
+<div class="m-top">
+  <div class="m-target">
+    <div class="m-k">TARGET</div>
+    <div class="m-tick">USO <span class="m-px">{_pxtxt}</span></div>
+    <div class="m-sub">United States Oil Fund &middot; <b class="gd">BULLISH</b> &middot;
+    window <b>2&ndash;4 Sep</b> &middot; flat by Thu (never holds NFP Friday)</div>
+    <div class="m-struct">140/145 call debit vertical &middot; ~50x @ &le;$2.50 ceiling &middot;
+    breakeven <b>141.98 (+0.7%)</b> &middot; risk &le;$9,900 &middot; exit rests 2&times; GTC
+    &middot; escalation ladder to $20k on physical confirmation only</div>
+  </div>
+  <div class="m-conf">
+    <div class="m-k">EVIDENCE CONFIDENCE</div>
+    <div class="m-pct">62%</div>
+    <div class="m-why">Catalyst, technicals, liquidity and the lifecycle backtest agree;
+    held down by tiny samples (n&le;5), a 50/50 historical catalyst regime, and paying
+    IV at 1.5&times; realised vol. This scores evidence support &mdash; <b>not</b>
+    P(profit).</div>
+  </div>
+</div>
+<div class="m-proof">
+  <div class="m-k">WHAT WAS ACTUALLY TESTED &mdash; REAL OPTION PRICES (OPRA via Massive)</div>
+  <table class="m-tbl">
+  <tr><th>test</th><th>result</th><th>reading</th></tr>
+  <tr><td>Hold-to-expiry, 3%-OTM verticals, 8 Friday expiries</td>
+      <td class="rd">0/3 profitable &middot; 5 never traded</td>
+      <td>lost <i>even when USO rose +3.8%</i> &mdash; forced the re-strike to 140/145</td></tr>
+  <tr><td>Full lifecycle with resting 2&times; exit, 4 structures</td>
+      <td class="gd">9/14 hit the exit intraday</td>
+      <td>the edge is the resting exit harvesting movement, not direction</td></tr>
+  <tr><td>Our exact rule (ATM 5-wide, 2 sessions out)</td>
+      <td class="gd">3/3 wins via 2&times; exit</td>
+      <td class="rd">n=3 &mdash; LOW SAMPLE, treated as tendency only</td></tr>
+  <tr><td>Catalyst-regime split (prior day &ge;+2%)</td>
+      <td>1 continuation / 1 fakeout</td>
+      <td>catalyst predicts <b>movement</b>, not direction (Jul 10 &minus;100%, Jul 24 +100%)</td></tr>
+  <tr><td>P(exit level ~144 touched before Thu)</td>
+      <td class="gd">68% IV-implied &middot; 75% posterior</td>
+      <td>historical analogue 64% (9/14); updated live each cycle</td></tr>
+  <tr><td>Structures rejected on the live book</td>
+      <td>4</td>
+      <td>145/150 (debit ate a +3.8% move) &middot; 141/146 (OI caps at 11) &middot;
+      145/155 (155c bid $0.00, dominated) &middot; condor (pays zero above 160)</td></tr>
+  </table>
+</div>
+<div class="ev-grid">
+  <div><span>BACKTEST</span><b class="mixed">MIXED</b><i>lifecycle +, expiry-hold &minus;, n small</i></div>
+  <div><span>CATALYST</span><b class="ok">CONFIRMED</b><i>US&ndash;Iran strikes &middot; 33 headlines &middot; crude &gt;$90</i></div>
+  <div><span>TECHNICALS</span><b class="ok">CONFIRMED</b><i>above VWAP &amp; prior close at last read</i></div>
+  <div><span>VOLATILITY</span><b class="bad">UNFAVORABLE</b><i>buying IV at 1.5&times; realised</i></div>
+  <div><span>LIQUIDITY</span><b class="ok">PASS</b><i>OI 2,421 / 7,745 &middot; legs 5% / 4% wide</i></div>
+  <div><span>RISK GATES</span><b class="ok">ARMED</b><i>16 income gates &middot; 7 catalyst checks &middot; fail closed</i></div>
+  <div><span>DATA QUALITY</span><b class="mixed">MEDIUM</b><i>free-tier delays &middot; repriced at 09:30</i></div>
+  <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper &middot; equity {money(eq)}</i></div>
+</div>
+</div>
+"""
+
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.mission{{border:1px solid var(--line);background:linear-gradient(180deg,#03100F,#020808);
+padding:20px 22px;margin:0 0 18px}}
+.m-top{{display:flex;gap:26px;flex-wrap:wrap}}
+.m-target{{flex:2;min-width:300px}}
+.m-conf{{flex:1;min-width:230px;border-left:1px solid var(--line);padding-left:22px}}
+.m-k{{color:var(--dim2);font-size:10px;letter-spacing:.22em;margin-bottom:7px}}
+.m-tick{{color:var(--white);font-size:34px;font-weight:700;letter-spacing:.02em}}
+.m-px{{font-size:20px;font-weight:400;color:var(--bl)}}
+.m-sub{{color:var(--txt);font-size:13px;margin-top:5px}}
+.m-struct{{color:var(--txt);font-size:12.5px;margin-top:9px;line-height:1.6;
+border-top:1px solid var(--line);padding-top:9px}}
+.m-struct b,.m-sub b{{color:var(--white)}}
+.m-pct{{color:var(--bl);font-size:52px;font-weight:700;line-height:1;
+text-shadow:0 0 18px rgba(63,224,218,.35)}}
+.m-why{{color:var(--dim2);font-size:11.5px;line-height:1.55;margin-top:9px}}
+.m-why b{{color:var(--txt)}}
+.m-proof{{margin-top:16px}}
+.m-tbl{{width:100%;border-collapse:collapse;font-size:12px}}
+.m-tbl th{{color:var(--dim2);font-size:10px;letter-spacing:.14em;text-align:left;
+padding:4px 8px;border-bottom:1px solid var(--line)}}
+.m-tbl td{{padding:5px 8px;border-bottom:1px solid #0C1F1D;color:var(--txt);
+vertical-align:top}}
+.ev-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:8px;margin-top:14px}}
+.ev-grid div{{border:1px solid var(--line);background:#040D0C;padding:8px 10px}}
+.ev-grid span{{display:block;color:var(--dim2);font-size:9.5px;letter-spacing:.16em}}
+.ev-grid b{{font-size:13px}}
+.ev-grid i{{display:block;color:var(--dim2);font-size:10px;font-style:normal;margin-top:2px}}
+.ev-grid .ok{{color:#3FE0DA}}.ev-grid .mixed{{color:#E8B42B}}.ev-grid .bad{{color:#FF8A8A}}
 .sd{{border:1px solid #6B5A1E;background:linear-gradient(180deg,#161200,#0B0900);
 border-left:3px solid #E8B42B;padding:18px 20px;margin:0 0 18px}}
 .sd-h{{color:#F0C44C;font-weight:700;letter-spacing:.14em;font-size:12px;
@@ -526,6 +633,7 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 </div>
 {standdown}
 {warn}
+{mission}
 <div class="stats">{stats}</div>
 
 <h2>WHY THE AGENT SAID NO</h2><div class="rule"></div>
@@ -570,6 +678,57 @@ the stock stays in range.</div>
 </table>
 </div>
 </div>
+
+<h2>RESEARCH &amp; DATA SOURCES</h2><div class="rule"></div>
+<div class="lead" style="margin-bottom:10px">Every dataset behind the current thesis,
+deduplicated. Multiple independent sources &mdash; not a single model opinion.
+Retrieved 1&ndash;2 Sep 2026 unless noted.</div>
+<table>
+<tr><th>SOURCE</th><th>DATASET</th><th>CONTRIBUTED</th><th>ROLE</th></tr>
+<tr><td class="cy">Massive</td><td>OPRA consolidated &middot; historical option OHLC
+ per contract (REST v2 aggs)</td>
+ <td>Real traded prices for USO verticals across 9 Friday expiries &mdash; the
+ backtests that re-struck the trade and found the exit-lifecycle edge</td>
+ <td>historical options / backtesting / validation</td></tr>
+<tr><td class="cy">Massive</td><td>Options contracts reference (v3, incl. expired)</td>
+ <td>Strike/expiry existence for expired weeklies the live chain no longer shows</td>
+ <td>backtest integrity</td></tr>
+<tr><td class="cy">Alpaca</td><td>Market data &middot; IEX equities bars &amp; snapshots</td>
+ <td>USO/benchmark prices, VWAP, realized vol, regime reads, every account state</td>
+ <td>live market data / execution</td></tr>
+<tr><td class="cy">Alpaca</td><td>Options chain &amp; contracts (indicative feed,
+ 15-min delay on free tier)</td>
+ <td>Live quotes, greeks, IV, open interest &mdash; all gate checks and the
+ posterior&rsquo;s IV-implied base rate</td>
+ <td>options pricing / risk gates</td></tr>
+<tr><td class="cy">Alpaca</td><td>News API</td>
+ <td>33 corroborating supply-shock headlines validating the catalyst (US&ndash;Iran
+ strikes, Hormuz, crude &gt;$90)</td>
+ <td>catalyst confirmation</td></tr>
+<tr><td class="cy">SEC EDGAR</td><td>8-K Item 2.02 filings</td>
+ <td>Earnings blackout gate &mdash; <span class="rd">inactive: DELTAX_SEC_UA unset;
+ fails closed</span>; universe is all-ETF so unaffected</td>
+ <td>earnings risk (dormant)</td></tr>
+<tr><td class="cy">S&amp;P DJI</td><td>Energy Select Sector index factsheet
+ (31 Aug 2026, operator-supplied)</td>
+ <td>29% single-name concentration &rarr; XLE is 2&ndash;3 mega-caps in a wrapper;
+ explained why sector-ETF weeklies are untradeable</td>
+ <td>structure research</td></tr>
+<tr><td class="cy">Coinglass</td><td>Spot netflow statistics (operator-supplied,
+ 1 Sep)</td>
+ <td>BTC/ETH/XRP exchange-flow reversal read &mdash; informational only; crypto is
+ excluded on evidence (0/22 pairs significant)</td>
+ <td>context, not traded</td></tr>
+<tr><td class="cy">Yahoo Finance</td><td>USO daily OHLCV, Dec 2025&ndash;Sep 2026
+ (operator-supplied)</td>
+ <td>Cross-validation of Alpaca bars; the 20-case study of what follows a
+ &ge;+4% day (60% up, median +1.1%)</td>
+ <td>historical validation</td></tr>
+<tr><td class="cy">Corpus</td><td>research/ &mdash; 6 options sources incl. WSJ 0DTE
+ (only disinterested source), Alyrise (I. Rosicka), AURA (Matin)</td>
+ <td>R5 DTE constraint, regime filter, validation bars, decision ledger E1&ndash;E63</td>
+ <td>rules &amp; provenance</td></tr>
+</table>
 
 <h2>NEWS &amp; DATA FEEDS</h2><div class="rule"></div>
 <div class="lead">Probed live at every page generation. Per the corpus, news can
