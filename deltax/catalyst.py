@@ -27,15 +27,28 @@ from typing import Optional
 
 UNDERLYING     = "USO"
 EXPIRY         = date(2026, 9, 4)
-LONG_STRIKE    = 145.0
-SHORT_STRIKE   = 150.0
+# E59: re-struck from 145/150 after the first real-price backtest showed the
+# 3%-OTM structure losing even when USO rose +3.8% into expiry - the breakeven
+# sat too far out and the debit ate the move. 140/145 puts the breakeven at
+# ~+0.7% instead of +3.4%. (141/146 was the first choice but its legs carry
+# OI 310/239, capping size at 11 spreads under the 5%-of-OI rule; the
+# liquidity lives at the 140 and 145 strikes: 2,421/7,745.)
+LONG_STRIKE    = 140.0
+SHORT_STRIKE   = 145.0
 
 RISK_BUDGET    = 10_000.0   # total dollars at risk; the debit IS the max loss
-MAX_DEBIT      = 1.00       # ceiling per spread. Above this, NO TRADE.
+# Ceiling keeps the payoff at worst 1:1 (width 5 - 2.50 = 2.50 max profit) and
+# the breakeven at worst 142.50. A debit above this means USO already gapped
+# and the entry edge is gone - NO TRADE rather than chase.
+MAX_DEBIT      = 2.50
 MIN_LEG_OI     = 500        # both legs, independently
 MAX_LEG_SPREAD = 0.35       # worst leg bid/ask as a fraction of mid
 MAX_OI_FRACTION = 0.05      # never take more than 5% of a leg's open interest
-TARGET_MULTIPLE = 3.0       # resting exit at 3x the debit paid
+# E59 also caught: 3x a $1.98 debit is $5.94 - ABOVE the $5 width, an exit that
+# could never fill. The target is a multiple capped at 90% of width, so the
+# resting order is always inside the structure's possible value.
+TARGET_MULTIPLE = 2.0
+TARGET_WIDTH_CAP = 0.90     # exit never above this fraction of the width
 
 # A move this size in the underlying, on the session before entry, is what marks
 # the shock as live rather than remembered.
@@ -192,7 +205,7 @@ def price_vertical(feed, *, underlying: str = UNDERLYING, expiry: date = EXPIRY,
     v.max_loss = round(debit * 100 * contracts, 2)
     v.max_profit = round((width - debit) * 100 * contracts, 2)
     v.breakeven = round(long_strike + debit, 2)
-    v.exit_limit = round(debit * TARGET_MULTIPLE, 2)
+    v.exit_limit = round(min(debit * TARGET_MULTIPLE, width * TARGET_WIDTH_CAP), 2)
     v.reason = (f"{contracts}x {long_strike:.0f}/{short_strike:.0f} @ ${debit:.2f} "
                 f"- risk ${v.max_loss:,.0f}, max ${v.max_profit:,.0f}")
     v.detail.update({"width": width, "long_ask": la, "short_bid": sb,
