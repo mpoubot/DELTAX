@@ -361,9 +361,10 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
                                       expiry_lte=lte, strike_gte=strike_lo,
                                       strike_lte=strike_hi, limit=1000)
     by_exp: dict = {}
+    LAST_UNREADABLE_OI.clear()          # E88: per-call, read by run.py below
     for c in contracts:
         by_exp.setdefault(c["expiration_date"], {})[c["symbol"]] = _as_int(
-            c.get("open_interest"))
+            c.get("open_interest"), LAST_UNREADABLE_OI)
     for exp in sorted(by_exp):                      # ascending date = nearest first
         oi = by_exp[exp]
         liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
@@ -389,11 +390,29 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
     return (best[0], best[1]) if best else None
 
 
-def _as_int(v) -> int:
-    """Alpaca returns open_interest as a string; normalise to int."""
+# E88: raw open-interest values that could not be read on the most recent
+# choose_expiry() call. `_as_int` returns 0 for these, which is the SAFE
+# direction - gate_liquidity refuses on 0 exactly as it refuses on None - but 0
+# is indistinguishable from a genuinely illiquid strike. That mattered at the
+# `liquid` count below: a chain whose OI field was garbled looked exactly like a
+# chain that is legitimately thin, so the expiry was skipped and the symbol
+# dropped with nobody told. Same dark-silent shape as E83/E84; recorded here so
+# run.py can say WHICH it was.
+LAST_UNREADABLE_OI: list = []
+
+
+def _as_int(v, bad: "list | None" = None) -> int:
+    """Alpaca returns open_interest as a string; normalise to int.
+
+    Returns 0 when the value cannot be read. That fails closed downstream, but
+    `bad` (when supplied) records the raw value so an unreadable chain can be
+    told apart from an illiquid one.
+    """
     try:
         return int(float(v))
     except (TypeError, ValueError):
+        if bad is not None:
+            bad.append(repr(v)[:40])
         return 0
 
 

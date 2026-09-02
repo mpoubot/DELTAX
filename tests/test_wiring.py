@@ -207,5 +207,28 @@ check("E87 both production callers pass roundtrip_cost",
       and "roundtrip_cost=cand" in open(os.path.join(os.path.dirname(__file__), "..",
           "deltax", "screener.py")).read())
 
+print("\n── E89: an unreadable account must not render as a total loss ──")
+# A failed feed.account() degraded to eq = csh = 0.0, and the board rendered
+# "$0.00 (-100.0% today)" and "net -100,000.00 vs $100,000 start". A transient
+# API timeout was displayed to the team - and on the public board to the
+# judges - as the fund having lost everything.
+from deltax import report as _rep
+_h = _rep.header(None, None, market_open=False)
+check("E89 header renders None as unavailable", "unavailable" in _h, _h[-90:])
+check("E89 header does NOT claim -100%", "-100.0" not in _h, _h[-90:])
+check("E89 header does NOT show $0.00", "$0.00" not in _h, _h[-90:])
+_sb = _rep.scoreboard(None, 0.0, 0.0)
+check("E89 scoreboard reports the read failure", "unreadable" in _sb, _sb)
+check("E89 scoreboard does NOT print a -100,000 net", "100,000.00" not in _sb, _sb)
+# a real equity must still render normally
+_h2 = _rep.header(98_943.18, 102_719.0, market_open=True)
+check("E89 a real equity still renders", "98,943.18" in _h2, _h2[-90:])
+_sb2 = _rep.scoreboard(98_943.18, 0.0, 0.0)
+check("E89 and its net still computes", "1,056" in _sb2 or "1,057" in _sb2, _sb2)
+check("E89 run.py records the account read failure",
+      "account_read_failed" in _run_src)
+check("E89 run.py no longer zeroes equity on failure",
+      "eq = csh = 0.0" not in _run_src)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

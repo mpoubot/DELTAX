@@ -201,6 +201,7 @@ check("missing data still fails closed at 3/3",
 
 print("\n── E50: vol-premium ranking ──")
 from deltax.screener import rank_by_vol_premium, vol_premium, realized_vol_20
+from deltax.screener import _as_int, LAST_UNREADABLE_OI
 
 class _FakeFeed:
     """IV/RV is controllable per symbol; one symbol is deliberately broken."""
@@ -235,6 +236,24 @@ check("realized vol survives a broken feed",
       realized_vol_20(ff, "BOOM") is None)
 check("ranking with no spots keeps every name",
       len(rank_by_vol_premium(ff, ["RICH", "MID"], "2026-09-04", {})) == 2)
+
+print("\n-- E88: an unreadable OI must be distinguishable from a thin one --")
+# _as_int returns 0 for garbage, which fails closed correctly at gate_liquidity.
+# But 0 and "unknown" are different facts: a chain whose OI field is garbled
+# looks exactly like a legitimately illiquid chain, so choose_expiry skipped the
+# symbol for a DATA fault while reporting nothing.
+_bad = []
+check("E88 a readable value still parses", _as_int("1500", _bad) == 1500)
+check("E88 a readable value records nothing", _bad == [], str(_bad))
+check("E88 unreadable still returns 0 (fails closed downstream)",
+      _as_int("n/a", _bad) == 0)
+check("E88 and the raw value is recorded", len(_bad) == 1, str(_bad))
+check("E88 None is recorded too", _as_int(None, _bad) == 0 and len(_bad) == 2, str(_bad))
+check("E88 the accumulator exists for choose_expiry to fill",
+      isinstance(LAST_UNREADABLE_OI, list))
+_rs = open(os.path.join(os.path.dirname(__file__), "..", "deltax", "run.py")).read()
+check("E88 run.py distinguishes the two refusal reasons",
+      "unreadable_oi" in _rs and "no_liquid_expiry" in _rs)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

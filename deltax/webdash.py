@@ -467,7 +467,7 @@ refusal is enforced in code at the order boundary, not by convention.</div>
 <div class="m-hero">
   <div>
     <div class="m-k">LIVE BOOK &middot; 3 STRATEGIES</div>
-    <div class="m-big">{money(eq)} <span class="sm {_plc(pnl or 0)}">{_pct(pnl or 0)}</span></div>
+    <div class="m-big">{money(eq)} <span class="sm {_plc(pnl or 0)}">{"&mdash;" if pnl is None else _pct(pnl)}</span></div>
     <div class="m-line" style="margin-top:2px"><span class="dim">{pnl_val} vs $100,000 start</span></div>
     <div class="m-line"><b>Options income</b> (credit spreads, 17 gates) &middot;
     <b>Catalyst</b> (defined-risk verticals on a supply shock) &middot;

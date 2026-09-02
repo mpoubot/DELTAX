@@ -697,6 +697,25 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             klo, khi = round(px*lo, 2), round(px*hi, 2)
             picked = choose_expiry(feed, symbol, side, gte, lte, klo, khi)
             if not picked:
+                # E88: a bare `continue` here could not distinguish "no expiry
+                # is liquid enough" - a real, expected outcome - from "the
+                # chain's open-interest field was unreadable", which makes every
+                # strike look illiquid and drops the symbol with nobody told.
+                # _as_int returns 0 for unreadable values, which fails closed
+                # correctly, but 0 and "unknown" are not the same fact.
+                from deltax.screener import LAST_UNREADABLE_OI as _bad_oi
+                if _bad_oi:
+                    ledger.record_raw({
+                        "action": "expiry_skipped_unreadable_oi",
+                        "symbol": symbol, "side": side,
+                        "unreadable_values": _bad_oi[:8],
+                        "unreadable_count": len(_bad_oi),
+                        "consequence": "every strike counted as illiquid - the "
+                                       "symbol was skipped for a DATA fault, not "
+                                       "a liquidity one"})
+                    refused.append((symbol, side, "unreadable_oi"))
+                else:
+                    refused.append((symbol, side, "no_liquid_expiry"))
                 continue
             expiry_str, oi = picked
             # One expiry per query - the endpoint pages by expiry then strike.
@@ -807,8 +826,15 @@ if __name__ == "__main__":
         try:
             acct = feed.account()
             eq, csh = float(acct.get("equity") or 0), float(acct.get("cash") or 0)
-        except Exception:
-            eq = csh = 0.0
+        except Exception as _ae:
+            # E89: this degraded to 0.0, which the board rendered as
+            # "$0.00 (-100.0% today)" and "net -100,000.00" - a transient API
+            # failure shown to the team, and on the public board to the judges,
+            # as total loss of the fund. None means "not read".
+            eq = csh = None
+            led.record_raw({"action": "account_read_failed",
+                            "error": f"{type(_ae).__name__}: {str(_ae)[:120]}",
+                            "consequence": "board shows account unavailable"})
         # E75: the clock is read AGAIN here, and it sat outside the try above.
         # That is how the 2 Sep traceback actually reached the terminal: the
         # clock failed inside run(), run() returned "skipped", and this line
@@ -828,8 +854,11 @@ if __name__ == "__main__":
     try:
         acct = feed.account()
         eq, csh = float(acct.get("equity") or 0), float(acct.get("cash") or 0)
-    except Exception:
-        eq = csh = 0.0
+    except Exception as _ae:
+        eq = csh = None                     # E89: see above - never render 0.0
+        led.record_raw({"action": "account_read_failed",
+                        "error": f"{type(_ae).__name__}: {str(_ae)[:120]}",
+                        "consequence": "board shows account unavailable"})
     r = out["regime"]
     events = [("open", sym, f"OPENED {side} · {ct} ct · credit ${cr*100*ct:,.0f} → {res}")
               for sym, side, ct, cr, ml, res in out["traded"]]
