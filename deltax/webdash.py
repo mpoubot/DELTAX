@@ -235,6 +235,46 @@ def _equity_chart(history=None):
 </svg></div>"""
 
 
+def _market_status():
+    """Session state and how long is left in it.
+
+    Four states, not two: a board that says only OPEN or CLOSED cannot explain
+    why the agent is awake at 7am or idle at 5pm. US equity options trade
+    09:30-16:00 ET; the 04:00-09:30 and 16:00-20:00 windows are extended hours,
+    when quotes exist but are thin - the agent screens then and does not trade.
+
+    Returns (state, detail, is_open). Never raises; a clock cannot be allowed to
+    take the board down.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    ET = _tz(_td(hours=-4))
+    try:
+        now = _dt.now(ET)
+        o = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        c = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        pre = now.replace(hour=4, minute=0, second=0, microsecond=0)
+        post = now.replace(hour=20, minute=0, second=0, microsecond=0)
+
+        def _left(target):
+            m = int(max((target - now).total_seconds(), 0) // 60)
+            return f"{m // 60}h {m % 60}m" if m >= 60 else f"{m}m"
+
+        if now.weekday() >= 5:
+            d = (7 - now.weekday()) % 7 or 1
+            return ("CLOSED", f"weekend &middot; opens Monday 9:30 am", False)
+        if now < pre:
+            return ("CLOSED", f"opens in {_left(o)}", False)
+        if now < o:
+            return ("PRE-MARKET", f"regular session opens in {_left(o)}", False)
+        if now < c:
+            return ("OPEN", f"closes in {_left(c)}", True)
+        if now < post:
+            return ("AFTER HOURS", f"extended trading ends in {_left(post)}", False)
+        return ("CLOSED", "opens 9:30 am tomorrow", False)
+    except Exception:
+        return ("&mdash;", "", False)
+
+
 def _forecast():
     """What the agent expects at judging, and how confident that is.
 
@@ -757,13 +797,13 @@ refusal is enforced in code at the order boundary, not by convention.</div>
         _book_rows += (f'<tr><td class="cy">{root}</td>'
                        f'<td>{len(legs)} legs &middot; {len(legs)//2} spread(s)</td>'
                        f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
-                       f'<td class="num {_plc(pl)}">{_pct(pl)}</td></tr>')
+                       f'</tr>')
     for p_ in _eq_legs:
         pl = _pl([p_])
         _book_rows += (f'<tr><td class="cy">{p_.get("symbol")}</td>'
                        f'<td>{p_.get("qty")} shares &middot; rotation</td>'
                        f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
-                       f'<td class="num {_plc(pl)}">{_pct(pl)}</td></tr>')
+                       f'</tr>')
     if not _book_rows:
         _book_rows = '<tr><td colspan="3" class="empty">flat &mdash; no open risk</td></tr>'
 
@@ -785,6 +825,7 @@ refusal is enforced in code at the order boundary, not by convention.</div>
 
     _tc_n, _tc_sub = _test_count()
     _fc = _forecast()
+    _mkt_s, _mkt_d, _mkt_open = _market_status()
     _frz = _freeze_badge()
     mission = f"""<div class="mission">
 <div class="m-hero">
@@ -820,8 +861,7 @@ refusal is enforced in code at the order boundary, not by convention.</div>
 <div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:16px">
   <div style="flex:1;min-width:260px">
     <div class="m-k">OPEN POSITIONS</div>
-    <table><tr><th>NAME</th><th>STRUCTURE</th><th style="text-align:right">P&amp;L</th>
-    <th style="text-align:right">%</th></tr>
+    <table><tr><th>NAME</th><th>STRUCTURE</th><th style="text-align:right">P&amp;L</th></tr>
     {_book_rows}</table>
   </div>
   <div style="flex:1;min-width:220px">
@@ -857,6 +897,14 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.mkt{{display:inline-flex;align-items:baseline;gap:7px;border:1px solid var(--line);
+padding:4px 10px;margin-left:auto;align-self:center}}
+.mkt-dot{{width:7px;height:7px;border-radius:50%;background:var(--dim2);
+display:inline-block}}
+.mkt.on .mkt-dot{{background:#0ABAB5;box-shadow:0 0 8px rgba(10,186,181,.8)}}
+.mkt-s{{color:var(--dim2);font-size:10px;letter-spacing:.18em}}
+.mkt.on .mkt-s{{color:var(--bl)}}
+.mkt-d{{color:var(--dim2);font-size:9.5px;letter-spacing:.05em}}
 .pnl{{background:var(--panel);border:1px solid var(--line);
 padding:16px 20px;margin:0 0 14px;display:flex;flex-wrap:wrap;
 align-items:baseline;gap:26px}}
@@ -1069,8 +1117,11 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
     <span class="pnl-v">{money(eq)}</span></div>
   <div><span class="pnl-k">{"PROFIT" if (pnl or 0) >= 0 else "LOSS"} TODAY</span>
     <span class="pnl-d {"up" if (pnl or 0) >= 0 else "down"}">{pnl_val}<span
-      class="pnl-p">{"&mdash;" if pnl is None else _pct(pnl)}</span></span>
+      class="pnl-p">{"&mdash;" if pnl is None else f"{pnl/START*100:+.2f}%"}</span></span>
     <span class="pnl-n">against the $100,000 start &middot; paper account</span></div>
+  <div class="mkt {"on" if _mkt_open else ""}"><span class="mkt-dot"></span>
+    <span class="mkt-s">MARKET {_mkt_s}</span>
+    <span class="mkt-d">{_mkt_d}</span></div>
 </div>
 {_equity_chart(history)}
 {mission}
