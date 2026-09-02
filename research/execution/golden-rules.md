@@ -1732,3 +1732,38 @@ every leg has a live bid before building a strategy that sells it.
 **Rule.** When adding a strategy whose direction is opposite to everything
 already there, its refusal paths deserve more tests than its success path. The
 success path is the one you will notice when it breaks.
+
+## E59 — The first backtest on real option prices, and what it says about today
+
+With the Massive key (Pautax supplied it overnight), historical OHLC for
+individual option contracts became available for the first time. First use:
+test the EXACT structure armed for this morning — a ~3%-OTM 5-wide USO call
+vertical entered two sessions before a Friday expiry — at prices the market
+actually traded.
+
+**Eight recent Friday expiries. Five never printed a trade on the entry day at
+all** — the market for this structure frequently does not exist two days out.
+The three that did:
+
+| expiry | structure | paid | settled | return | USO move |
+|---|---|---|---|---|---|
+| 10 Jul | 116/121 | 0.55 | 0.00 | −100% | −3.1% |
+| 17 Jul | 125/130 | 0.74 | 0.00 | −100% | +2.1% |
+| 24 Jul | 136/141 | 1.12 | 0.69 | **−38%** | **+3.8%** |
+
+**The 24 Jul row is the finding.** USO rose 3.8% into expiry — the thesis
+*happened* — and the trade still lost 38%, because the debit paid was rich
+relative to the strike distance. The structure loses even when the view is
+right, unless the move is large AND fast.
+
+Context that cuts the other way, honestly stated: n=3 is not a sample, none of
+those weeks had a live supply shock with 33 corroborating headlines, and
+yesterday's +5.4% session would have cleared today's 145.81 breakeven with room.
+The catalyst case is precisely that this week is not like those weeks.
+
+**Rule.** Real prices beat modeled prices the moment they are available, and
+they said something the model could not: this structure's failure mode is not
+"the move doesn't come" — it is "the move comes and the debit ate it."
+
+**Rule.** When new data arrives hours before a live trade, its job is to inform
+the operator's decision, not to silently re-arm or disarm the system.
