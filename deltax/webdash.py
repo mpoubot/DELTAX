@@ -13,9 +13,17 @@ from __future__ import annotations
 import json, glob, os, sys
 from datetime import datetime, timezone
 
+# Repo root from THIS file, never the working directory. Every reader below
+# used CWD-relative globs, which worked only because publish-dashboard.sh
+# happens to cd here first. Called from anywhere else they matched nothing and
+# the board rendered "no refusals recorded" and REGIME as an em dash while
+# nearly a thousand decisions and 78 rotation readings sat in the ledger.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def _ledger():
     rows = []
-    for f in sorted(glob.glob("logs/decisions-*.jsonl")):
+    for f in sorted(glob.glob(os.path.join(_ROOT, "logs", "decisions-*.jsonl"))):
         for line in open(f):
             try: rows.append(json.loads(line))
             except Exception: pass
@@ -226,6 +234,96 @@ def _equity_chart(history=None):
 </svg></div>"""
 
 
+def _freeze_badge():
+    """Whether new entries are permitted right now, and why. Reads live state."""
+    try:
+        from deltax.freeze import read_state
+        st = read_state()
+        if st.get("frozen", True):
+            why = str(st.get("source") or st.get("reason") or "frozen")
+            why = why.replace("frozen: ", "")
+            return "FROZEN", why[:74]
+        return "OPEN", f"all signals pass &middot; rechecked {st.get('age_min','?')} min ago"
+    except Exception:
+        return "FROZEN", "state unreadable &mdash; failing closed"
+
+
+def _gate_activity():
+    """What the gates actually did today - scanned, passed, and what refused.
+
+    The board used to assert "RISK GATES ARMED - 17 gates - fail closed", which
+    was three claims and one of them was wrong: evaluate() emits 14, not 17.
+    A count typed into a template goes stale the moment the stack changes and
+    nobody notices, so every number here is COUNTED from today's decision
+    ledger, and the gate count is measured from a live evaluate() call rather
+    than asserted.
+
+    Returns the counts the mission block needs, or safe defaults. Never raises.
+    """
+    from collections import Counter
+    import glob, json as _json
+    from datetime import date as _date
+    out = {"scanned": 0, "traded": 0, "refused": 0, "gate_count": 0,
+           "binding": [], "top": [], "clean": 0}
+    try:
+        from deltax.gates import evaluate as _ev, MIN_DTE
+        from datetime import timedelta as _td
+        _t = _date.today()
+        out["gate_count"] = len(_ev(
+            symbol="SPY", equity=100_000.0, max_loss_per_contract=270.0,
+            max_profit_per_contract=230.0, credit=2.30,
+            expiry=_t + _td(days=6), today=_t, open_interest=5000,
+            open_portfolio_max_loss=0.0, structure="credit", width=5.0,
+            short_delta=0.20, worst_leg_spread_pct=0.05, roundtrip_cost=0.20,
+            quote_age_hours=0.1, tradable=True, last_bar_age_days=0.5).gates)
+    except Exception:
+        pass
+    try:
+        rows = []
+        for fn_ in sorted(glob.glob(os.path.join(_ROOT, "logs", "decisions-*.jsonl")))[-2:]:
+            for ln in open(fn_):
+                try:
+                    rows.append(_json.loads(ln))
+                except Exception:
+                    continue
+        withg = [r for r in rows if r.get("gates")]
+        out["scanned"] = len(withg)
+        out["traded"] = sum(1 for r in withg if r.get("decision") == "TRADE")
+        out["refused"] = sum(1 for r in withg if r.get("decision") == "REFUSE")
+        any_fail, sole = Counter(), Counter()
+        for r in withg:
+            if r.get("decision") != "REFUSE":
+                continue
+            f = [g["gate"] for g in r["gates"] if not g.get("passed")]
+            for g in f:
+                any_fail[g] += 1
+            if len(f) == 1:
+                sole[f[0]] += 1
+        out["top"] = any_fail.most_common(4)
+        out["binding"] = sole.most_common(3)
+        out["clean"] = sum(1 for r in withg
+                           if all(g.get("passed") for g in r["gates"]))
+    except Exception:
+        pass
+    return out
+
+
+def _test_count():
+    """Suite size, read from state rather than typed into the page.
+
+    The board advertised "571 PASS" long after the suite passed 754. A number
+    written into a template cannot know it has gone stale, so this reads what
+    the last run recorded and shows an em dash when there is no record - an
+    honest gap rather than a confident wrong number.
+    """
+    import json as _json
+    try:
+        d = _json.load(open(os.path.join(_ROOT, "state", "tests.json")))
+        return f'{int(d["passed"])} PASS', f'{int(d["files"])} files &middot; {d.get("asof","")}'
+    except Exception:
+        return "&mdash;", "no recorded run"
+
+
 def _terminal_lines(limit=90):
     """The agent's real activity — timestamped, icon-coded, newest FIRST.
 
@@ -244,7 +342,8 @@ def _terminal_lines(limit=90):
             return "--:--:--", 0.0
 
     # ── scheduled runs and pre-market passes ──
-    for path, tag in (("logs/cron.log", "agent"), ("logs/premarket.log", "intel")):
+    for path, tag in ((os.path.join(_ROOT, "logs", "cron.log"), "agent"),
+                      (os.path.join(_ROOT, "logs", "premarket.log"), "intel")):
         cur_t, cur_k = "--:--:--", 0.0
         try:
             lines = open(path).readlines()[-90:]
@@ -296,7 +395,7 @@ def _terminal_lines(limit=90):
 
     # ── ledger: every decision the agent made ──
     try:
-        for f in sorted(glob.glob("logs/decisions-*.jsonl")):
+        for f in sorted(glob.glob(os.path.join(_ROOT, "logs", "decisions-*.jsonl"))):
             for ln in open(f).readlines()[-70:]:
                 try:
                     r = json.loads(ln)
@@ -423,6 +522,7 @@ def build(account=None, positions=None, error=None, history=None) -> str:
     rows = _ledger()
     dec = [r for r in rows if r.get("kind") != "event" and r.get("decision")]
     ref = [r for r in dec if r.get("decision") != "TRADE"]
+    _ga = _gate_activity()
     gates = {}
     for r in ref:
         g = r.get("failed_gate") or "unknown"
@@ -466,9 +566,37 @@ def build(account=None, positions=None, error=None, history=None) -> str:
              f"{len(ref)/max(1,len(dec))*100:.0f}% of candidates screened"),
     ])
 
+    # A gate slug means nothing to anyone who did not write it. Each row now
+    # says what the gate actually checks, and marks the ones that were the ONLY
+    # thing standing between us and a trade - those are the binding constraint,
+    # and the only ones where changing a threshold would change behaviour.
+    GATE_MEANS = {
+        "spread_quality": "bid/ask too wide to enter and exit at a fair price",
+        "liquidity": "too few contracts open at that strike to trade safely",
+        "credit_fraction": "premium below what the market pays for that risk",
+        "min_credit": "premium too small to cover fees and slippage",
+        "listed": "instrument not confirmed trading today",
+        "portfolio_risk": "would breach the 30% total-risk cap",
+        "position_size": "single position larger than the 2% cap",
+        "dte": "expiry outside the 2-21 day band",
+        "contest_window": "expiry falls past the judging deadline",
+        "earnings": "earnings scheduled before expiry",
+        "quote_sanity": "quotes internally inconsistent",
+        "defined_risk": "maximum loss not bounded",
+        "tradeable": "underlying halted or in a corporate action",
+        "dte_vs_time_stop": "expiry too close to the time stop",
+        "no_tradeable_structure": "no strike pair in the chain cleared the floors",
+        "unreadable_oi": "open-interest data unreadable for that chain",
+        "already_held": "that underlying and side is already open",
+    }
+    _sole = dict(_ga.get("binding") or [])
     gate_rows = "".join(
-        f'<tr><td><span class="mono cy">{g}</span></td>'
-        f'<td class="num">{n}</td>'
+        f'<tr><td><span class="mono cy">{g}</span>'
+        f'<i class="gx">{GATE_MEANS.get(g, "")}</i></td>'
+        f'<td class="num">{n}'
+        + (f'<i class="gx sole">only blocker &times;{_sole[g]}</i>'
+           if g in _sole else '')
+        + f'</td>'
         f'<td class="bar"><span style="width:{n/mx*100:.0f}%"></span></td></tr>'
         for g, n in top) or \
         '<tr><td colspan="3" class="empty">No refusals recorded yet.</td></tr>'
@@ -547,9 +675,17 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     _rot_live = None
     try:
         for _r in reversed(rows):
-            _e = _r.get("event") or {}
-            if _e.get("action") == "rotation":
-                _rot_live = _e
+            # Rotation is recorded via ledger.record_raw(), which writes the
+            # payload at the TOP level. This only ever looked inside an "event"
+            # key, so it never matched and the board showed REGIME as an em
+            # dash while 78 rotation readings sat in the ledger unread. Accept
+            # both shapes rather than assume one.
+            _e = _r.get("event") if isinstance(_r.get("event"), dict) else None
+            for _cand in (_e, _r):
+                if isinstance(_cand, dict) and _cand.get("action") == "rotation":
+                    _rot_live = _cand
+                    break
+            if _rot_live:
                 break
     except Exception:
         pass
@@ -609,20 +745,28 @@ refusal is enforced in code at the order boundary, not by convention.</div>
         _rank_rows = '<tr><td colspan="2" class="empty">awaiting first cycle</td></tr>'
         _picks, _regime_txt, _regime_why = "—", "—", ""
 
+    _tc_n, _tc_sub = _test_count()
+    _frz = _freeze_badge()
     mission = f"""<div class="mission">
 <div class="m-hero">
   <div>
     <div class="m-k">LIVE BOOK &middot; 3 STRATEGIES</div>
     <div class="m-big">{money(eq)} <span class="sm {_plc(pnl or 0)}">{"&mdash;" if pnl is None else _pct(pnl)}</span></div>
     <div class="m-line" style="margin-top:2px"><span class="dim">{pnl_val} vs $100,000 start</span></div>
-    <div class="m-line"><b>Options income</b> (credit spreads, 17 gates) &middot;
-    <b>Catalyst</b> (defined-risk verticals on a supply shock) &middot;
-    <b>Rotation</b> (11 GICS sectors ranked by relative strength).
+    <div class="m-line"><b>Options income</b> &mdash; credit spreads through
+    {_ga["gate_count"]} deterministic gates &middot; <b>Rotation</b> &mdash; 11 GICS
+    sectors ranked by relative strength, advisory only &middot; <b>Catalyst</b>
+    &mdash; <span class="dim">retired 2 Sep, backtested negative</span>.
     Autonomous every 5 minutes, full session.</div>
+    <div class="m-line" style="margin-top:4px"><span class="dim">Today:
+    scanned <b>{_ga["scanned"]}</b> candidates &middot; cleared every gate
+    <b>{_ga["clean"]}</b> &middot; opened <b>{_ga["traded"]}</b> &middot; refused
+    <b>{_ga["refused"]}</b>.</span></div>
   </div>
   <div class="m-conf">
-    <div class="m-k">EVIDENCE CONFIDENCE</div>
-    <div class="m-big">58%</div>
+    <div class="m-k">NEW ENTRIES</div>
+    <div class="m-big">{_frz[0]}</div>
+    <div class="m-line" style="margin-top:3px"><span class="dim">{_frz[1]}</span></div>
   </div>
   <div>
     <div class="m-k">OPEN RISK</div>
@@ -634,8 +778,8 @@ refusal is enforced in code at the order boundary, not by convention.</div>
   <div><span>OPTIONS P&amp;L</span><b class="{"ok" if _opt_pl>=0 else "bad"}">{_pct(_opt_pl)}</b><i>{_opt_pl:+,.2f} &middot; {len(_opt_legs)} legs</i></div>
   <div><span>EQUITY P&amp;L</span><b class="{"ok" if _eq_pl>=0 else "bad"}">{_pct(_eq_pl)}</b><i>{_eq_pl:+,.2f} &middot; rotation</i></div>
   <div><span>NET UNREALIZED</span><b class="{"ok" if _tot_pl>=0 else "bad"}">{_pct(_tot_pl)}</b><i>{_tot_pl:+,.2f} marked</i></div>
-  <div><span>TESTS</span><b class="ok">571 PASS</b><i>20 files, 0 silent</i></div>
-  <div><span>RISK GATES</span><b class="ok">ARMED</b><i>17 gates &middot; fail closed</i></div>
+  <div><span>TESTS</span><b class="ok">{_tc_n}</b><i>{_tc_sub}</i></div>
+  <div><span>RISK GATES</span><b class="ok">{_ga["gate_count"]} ARMED</b><i>fail closed &middot; every candidate</i></div>
   <div><span>DATA</span><b class="mixed">MEDIUM</b><i>free tier &middot; repriced live</i></div>
   <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper</i></div>
 </div>
@@ -703,7 +847,12 @@ letter-spacing:.02em}}
 .ev-grid div{{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:6px 9px}}
 .ev-grid span{{display:block;color:var(--dim2);font-size:9px;letter-spacing:.14em;
 margin-bottom:2px}}
-.ev-grid b{{font-size:12px}}
+.ev-grid b{{display:block;font-size:13px;line-height:1.2;
+font-variant-numeric:tabular-nums;letter-spacing:.01em}}
+.gx{{display:block;font-style:normal;color:var(--dim2);font-size:9px;margin-top:3px;letter-spacing:.04em;line-height:1.3}}
+.gx.sole{{color:#E8B42B}}
+.ev-grid i{{display:block;font-style:normal;color:var(--dim2);font-size:9px;
+margin-top:3px;letter-spacing:.06em;line-height:1.35}}
 .ev-grid .ok{{color:var(--bl)}}.ev-grid .mixed{{color:#E8B42B}}.ev-grid .bad{{color:#FF8A8A}}
 details.m-proof{{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}}
 details.m-proof summary{{color:var(--cy);font-size:10px;letter-spacing:.22em;
@@ -874,8 +1023,11 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 
 <h2>WHY THE AGENT SAID NO</h2><div class="rule"></div>
 <div class="lead">Every evaluation is recorded — approvals and refusals alike — in a
-hash-chained, append-only ledger. An agent that can explain why it declined a
-candidate demonstrates more than a P&amp;L number can.</div>
+hash-chained, append-only ledger. Each row is a gate, what it checks, and how many
+candidates it turned away. A gate marked <b style="color:#E8B42B">only blocker</b>
+was the single thing standing between us and a trade — those are the binding
+constraint, and the only ones where moving a threshold would change what the agent
+does.</div>
 <table><tr><th>GATE</th><th style="text-align:right">REFUSALS</th><th></th></tr>{gate_rows}</table>
 
 <h2>OPEN POSITIONS</h2><div class="rule"></div>
