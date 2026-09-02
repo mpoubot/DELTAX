@@ -102,6 +102,130 @@ def _tz_times():
         return {"us": "", "lv": "", "dk": ""}
 
 
+def _equity_chart(history=None):
+    """Equity through the contest window, with the finish line marked.
+
+    Form: change-over-time, one series -> a line. One series needs no legend;
+    the heading names it. Everything else on the plot is a REFERENCE mark, not a
+    second series, so each carries a label and a shape and never relies on
+    colour alone.
+
+    The window is fixed to the contest - Mon 31 Aug through the Fri 4 Sep close -
+    rather than to the data, so the run is read against its deadline instead of
+    against whatever happened to be fetched. The empty right-hand side IS the
+    information: it is the time still left.
+
+    Contrast was computed against the #050B0B panel, not eyeballed: the line at
+    12.2:1, the finish line at 10.4:1, the $100k baseline at 4.6:1.
+
+    Returns '' on any failure. A chart is decoration; it must never take the
+    board down.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    ET = _tz(_td(hours=-4))
+    try:
+        ts = [int(t) for t in (history or {}).get("timestamp") or []]
+        eq = [float(v) for v in (history or {}).get("equity") or []]
+        pts = [(t, v) for t, v in zip(ts, eq) if v > 0]
+        if len(pts) < 2:
+            return ""
+    except Exception:
+        return ""
+
+    START = _dt(2026, 8, 31, 9, 30, tzinfo=ET)      # contest day one
+    END   = _dt(2026, 9, 4, 16, 0, tzinfo=ET)       # Friday close - the finish line
+    JUDGE = _dt(2026, 9, 4, 11, 0, tzinfo=ET)       # submission
+    FIRST = _dt(2026, 9, 2, 10, 10, tzinfo=ET)      # first fill, from the broker
+    BASE  = 100_000.0
+
+    W, H = 1000.0, 168.0
+    PL, PR, PT, PB = 52.0, 92.0, 16.0, 22.0
+    span = (END - START).total_seconds()
+    x_of = lambda d: PL + (max((d - START).total_seconds(), 0) / span) * (W - PL - PR)
+
+    vals = [v for _, v in pts] + [BASE]
+    lo, hi = min(vals), max(vals)
+    pad = max((hi - lo) * 0.35, 120.0)
+    lo, hi = lo - pad, hi + pad
+    y_of = lambda v: PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB)
+
+    def _d(t):
+        return _dt.fromtimestamp(t, ET)
+
+    xs = [(x_of(_d(t)), y_of(v), _d(t), v) for t, v in pts]
+    xs = [p for p in xs if p[0] >= PL - 1]
+    if len(xs) < 2:
+        return ""
+    line = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}"
+                    for i, (x, y, _, _) in enumerate(xs))
+    base_y = y_of(BASE)
+    area = (f"M{xs[0][0]:.1f},{base_y:.1f} "
+            + " ".join(f"L{x:.1f},{y:.1f}" for x, y, _, _ in xs)
+            + f" L{xs[-1][0]:.1f},{base_y:.1f} Z")
+
+    last_v = xs[-1][3]
+    last_x, last_y = xs[-1][0], xs[-1][1]
+    up = last_v >= BASE
+    stroke = "#3FE0DA" if up else "#FF8A8A"
+    pnl = (last_v - BASE) / BASE * 100
+
+    # day gridlines
+    grid = []
+    for i in range(5):
+        d = START + _td(days=i)
+        gx = x_of(d.replace(hour=9, minute=30))
+        grid.append(
+            f'<line x1="{gx:.1f}" y1="{PT}" x2="{gx:.1f}" y2="{H-PB}" '
+            f'stroke="#12302E" stroke-width="1"/>'
+            f'<text x="{gx:.1f}" y="{H-8}" fill="#5B807D" font-size="8.5" '
+            f'letter-spacing="1.4">{d:%a %d}</text>')
+
+    idle_x0, idle_x1 = x_of(START), x_of(FIRST)
+    jx, ex = x_of(JUDGE), x_of(END)
+
+    return f"""<div class="eqc">
+<div class="eqc-hd">EQUITY &middot; CONTEST WINDOW
+  <b class="{'ok' if up else 'bad'}">{last_v:,.0f} &nbsp;{pnl:+.2f}%</b></div>
+<svg viewBox="0 0 {W:.0f} {H:.0f}" preserveAspectRatio="none" class="eqc-svg"
+     role="img" aria-label="Account equity from 31 August to the 4 September close.
+     No positions were opened until 2 September at 10:10 ET. Currently
+     {last_v:,.0f} dollars, {pnl:+.2f} percent against the 100,000 start.">
+  <defs>
+    <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="{stroke}" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="{stroke}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  {''.join(grid)}
+  <rect x="{idle_x0:.1f}" y="{PT}" width="{max(idle_x1-idle_x0,0):.1f}"
+        height="{H-PT-PB:.1f}" fill="#5B807D" fill-opacity=".07"/>
+  <text x="{(idle_x0+idle_x1)/2:.1f}" y="{PT+13}" fill="#5B807D" font-size="8.5"
+        text-anchor="middle" letter-spacing="1.6">NO POSITIONS OPENED</text>
+  <line x1="{PL}" y1="{base_y:.1f}" x2="{W-PR}" y2="{base_y:.1f}"
+        stroke="#5B807D" stroke-width="1" stroke-dasharray="3 4"/>
+  <text x="{PL-6}" y="{base_y+3:.1f}" fill="#5B807D" font-size="8.5"
+        text-anchor="end">100k</text>
+  <path d="{area}" fill="url(#eqfill)"/>
+  <path d="{line}" fill="none" stroke="{stroke}" stroke-width="2"
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="{x_of(FIRST):.1f}" cy="{y_of(BASE):.1f}" r="3.5" fill="#050B0B"
+          stroke="{stroke}" stroke-width="2"/>
+  <text x="{x_of(FIRST)+7:.1f}" y="{y_of(BASE)-7:.1f}" fill="#5B807D"
+        font-size="8.5" letter-spacing="1.2">FIRST TRADE 10:10</text>
+  <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="4" fill="{stroke}"/>
+  <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="8" fill="{stroke}"
+          fill-opacity=".18"/>
+  <line x1="{jx:.1f}" y1="{PT}" x2="{jx:.1f}" y2="{H-PB}" stroke="#E8B42B"
+        stroke-width="1" stroke-dasharray="2 3" opacity=".75"/>
+  <line x1="{ex:.1f}" y1="{PT}" x2="{ex:.1f}" y2="{H-PB}" stroke="#E8B42B"
+        stroke-width="2"/>
+  <text x="{ex-6:.1f}" y="{PT+11}" fill="#E8B42B" font-size="9"
+        text-anchor="end" letter-spacing="1.6">FINISH &middot; FRI CLOSE</text>
+  <text x="{jx-6:.1f}" y="{H-PB-6:.1f}" fill="#E8B42B" font-size="8"
+        text-anchor="end" opacity=".85" letter-spacing="1.2">JUDGING 11:00</text>
+</svg></div>"""
+
+
 def _terminal_lines(limit=90):
     """The agent's real activity — timestamped, icon-coded, newest FIRST.
 
@@ -294,7 +418,7 @@ def _positions_table(positions):
                     'recognised as spreads — see the terminal below.</td></tr>')
 
 
-def build(account=None, positions=None, error=None) -> str:
+def build(account=None, positions=None, error=None, history=None) -> str:
     now = datetime.now(timezone.utc)
     rows = _ledger()
     dec = [r for r in rows if r.get("kind") != "event" and r.get("decision")]
@@ -555,6 +679,13 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.eqc{{background:var(--panel);border:1px solid var(--line);padding:12px 14px 6px;
+margin:0 0 14px}}
+.eqc-hd{{display:flex;justify-content:space-between;align-items:baseline;
+color:var(--dim2);font-size:9.5px;letter-spacing:.2em;margin-bottom:6px}}
+.eqc-hd b{{font-size:14px;letter-spacing:.02em;font-variant-numeric:tabular-nums}}
+.eqc-hd b.ok{{color:var(--bl)}}.eqc-hd b.bad{{color:#FF8A8A}}
+.eqc-svg{{width:100%;height:168px;display:block}}
 .mission{{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
 var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}}
@@ -737,6 +868,7 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 </div>
 {standdown}
 {warn}
+{_equity_chart(history)}
 {mission}
 <div class="stats">{stats}</div>
 
@@ -976,7 +1108,7 @@ GENERATED {now:%Y-%m-%d %H:%M} UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCH
 
 
 def main():
-    account = positions = None; err = None
+    account = positions = history = None; err = None
     try:
         from deltax.feeds import AlpacaFeed
         f = AlpacaFeed(); account = f.account()
@@ -984,10 +1116,17 @@ def main():
         # symbol/qty/pl, so entry and current price were gone by the time the
         # table tried to compute what each spread actually collected.
         positions = list(f.positions())
+        # Portfolio history for the equity chart. Its own try: a chart is
+        # decoration and must never cost us the board.
+        try:
+            history = f._run(["account", "portfolio", "--period", "1W",
+                              "--timeframe", "1H"])
+        except Exception:
+            history = None
     except Exception as e:
         err = str(e)[:110]
     os.makedirs("docs", exist_ok=True)
-    html = build(account, positions, err)
+    html = build(account, positions, err, history)
     open("docs/index.html", "w").write(html)
     print(f"wrote docs/index.html ({len(html):,} bytes)" + (f" — account unread: {err}" if err else ""))
     return 0
