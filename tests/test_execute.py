@@ -115,5 +115,25 @@ except ExecutionRefused:
 check("the guard names the rule, not just 'invalid'",
       "RULE 3" in (lambda: [str(x) for x in [Exception()]] and "")() or True)
 
+print("\n── E82: rule 3 enforced at the order-BUILDING chokepoint ──")
+# E80 put the check in submit(), but manage.place_exit() reaches the broker via
+# build_close_args() + execute._run(), never touching submit(). build_mleg_args
+# is the one function every order-building path runs through.
+_eq = [Leg("IGV", "buy", 1), Leg("SPY260918P00740000", "sell", 1)]
+try:
+    build_mleg_args(_eq, 1, 1.00)
+    check("E82 build_mleg_args refuses an equity leg", False, "no exception raised")
+except ValueError as e:
+    check("E82 build_mleg_args refuses an equity leg", "RULE 3" in str(e), str(e))
+try:
+    build_close_args(_eq, 1, 1.00)
+    check("E82 build_close_args refuses too (the place_exit path)", False, "no exception")
+except ValueError as e:
+    check("E82 build_close_args refuses too (the place_exit path)", "RULE 3" in str(e), str(e))
+_ok = [Leg("SPY260918P00740000", "buy", 1), Leg("SPY260918P00760000", "sell", 1)]
+check("E82 a genuine options spread still builds",
+      len(build_mleg_args(_ok, 1, 1.00)) > 0)
+check("E82 and still closes", len(build_close_args(_ok, 1, 1.00)) > 0)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

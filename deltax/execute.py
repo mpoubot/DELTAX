@@ -58,6 +58,22 @@ def build_mleg_args(legs: list, qty: int, limit_price: float,
         raise ValueError(f"mleg takes 2-4 legs, got {len(legs)}")
     if qty < 1:
         raise ValueError(f"qty must be >= 1, got {qty}")
+    # E82: rule 3 belongs HERE, not only in submit(). The E80 guard sat in
+    # submit(), but submit() is not the only path to the broker -
+    # manage.place_exit() builds its order with build_close_args() and fires it
+    # through execute._run() directly, never touching submit() or its check.
+    # build_mleg_args is the one function EVERY order-building path runs
+    # through (build_close_args delegates to it), so the check is enforced at
+    # the chokepoint rather than at one of the two doors. submit() keeps its
+    # copy: a caller that never builds args should still be refused.
+    from deltax.reconcile import parse_occ as _occ
+    for _l in legs:
+        _sym = getattr(_l, "symbol", None) or (
+            _l.get("symbol") if isinstance(_l, dict) else None)
+        if _occ(_sym or "") is None:
+            raise ValueError(
+                f"RULE 3 - '{_sym}' is not an options contract. Every leg of "
+                f"every order must be an option.")
     return [
         "order", "submit",
         "--order-class", "mleg",
