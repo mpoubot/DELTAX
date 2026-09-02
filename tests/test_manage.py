@@ -22,9 +22,16 @@ check("56% captured closes", Managed("SPY",7,2.30,1.02,7).reason() is not None)
 check("exactly 50% closes", Managed("SPY",7,2.00,1.00,7).reason() is not None)
 check("49% holds", Managed("SPY",7,2.00,1.02,7).reason() is None)
 check("12% holds", Managed("SPY",7,2.25,1.98,7).reason() is None)
-check("2 DTE closes on time stop even at small profit",
-      "time stop" in (Managed("IWM",18,0.92,0.61,2).reason() or ""))
-check("2 DTE closes even at a LOSS", Managed("IWM",18,0.92,1.40,1).reason() is not None)
+# E22/E57: derive from the live constant. These hardcoded 2 and broke silently
+# when E57 cut TIME_STOP_DTE to 1 - the value has moved twice now, so assert the
+# BEHAVIOUR at the threshold rather than a particular number of days.
+check("at the time stop, closes even on a small profit",
+      "time stop" in (Managed("IWM",18,0.92,0.61,TIME_STOP_DTE).reason() or ""),
+      f"TIME_STOP_DTE={TIME_STOP_DTE}")
+check("inside the time stop, closes even at a LOSS",
+      Managed("IWM",18,0.92,1.40,max(TIME_STOP_DTE-1,0)).reason() is not None)
+check("one day outside the time stop, a small profit holds",
+      Managed("IWM",18,0.92,0.85,TIME_STOP_DTE+1).reason() is None)
 check("7 DTE with small profit holds", Managed("IWM",18,0.92,0.85,7).reason() is None)
 
 print("\n── never guess a price ──")
@@ -34,10 +41,10 @@ check("unpriceable position is NOT closed", m.reason() is None)
 check("zero entry credit does not divide by zero", Managed("X",1,0.0,1.0,7).captured is None)
 
 print("\n── sweep ──")
-out = manage([Managed("SPY",7,2.30,1.02,7),      # target hit
-              Managed("QQQ",7,2.25,1.98,7),      # hold
-              Managed("IWM",18,0.92,0.61,2),     # time stop
-              Managed("MA",7,2.40,None,7)],      # unpriceable
+out = manage([Managed("SPY",7,2.30,1.02,7),                 # target hit
+              Managed("QQQ",7,2.25,1.98,7),                 # hold
+              Managed("IWM",18,0.92,0.61,TIME_STOP_DTE),    # time stop
+              Managed("MA",7,2.40,None,7)],                 # unpriceable
              dry_run=True)
 check("closes the two that qualify", len(out["closed"]) == 2, str(out["closed"]))
 check("holds the one that does not", out["held"] == ["QQQ"], str(out["held"]))

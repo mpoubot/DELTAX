@@ -1,7 +1,7 @@
 """Unit tests for the DELTAX risk gates. No network, no market connection."""
 
 import sys, os
-from datetime import date
+from datetime import date, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from deltax.gates import (
@@ -49,14 +49,16 @@ check("40% win rate with 3:1 payoff PASSES", r.passed, f"E={r.observed}")
 
 print("\n── DTE band (rule R5: no 0DTE) ──")
 check("0DTE rejected", not gate_dte(TODAY, TODAY).passed)
-# E41 lowered MIN_DTE to 2 so a Sep 4 expiry stayed reachable. E45 raised it
-# back to 3: at 2, an opened position was instantly eligible for the 2-DTE time
-# stop - opened and closed on the same cycle. The floor must stay STRICTLY above
-# TIME_STOP_DTE, which is the invariant asserted below.
-check("1 DTE rejected — gamma zone", not gate_dte(date(2026, 9, 1), TODAY).passed)
-check("2 DTE rejected — the exit engine would close it on arrival",
-      not gate_dte(date(2026, 9, 2), TODAY).passed)
-check("3 DTE accepted — the floor", gate_dte(date(2026, 9, 3), TODAY).passed)
+# The floor has moved three times and the INVARIANT, not the value, is what
+# must hold: MIN_DTE strictly above TIME_STOP_DTE, or a position is eligible for
+# the time stop the moment it opens (E45). E41 set 2, E45 raised it to 3, E57
+# lowered it to 2 again with TIME_STOP_DTE cut to 1 so the invariant survives.
+# E57 is a knowing, capped override of R5 for submission evidence - see E56/E57.
+check("0 DTE always rejected", not gate_dte(TODAY, TODAY).passed)
+check("the floor itself is accepted",
+      gate_dte(TODAY + timedelta(days=MIN_DTE), TODAY).passed, f"MIN_DTE={MIN_DTE}")
+check("one day inside the floor is rejected",
+      not gate_dte(TODAY + timedelta(days=MIN_DTE - 1), TODAY).passed)
 
 from deltax.manage import TIME_STOP_DTE as _TS
 check("E45 MIN_DTE stays strictly above TIME_STOP_DTE", MIN_DTE > _TS,
@@ -251,6 +253,42 @@ def test_e42_screening_still_runs():
 test_e42_submit_refuses_while_suspended()
 test_e42_guard_survives_dry_run_false()
 test_e42_screening_still_runs()
+
+print("\n── E57: demonstration mode (a capped, explicit override of R5) ──")
+import deltax.gates as _G
+from deltax.gates import demo_cap, demo_permits, DEMO_MAX_CONTRACTS
+
+check("E57 cap reduces an oversized position", demo_cap(47) == DEMO_MAX_CONTRACTS,
+      f"47 -> {demo_cap(47)}")
+check("E57 cap never RAISES size",
+      demo_cap(0) == 0 and demo_cap(1) <= DEMO_MAX_CONTRACTS,
+      f"0 -> {demo_cap(0)}, 1 -> {demo_cap(1)}")
+check("E57 cap is monotone",
+      all(demo_cap(a) <= demo_cap(b) for a, b in zip(range(0, 20), range(1, 21))))
+check("E57 proceeds through a directional caution", demo_permits("DEFENSIVE"))
+check("E57 NEVER proceeds through NO_NEW_POSITIONS",
+      not demo_permits("NO_NEW_POSITIONS"))
+check("E57 NEVER proceeds through HALT", not demo_permits("HALT"))
+
+# Mutation: with the mode off, the cap must go inert and the overrides stop.
+# A control that behaves identically switched off was never doing anything.
+_was = _G.DEMONSTRATION_MODE
+_G.DEMONSTRATION_MODE = False
+check("E57 disabled -> cap is inert", _G.demo_cap(47) == 47, str(_G.demo_cap(47)))
+check("E57 disabled -> no permission override", _G.demo_permits("HALT") is True)
+_G.DEMONSTRATION_MODE = _was
+check("E57 state restored after mutation", _G.DEMONSTRATION_MODE == _was)
+
+# E43: the controls must be WIRED, not merely defined. A guard nothing calls
+# reports green forever.
+_run = open("deltax/run.py").read()
+check("E57 cap is applied in the trading path", "demo_cap(dec.contracts)" in _run)
+check("E57 submit uses the CAPPED quantity", "execute.submit(legs, qty," in _run)
+check("E57 exit uses the CAPPED quantity", "place_exit(legs, qty," in _run)
+check("E57 permission override is wired", "demo_permits(perm.state)" in _run)
+check("E57 sized-vs-capped divergence is logged", "demo_size_cap" in _run)
+check("E57 committed risk follows the capped size",
+      "dec.max_loss * (qty / dec.contracts" in _run)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

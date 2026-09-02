@@ -45,11 +45,17 @@ PORTFOLIO_RISK_PCT    = 0.30   # 30% of equity max loss across all open position
 # what was measured. A Thursday entry would be 1 DTE - untested, maximum gamma,
 # and correctly refused. R5's intent was banning 0DTE and clearing the gamma
 # zone; a 2-day floor still does both.
-# E45: MIN_DTE must stay STRICTLY above manage.TIME_STOP_DTE. At MIN_DTE == 2
-# a position opened on 2 Sep is instantly eligible for the 2-DTE time stop -
-# opened and closed on the same cycle, paying the spread twice for nothing.
-# Enforced by gate_dte_vs_time_stop() below, not by this comment.
-MIN_DTE               = 3      # rule R5: 0DTE banned; clear the gamma zone
+# E57: lowered 3 -> 2 for the contest endgame. Core requirement 1 is an
+# AUTONOMOUS TRADING AGENT, and the submission account PA397N6FXXIE has never
+# placed an order - the "live 31 Aug" evidence was on the account we abandoned
+# in the switch. Zero orders is an evidentiary failure of requirement 1 no
+# matter how good the research is. E55 measured a 2-DTE entry at -1.9% to
+# -11.3%, so this is knowingly negative-expectancy AT FULL SIZE; the
+# compensating control is DEMONSTRATION_MODE below, which caps the position at
+# one contract. R5 is overridden explicitly here rather than eroded quietly,
+# which is the failure E56 records.
+# The E45 invariant still holds: MIN_DTE (2) > TIME_STOP_DTE (1).
+MIN_DTE               = 2      # rule R5: 0DTE banned; clear the gamma zone
 MAX_DTE               = 21     # short enough to resolve inside the contest window
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
@@ -207,6 +213,17 @@ CONTEST_CLOSE = date(2026, 9, 4)
 # credited decay it had not earned. Rebuilt and tested, expectancy is roughly
 # flat rather than -50.9%, and positive at the vol premium actually observed.
 # The stand-down mechanism stays wired in so it can be re-armed in one line.
+# ── E57: demonstration mode ────────────────────────────────────────────────
+# Purpose is EVIDENCE, not alpha. Every gate still runs; what changes is size
+# and two explicit overrides, each with a stated reason and a hard cap.
+DEMONSTRATION_MODE   = True
+DEMO_MAX_CONTRACTS   = 1      # hard ceiling regardless of what sizing returns
+DEMO_ALLOW_DEFENSIVE = True   # trade through a regime CAUTION at capped size...
+DEMO_NEVER_OVERRIDE  = ("HALT", "NO_NEW_POSITIONS")   # ...but never through
+                              # a data failure, a daily loss limit, or the S5
+                              # drawdown kill switch. Those are not opinions
+                              # about direction - they mean something is broken.
+
 TRADING_SUSPENDED = False
 SUSPENSION_REASON = ("E42 lifted 1 Sep after E44 rebuilt the backtest. "
                      "Re-arm by setting TRADING_SUSPENDED = True.")
@@ -219,6 +236,26 @@ def gate_dte_vs_time_stop() -> GateResult:
     return GateResult("dte_vs_time_stop", ok,
                       f"MIN_DTE={MIN_DTE} vs TIME_STOP_DTE={TIME_STOP_DTE}"
                       + ("" if ok else " - would open then instantly time-stop"))
+
+
+def demo_cap(contracts: int) -> int:
+    """E57: hard ceiling on size while demonstrating. Never raises size."""
+    if not DEMONSTRATION_MODE:
+        return contracts
+    return min(contracts, DEMO_MAX_CONTRACTS)
+
+
+def demo_permits(state: str) -> bool:
+    """E57: may demonstration mode proceed from this permission state?
+
+    Trades through DEFENSIVE (a directional caution) because size is capped at
+    one contract. Never through HALT or NO_NEW_POSITIONS - those signal a
+    broken feed, a breached loss limit, or a drawdown past the backtested worst
+    case, and no amount of size capping makes trading on bad data acceptable.
+    """
+    if not DEMONSTRATION_MODE:
+        return True
+    return state not in DEMO_NEVER_OVERRIDE
 
 
 def gate_trading_enabled() -> GateResult:

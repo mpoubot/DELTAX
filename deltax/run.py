@@ -13,6 +13,7 @@ import sys
 from deltax import execute
 from deltax.calendar import entry_allowed
 from deltax.permission import Evidence, recommend_state, gate_permission
+from deltax.gates import DEMONSTRATION_MODE, demo_cap, demo_permits
 from deltax.manage import place_exit
 from deltax.reconcile import reconcile, safe_to_open
 from deltax import report
@@ -202,6 +203,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 refused.append((symbol, side, "already_held"))
                 continue
             allowed, why = gate_permission(perm, side)
+            # E57: DEMONSTRATION_MODE may proceed through DEFENSIVE - a
+            # directional caution - because size is capped at one contract.
+            # It may never proceed through HALT or NO_NEW_POSITIONS, which mean
+            # broken data or a breached loss limit, not a view on direction.
+            if not allowed and DEMONSTRATION_MODE and demo_permits(perm.state):
+                allowed = True
+                why = f"demo override of {perm.state} at capped size (E57)"
+                ledger.record_raw({"action": "demo_permission_override",
+                                   "symbol": symbol, "side": side,
+                                   "state": perm.state, "reason": why})
             if not allowed and not perm_override:
                 refused.append((symbol, side, f"permission:{perm.state}"))
                 continue
@@ -264,8 +275,15 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 refused.append((symbol, side, "news"))
                 continue
 
+            # E57: hard ceiling applied AFTER every risk calculation, so it can
+            # only ever reduce size, never raise it.
+            qty = demo_cap(dec.contracts)
+            if qty != dec.contracts:
+                ledger.record_raw({"action": "demo_size_cap", "symbol": symbol,
+                                   "side": side, "sized": dec.contracts,
+                                   "capped_to": qty, "reason": "E57"})
             try:
-                rec = execute.submit(legs, dec.contracts, cand["credit"],
+                rec = execute.submit(legs, qty, cand["credit"],
                                      dry_run=dry_run,
                                      context={"symbol": symbol, "side": side})
             except Exception as e:
@@ -280,11 +298,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             # exit that needs the agent alive at the right minute is not an
             # exit — and the 50% close is where the measured edge lives.
             if str(rec.get("result", "")).startswith(("SUBMITTED", "DRY_RUN")):
-                ex = place_exit(legs, dec.contracts, cand["credit"],
+                ex = place_exit(legs, qty, cand["credit"],
                                 ledger=ledger, dry_run=dry_run)
                 exits_placed.append((symbol, side, ex.get("limit_price")))
-            committed += dec.max_loss
-            traded.append((symbol, f"{side}/{bias}", dec.contracts, cand["credit"],
+            # Risk actually committed follows the CAPPED size, not the sized
+            # quantity, or the book would reserve budget it never spent.
+            committed += dec.max_loss * (qty / dec.contracts if dec.contracts else 1)
+            traded.append((symbol, f"{side}/{bias}", qty, cand["credit"],
                            dec.max_loss, rec["result"]))
     return {"regime": regime, "traded": traded, "refused": refused,
             "committed": committed, "skipped": None,

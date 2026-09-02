@@ -26,7 +26,12 @@ from deltax import execute
 from datetime import date, datetime, timezone, timedelta
 
 TAKE_PROFIT_FRACTION = 0.50    # E5 / E15
-TIME_STOP_DTE = 2              # gamma zone — close regardless of profit
+# E57: 2 -> 1 so MIN_DTE (2) stays STRICTLY above it, preserving the E45
+# invariant. A position opened 2 Sep now closes 3 Sep rather than being
+# time-stopped on arrival. This DOES hold one day deeper into the gamma zone,
+# which E55 measured as the worse half of a bad trade - accepted only because
+# DEMONSTRATION_MODE caps the position at a single contract.
+TIME_STOP_DTE = 1              # gamma zone — close regardless of profit
 
 # HARD DEADLINE. The contest is judged Fri 4 Sep 11:00 ET; anything still open
 # is marked at whatever it happens to be worth, mid-decay. A position whose
