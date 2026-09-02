@@ -137,6 +137,69 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                        "clear": len((bl or {}).get("clear") or [])})
     exits_placed = []
     news_checked = {}      # symbol -> verdict, one fetch per name per cycle
+    catalyst_result = None
+
+    # ── E58: catalyst rule ────────────────────────────────────────────────
+    # A defined-risk LONG vertical on a live supply shock. This is the only
+    # structure here that buys premium. It authorises a setup; it does not
+    # force an entry, and every stage below can refuse.
+    try:
+        from deltax import catalyst as _cat
+        _u = _cat.UNDERLYING
+        _already = any(u == _u for u, _s in held)
+        if _already:
+            catalyst_result = {"skipped": f"{_u} already held"}
+            ledger.record_raw({"action": "catalyst_skipped",
+                               "reason": catalyst_result["skipped"]})
+        elif not demo_permits(perm.state) and not perm_override:
+            # perm_override is analysis-only (force AND dry_run), so this can
+            # never let a real order through a HALT.
+            catalyst_result = {"skipped": f"permission {perm.state}"}
+            ledger.record_raw({"action": "catalyst_skipped",
+                               "reason": catalyst_result["skipped"],
+                               "state": perm.state})
+        else:
+            _sn = feed.snapshots([_u]).get(_u) or {}
+            from deltax.feeds import previous_close as _pc, latest_price as _lp
+            _on, _why = _cat.catalyst_active(_pc(_sn), _lp(_sn))
+            ledger.record_raw({"action": "catalyst_check", "underlying": _u,
+                               "active": _on, "reason": _why})
+            if not _on:
+                catalyst_result = {"skipped": f"catalyst inactive - {_why}"}
+            else:
+                _v = _cat.price_vertical(feed)
+                ledger.record_raw({"action": "catalyst_price", "ok": _v.ok,
+                                   "reason": _v.reason, "debit": _v.debit,
+                                   "contracts": _v.contracts,
+                                   "max_loss": _v.max_loss,
+                                   "detail": _v.detail})
+                if not _v.ok:
+                    catalyst_result = {"refused": _v.reason}
+                else:
+                    _legs = _cat.legs_for(_v)
+                    _rec = execute.submit(_legs, _v.contracts, _v.debit,
+                                          dry_run=dry_run,
+                                          context={"strategy": "E58 catalyst",
+                                                   "underlying": _u,
+                                                   "breakeven": _v.breakeven})
+                    ledger.record_raw(_rec)
+                    catalyst_result = {"placed": _v.reason,
+                                       "result": _rec.get("result")}
+                    # Exit rests immediately, exactly as the income book does:
+                    # a target that needs someone awake is not a target (E5).
+                    if str(_rec.get("result", "")).startswith(("SUBMITTED", "DRY_RUN")):
+                        _ex = execute.submit(
+                            [execute.Leg(_v.short_symbol, "buy", 1),
+                             execute.Leg(_v.long_symbol, "sell", 1)],
+                            _v.contracts, _v.exit_limit, dry_run=dry_run,
+                            context={"strategy": "E58 catalyst exit",
+                                     "target_multiple": _cat.TARGET_MULTIPLE})
+                        ledger.record_raw(_ex)
+                        catalyst_result["exit"] = _ex.get("result")
+    except Exception as e:
+        ledger.record_raw({"action": "catalyst_failed",
+                           "error": f"{type(e).__name__}: {str(e)[:200]}"})
+        catalyst_result = {"error": f"{type(e).__name__}"}
 
     # E50: richest variance premium first. run.py used to walk the list in the
     # order it was typed and stop at the cap, so capital went to whichever name
@@ -309,7 +372,8 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     return {"regime": regime, "traded": traded, "refused": refused,
             "committed": committed, "skipped": None,
             "permission": perm.state, "advisory_only": perm_override,
-            "book": book, "exits": exits_placed, "swept": swept}
+            "book": book, "exits": exits_placed, "swept": swept,
+            "catalyst": catalyst_result}
 
 
 if __name__ == "__main__":

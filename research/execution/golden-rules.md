@@ -1691,3 +1691,44 @@ sat at zero, and the operator caught it, not me.
 compensating control** — never by the drift E56 documents. R5 is overridden here
 by name, with its cost measured and its cap enforced in code and tested by
 mutation.
+
+## E58 — The first structure that buys premium
+
+Every other strategy here SELLS premium. On 1-2 Sep the window presented an
+actual oil supply shock — US strikes near the Strait of Hormuz, crude through
+$90, USO **+5.46%** on 1 Sep — and the income engine had no way to express a
+directional view. `deltax/catalyst.py` is that expression: a defined-risk long
+call vertical, USO 145/150, 4 Sep.
+
+**The rule authorises a SETUP; it does not force an entry.**
+
+    catalyst true -> liquidity/OI check -> live spread pricing
+        -> debit ceiling -> risk sizing -> limit MLeg order -> no fill, no chase
+
+Every stage can refuse, and refusing is the common case. Fourteen of the
+thirty-four tests exercise a refusal path.
+
+**Sizing derives from the ACTUAL live debit, never a contract count.** A plan
+that says "123 spreads" is correct at exactly one price and wrong at every
+other. `contracts = floor(RISK_BUDGET / (debit * 100))`, then capped at 5% of
+the thinner leg's open interest: $0.81 → 123, $0.90 → 111, $1.00 → 100,
+$1.01 → **NO TRADE**.
+
+**Pay the ask, receive the bid.** Never a mid-price fill. E34 was an entire
+backtest validated at a credit the market never paid; the same error on a debit
+would understate the cost of every contract.
+
+**What the live book rejected.** A proposal to use 145/155 verticals and a
+145/150/155/160 condor did not survive the quotes: the **155 call bid $0.00**,
+so selling it collects nothing, and the 145/155 vertical costs $1.12 — identical
+to the naked 145 call while surrendering everything above $155. It is strictly
+dominated. The condor also pays **zero above $160**, which is precisely the
+Hormuz-closes scenario the thesis rests on: the wrong payoff shape for a
+supply-shock trade.
+
+**Rule.** A structure is chosen by the order book, not by its diagram. Verify
+every leg has a live bid before building a strategy that sells it.
+
+**Rule.** When adding a strategy whose direction is opposite to everything
+already there, its refusal paths deserve more tests than its success path. The
+success path is the one you will notice when it breaks.
