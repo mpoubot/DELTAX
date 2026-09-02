@@ -80,6 +80,55 @@ def _clean(line: str) -> str:
     line = _BOX.sub("", line).strip()
     return _re.sub(r"\s{2,}", "  ", line)
 
+def _team_clocks():
+    """Local time for each of the three of us, anchored to the US market session.
+
+    The team is split across three zones, so "the open" means three different
+    wall-clock times and one of them is late evening. Every clock is 24-hour -
+    9 PM and 21:00 are the same instant, but only one of them is unambiguous
+    when Matin reads it at a glance in Denmark.
+
+    The session is defined in ET (09:30-16:00) and CONVERTED, never assumed:
+    the US, Latvia and Denmark leave daylight saving on different dates, so the
+    offset between them is not constant even inside this contest week.
+    """
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+
+    try:
+        et = ZoneInfo("America/New_York")
+        zones = (("YOU", "United States", ZoneInfo("America/New_York")),
+                 ("ELSA", "Latvia", ZoneInfo("Europe/Riga")),
+                 ("MATIN", "Denmark", ZoneInfo("Europe/Copenhagen")))
+        now_et = _dt.now(et)
+        open_et = now_et.replace(hour=9, minute=30, second=0, microsecond=0)
+        close_et = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+        is_open = open_et <= now_et <= close_et and now_et.weekday() < 5
+    except Exception:
+        return ""          # a clock must never be able to break the board
+
+    cells = []
+    for label, place, tz in zones:
+        now_l = now_et.astimezone(tz)
+        o = open_et.astimezone(tz)
+        c = close_et.astimezone(tz)
+        # Does the session land on the next calendar day for them? It does not
+        # today, but it will the moment the US and EU shift clocks apart.
+        roll = " <i>+1d</i>" if c.date() > now_l.date() else ""
+        cells.append(
+            f'<div class="clk">'
+            f'<span class="clk-k">{label} &middot; {place}</span>'
+            f'<b class="clk-t">{now_l:%H:%M}</b>'
+            f'<span class="clk-z">{now_l:%Z} &middot; UTC{now_l:%z}</span>'
+            f'<span class="clk-s">open {o:%H:%M} &rarr; close {c:%H:%M}{roll}</span>'
+            f'</div>')
+    state = ('<span class="clk-live on">MARKET OPEN</span>' if is_open
+             else '<span class="clk-live">MARKET CLOSED</span>')
+    return (f'<div class="clocks"><div class="clk-hd">TEAM CLOCKS '
+            f'&middot; 24-HOUR &middot; US SESSION 09:30&ndash;16:00 ET {state}</div>'
+            f'<div class="clk-row">{"".join(cells)}</div></div>')
+
+
 def _terminal_lines(limit=90):
     """The agent's real activity — timestamped, icon-coded, newest FIRST.
 
@@ -532,6 +581,22 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.clocks{{background:linear-gradient(160deg,rgba(92,207,230,.05),transparent 62%),
+var(--panel);border:1px solid var(--line);padding:11px 14px;margin:0 0 14px}}
+.clk-hd{{color:var(--dim2);font-size:9.5px;letter-spacing:.2em;margin-bottom:9px}}
+.clk-live{{color:var(--dim2);border:1px solid var(--line);padding:1px 6px;
+margin-left:8px;letter-spacing:.14em}}
+.clk-live.on{{color:#0ABAB5;border-color:rgba(10,186,181,.45);
+text-shadow:0 0 8px rgba(10,186,181,.5)}}
+.clk-row{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}}
+.clk{{display:flex;flex-direction:column;gap:2px;border-left:2px solid rgba(10,186,181,.35);
+padding-left:10px}}
+.clk-k{{color:var(--dim2);font-size:9px;letter-spacing:.16em}}
+.clk-t{{color:var(--white);font-size:22px;font-weight:700;line-height:1.05;
+font-variant-numeric:tabular-nums;letter-spacing:.02em}}
+.clk-z{{color:var(--dim2);font-size:9px;letter-spacing:.1em}}
+.clk-s{{color:var(--bl);font-size:9.5px;letter-spacing:.06em}}
+.clk-s i{{color:#E6B450;font-style:normal}}
 .mission{{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
 var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}}
@@ -710,8 +775,9 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
   <span class="pill on">TEAM SYNC BOARD</span>
   <a class="pill" href="presentation.html" style="text-decoration:none">📊 PRESENTATION</a>
   <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
-  <span class="pill">ALPACA PAPER</span><span class="pill">366 TESTS</span><span class="pill">MIT</span>
+  <span class="pill">ALPACA PAPER</span><span class="pill">754 TESTS</span><span class="pill">MIT</span>
 </div>
+{_team_clocks()}
 {standdown}
 {warn}
 {mission}
