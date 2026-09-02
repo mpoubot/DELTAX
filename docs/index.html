@@ -1,22 +1,6 @@
 <title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-.clocks{background:linear-gradient(160deg,rgba(92,207,230,.05),transparent 62%),
-var(--panel);border:1px solid var(--line);padding:11px 14px;margin:0 0 14px}
-.clk-hd{color:var(--dim2);font-size:9.5px;letter-spacing:.2em;margin-bottom:9px}
-.clk-live{color:var(--dim2);border:1px solid var(--line);padding:1px 6px;
-margin-left:8px;letter-spacing:.14em}
-.clk-live.on{color:#0ABAB5;border-color:rgba(10,186,181,.45);
-text-shadow:0 0 8px rgba(10,186,181,.5)}
-.clk-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.clk{display:flex;flex-direction:column;gap:2px;border-left:2px solid rgba(10,186,181,.35);
-padding-left:10px}
-.clk-k{color:var(--dim2);font-size:9px;letter-spacing:.16em}
-.clk-t{color:var(--white);font-size:22px;font-weight:700;line-height:1.05;
-font-variant-numeric:tabular-nums;letter-spacing:.02em}
-.clk-z{color:var(--dim2);font-size:9px;letter-spacing:.1em}
-.clk-s{color:var(--bl);font-size:9.5px;letter-spacing:.06em}
-.clk-s i{color:#E6B450;font-style:normal}
 .mission{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
 var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}
@@ -194,10 +178,9 @@ td.bar span{display:block;height:6px;background:linear-gradient(90deg,var(--bl),
 <div class="pills">
   <span class="pill on">TEAM SYNC BOARD</span>
   <a class="pill" href="presentation.html" style="text-decoration:none">📊 PRESENTATION</a>
-  <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
+  <span class="pill">US 16:03</span><span class="pill">LATVIA 23:03</span><span class="pill">DENMARK 22:03</span>
   <span class="pill">ALPACA PAPER</span><span class="pill">754 TESTS</span><span class="pill">MIT</span>
 </div>
-<div class="clocks"><div class="clk-hd">TEAM CLOCKS &middot; 24-HOUR &middot; US SESSION 09:30&ndash;16:00 ET <span class="clk-live">MARKET CLOSED</span></div><div class="clk-row"><div class="clk"><span class="clk-k">YOU &middot; United States</span><b class="clk-t">16:00</b><span class="clk-z">EDT &middot; UTC-0400</span><span class="clk-s">open 09:30 &rarr; close 16:00</span></div><div class="clk"><span class="clk-k">ELSA &middot; Latvia</span><b class="clk-t">23:00</b><span class="clk-z">EEST &middot; UTC+0300</span><span class="clk-s">open 16:30 &rarr; close 23:00</span></div><div class="clk"><span class="clk-k">MATIN &middot; Denmark</span><b class="clk-t">22:00</b><span class="clk-z">CEST &middot; UTC+0200</span><span class="clk-s">open 15:30 &rarr; close 22:00</span></div></div></div>
 
 
 <div class="mission">
@@ -364,7 +347,7 @@ Retrieved 1&ndash;2 Sep 2026 unless noted.</div>
 <div class="lead">Probed live at every page generation. Per the corpus, news can
 veto a trade, never originate one — a stale feed is disarmed, not trusted.</div>
 <table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
-<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 2.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 5.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 2.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 2.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.7h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 1.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">50</td><td>newest 18.8h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13992.6h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
+<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 2.7h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 5.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 2.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 2.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 1.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">50</td><td>newest 18.8h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13992.6h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
 
 <h2>1 SEP — WHAT THE AGENT REFUSED, AND WHY</h2><div class="rule"></div>
 <div class="lead" style="margin-bottom:12px">The tape sold off through the
@@ -495,7 +478,7 @@ Nothing summarised, nothing hidden. Refreshes with the page.</div>
 </div>
 
 <div class="foot">
-GENERATED 2026-09-02 20:00 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
+GENERATED 2026-09-02 20:03 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
 &nbsp;·&nbsp; PAPER TRADING ONLY — NO REAL CAPITAL &nbsp;·&nbsp; ACCOUNT PA397N6FXXIE
 </div>
 </div>
