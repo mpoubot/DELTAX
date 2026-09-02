@@ -375,6 +375,19 @@ def gate_spread_quality(worst_leg_spread_pct: Optional[float],
             f"worst leg spread {worst_leg_spread_pct:.1%} vs max {MAX_SPREAD_PCT:.0%}",
             round(worst_leg_spread_pct, 4), MAX_SPREAD_PCT,
         )
+    # E87: `roundtrip_cost is None` used to SKIP the friction test silently, so
+    # the gate passed on a candidate whose friction was simply unknown. That
+    # state is reachable: worst_leg_spread_pct is built with
+    # `max(filter(None, [...]), default=None)`, which survives when only ONE leg
+    # quotes, while roundtrip requires BOTH. One unreadable leg therefore gave a
+    # passing spread check with the E74 friction test not running at all - the
+    # same gate-goes-dark-on-partial-data shape as E83. A friction number we
+    # cannot compute is not a friction number we can accept.
+    if credit and roundtrip_cost is None:
+        return GateResult(
+            "spread_quality", False,
+            "round-trip cost unreadable (a leg is missing a two-sided quote) - "
+            "friction cannot be verified, refusing")
     if roundtrip_cost is not None and credit:
         share = roundtrip_cost / credit
         if share > MAX_FRICTION_OF_CREDIT:

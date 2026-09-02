@@ -283,5 +283,24 @@ def _boom(s, q): raise RuntimeError("broker rejected")
 out3 = _manage(hit, dry_run=False, closer=_boom)
 check("a failed close is NOT reported as closed", out3["closed"] == [] and out3["failed"])
 
+print("\n-- E85: an unreadable equity holding must widen the refusal --")
+# `pass` on a bad cost_basis counted the holding as ZERO committed risk, so the
+# portfolio cap silently understated the book - the E79 shape again. The
+# options path already routed such a position to `unparsed`; made consistent.
+# Reachable in normal operation: an assigned short option becomes stock with no
+# order placed, so the E82 rule-3 guard never sees it.
+_bad = reconcile([{"symbol": "SPY", "asset_class": "us_equity",
+                   "qty": "100", "cost_basis": "not-a-number"}])
+check("E85 unreadable equity cost basis lands in unparsed",
+      "SPY" in _bad["unparsed"], str(_bad))
+check("E85 it does NOT silently count as zero risk",
+      _bad["committed"] == 0.0 and _bad["unparsed"] != [])
+_ok2, _why2 = safe_to_open(_bad)
+check("E85 and the book therefore fails closed", _ok2 is False, _why2)
+_good = reconcile([{"symbol": "SPY", "asset_class": "us_equity",
+                    "qty": "100", "cost_basis": "76000"}])
+check("E85 a readable equity still counts its basis",
+      _good["committed"] == 76000.0 and not _good["unparsed"], str(_good))
+
 print(f"\n{chr(61)*52}\n  {passed} passed, {failed} failed\n{chr(61)*52}")
 sys.exit(1 if failed else 0)

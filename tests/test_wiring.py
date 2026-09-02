@@ -28,6 +28,12 @@ def base(**kw):
              today=TODAY, open_interest=5000, open_portfolio_max_loss=0.0,
              structure="credit", width=5.0, short_delta=0.20,
              worst_leg_spread_pct=0.05, quote_age_hours=0.1,
+             # E87: both production callers (screener.py and run.py) always
+             # supply this, and the gate now refuses when it is None - an
+             # unverifiable friction number cannot be accepted. The fixture
+             # omitted it, which is why these tests passed while the friction
+             # check was silently skipped.
+             roundtrip_cost=0.20,
              earnings_date=None, halted=False, corporate_action=None)
     a.update(kw); return a
 
@@ -126,6 +132,80 @@ check("run.py calls recommend_state", "recommend_state(" in src)
 check("run.py calls gate_permission per side", "gate_permission(" in src)
 check("run.py can early-return on permission", "size_factor" in src)
 check("permission decision is written to the ledger", '"action": "permission"' in src)
+
+import re
+print("\n── E83: the cycle timestamp must never be shadowed ──")
+# `now = sm - lm` in the exit sweep replaced the cycle's UTC timestamp with the
+# spread's mark (a float). Line 568's `(now - bar_t)` then raised TypeError,
+# was swallowed by `except (ValueError, TypeError)`, and bar_age became None -
+# so gate_listed took its fail-closed branch for EVERY candidate from the first
+# cycle that held a position, reporting healthy ETFs as "likely delisted".
+_run_src = open(os.path.join(os.path.dirname(__file__), "..", "deltax", "run.py")).read()
+check("E83 the sweep no longer assigns to `now`",
+      "\n            now = sm - lm" not in _run_src)
+check("E83 it uses a distinct name instead", "mark_now = sm - lm" in _run_src)
+check("E83 only one assignment to `now` remains in run.py",
+      len(re.findall(r"^\s+now = ", _run_src, re.M)) == 1,
+      str(re.findall(r"^\s+now = .*", _run_src, re.M)))
+check("E83 an unreadable bar age is now recorded, not swallowed",
+      "bar_age_unreadable" in _run_src)
+
+print("\n── E83b: partial listing evidence must not silently fail closed ──")
+# gate_listed is inserted when EITHER tradable or age is supplied, but fails
+# closed when EITHER is None - so tradable=True with age=None guarantees a
+# refusal attributed to "listed". That is the exact state run.py was in.
+_d = evaluate(**base(tradable=True, last_bar_age_days=None))
+_g = {g.gate: g for g in _d.gates}
+check("E83b tradable=True + age=None still refuses (fail-closed is correct)",
+      "listed" in _g and not _g["listed"].passed)
+check("E83b and the refusal is legible as unknown, not as delisted",
+      "unknown" in _g["listed"].detail, _g["listed"].detail)
+_d2 = evaluate(**base(tradable=True, last_bar_age_days=0.5))
+_g2 = {g.gate: g for g in _d2.gates}
+check("E83b a real age passes the gate", _g2["listed"].passed, _g2["listed"].detail)
+
+print("\n── E84: a position the sweep cannot read must not vanish ──")
+# The parse failure was a bare `continue`: the holding then appeared in NONE of
+# closed/held/unpriceable/failed, so it silently left the sweep and the board
+# with nobody told. A position the sweep cannot see is one that never closes.
+check("E84 an unreadable position is recorded", "sweep_drop" in _run_src)
+check("E84 an unreadable expiry is recorded", "sweep_dte_unreadable" in _run_src)
+check("E84 dropped positions are collected", "sweep_dropped" in _run_src)
+check("E84 and surfaced on the result, not only logged",
+      '"dropped"' in _run_src and "sweep_incomplete" in _run_src)
+check("E84 swept is initialised with every key manage() returns",
+      all(k in _run_src.split("swept = {")[1].split("}")[0]
+          for k in ('"closed"', '"held"', '"unpriceable"', '"failed"')),
+      _run_src.split("swept = {")[1].split("}")[0])
+
+print("\n── E86: an equity holding can never be silent ──")
+# reconcile() always collected `equities` and nothing read it - computed every
+# cycle and thrown away. It matters because assignment creates stock with NO
+# order placed, which bypasses the E82 rule-3 guard entirely.
+check("E86 unexpected equity is recorded loudly", "UNEXPECTED_EQUITY" in _run_src)
+check("E86 the record names the rule at stake", "rule 3" in _run_src)
+check("E86 it names assignment as the cause the guard cannot see",
+      "assignment" in _run_src)
+check("E86 equities are surfaced on the run result", '"equities": _eq' in _run_src)
+check("E86 but do NOT block trading (the E72 deadlock)",
+      "refusing new risk" not in _run_src.split("UNEXPECTED_EQUITY")[1][:600])
+
+print("\n── E87: unverifiable friction must refuse, not skip ──")
+_nf = evaluate(**base(roundtrip_cost=None))
+_gf = {g.gate: g for g in _nf.gates}
+check("E87 roundtrip_cost=None refuses", not _gf["spread_quality"].passed,
+      _gf["spread_quality"].detail)
+check("E87 the refusal explains why", "unreadable" in _gf["spread_quality"].detail)
+check("E87 a readable friction still passes",
+      {g.gate: g for g in evaluate(**base()).gates}["spread_quality"].passed)
+check("E87 and excessive friction still refuses",
+      not {g.gate: g for g in evaluate(**base(roundtrip_cost=2.00)).gates}["spread_quality"].passed)
+# the reachable path: ONE leg unreadable still yields a worst_leg_spread_pct
+check("E87 both production callers pass roundtrip_cost",
+      "roundtrip_cost=cand" in open(os.path.join(os.path.dirname(__file__), "..",
+          "deltax", "run.py")).read()
+      and "roundtrip_cost=cand" in open(os.path.join(os.path.dirname(__file__), "..",
+          "deltax", "screener.py")).read())
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

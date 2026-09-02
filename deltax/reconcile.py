@@ -99,7 +99,19 @@ def reconcile(positions: list, orders: Optional[list] = None) -> dict:
                 try:
                     committed += abs(float(p.get("cost_basis") or 0))
                 except (TypeError, ValueError):
-                    pass
+                    # E85: `pass` here counted the holding as ZERO committed
+                    # risk. The portfolio cap then silently understated the
+                    # book - the same shape as E79, where the risk number did
+                    # not measure risk. The options path below already treats
+                    # an unreadable position as `unparsed`, which fails closed
+                    # via safe_to_open; this module's own contract says an
+                    # unparseable holding must WIDEN the refusal, never be
+                    # silently ignored. Made consistent.
+                    #
+                    # This path is reachable in normal operation: an assigned
+                    # short option becomes an equity position without any order
+                    # being placed, so it bypasses the E82 rule-3 guard.
+                    unparsed.append(sym)
                 continue
             unparsed.append(sym)
             continue
