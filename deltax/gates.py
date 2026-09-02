@@ -597,6 +597,45 @@ def gate_no_earnings_before_expiry(
 MAX_BAR_AGE_DAYS = {"equity": 4.0, "crypto": 1.5}
 
 
+MIN_VARIANCE_PREMIUM = 1.10    # implied vol must exceed realised by 10%
+
+
+def gate_variance_premium(iv: Optional[float], rv: Optional[float]) -> GateResult:
+    """Are we being paid MORE than the stock is actually moving?
+
+    E101. Selling a credit spread is selling volatility, so the only edge a
+    seller has is implied vol sitting above what the underlying delivers. If
+    IV/RV < 1 you are selling movement for less than it costs - a mathematically
+    negative trade no strike selection can rescue, because the market has priced
+    the whole curve fairly and moving the short strike trades win rate against
+    payoff at roughly constant expectancy.
+
+    Nothing checked this for the first three days. On 2 Sep the book's largest
+    concentration by far - six SMH spreads, $5,507 and 42% of committed risk -
+    sat at IV/RV 0.91 while DIA offered 1.64 and SPY 1.40. That is not variance,
+    it is a measurable error, and it is most of why the day lost money.
+
+    Fails CLOSED: unreadable vol means no trade. A premium we cannot measure is
+    not a premium we can sell.
+    """
+    if iv is None or rv is None or rv <= 0:
+        return GateResult("variance_premium", False,
+                          "implied or realised vol unreadable - fails closed",
+                          None, MIN_VARIANCE_PREMIUM)
+    ratio = iv / rv
+    # Binary floats: 0.110 / 0.100 is 1.0999999999999999, so a candidate sitting
+    # exactly ON the floor would be refused by representation error rather than
+    # by policy. These are measured volatilities; a 1e-9 difference is not a
+    # risk decision. Compare with a tolerance.
+    ok = ratio >= MIN_VARIANCE_PREMIUM - 1e-9
+    return GateResult(
+        "variance_premium", ok,
+        f"IV {iv:.1%} vs realised {rv:.1%} = {ratio:.2f}x "
+        f"(floor {MIN_VARIANCE_PREMIUM:.2f}x)"
+        + ("" if ok else " - selling movement below what the stock delivers"),
+        round(ratio, 3), MIN_VARIANCE_PREMIUM)
+
+
 def gate_listed(tradable: Optional[bool], last_bar_age_days: Optional[float],
                 asset_class: str = "equity") -> GateResult:
     """Is this instrument actually live RIGHT NOW - not merely in our history?"""
@@ -663,6 +702,8 @@ def evaluate(
     worst_leg_spread_pct: Optional[float] = None,
     roundtrip_cost: Optional[float] = None,   # E74: sum of both legs' bid/ask
     quote_age_hours: Optional[float] = None,
+    implied_vol: Optional[float] = None,
+    realized_vol: Optional[float] = None,
     tradable: Optional[bool] = None,
     last_bar_age_days: Optional[float] = None,
     asset_class: str = "equity",
@@ -710,6 +751,12 @@ def evaluate(
     ]
     # Only enforced when listing evidence was supplied, so existing callers keep
     # working; run.py passes it, and E25 requires it before any live order.
+    # E101: only enforced when vol evidence was supplied, so existing callers
+    # keep working. run.py and screener.py both pass it; a caller that omits it
+    # is not silently exempted - test_wiring asserts both production paths send
+    # it, the same way the E74 friction gate is held to its callers.
+    if structure == "credit" and (implied_vol is not None or realized_vol is not None):
+        gates.append(gate_variance_premium(implied_vol, realized_vol))
     if tradable is not None or last_bar_age_days is not None:
         gates.insert(2, gate_listed(tradable, last_bar_age_days, asset_class))
     if worst_leg_spread_pct is not None:

@@ -74,7 +74,11 @@ DEFAULT_WIDTH = {
 # quoted $0.17 against a $1.27 requirement and could never pass. Width must
 # scale with price, not be a constant - these sit at ~2.5-3% of spot, matching
 # what SPY/QQQ/IWM already use.
-                 "XLF": 2.0, "XLE": 2.0, "KRE": 2.0,}
+                 "XLF": 2.0, "XLE": 2.0, "KRE": 2.0,
+                 # E101: ~1.5-3% of spot, so max loss per contract stays in
+                 # the same band as the index names rather than scaling with
+                 # share price - a 5-wide spread on a $35 ETF is not a spread.
+                 "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
@@ -117,7 +121,22 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # -11.7%, 6 names -1.4%, this basket +3.1%. Chosen from six candidates and
 # positive under BOTH the pessimistic (IV/RV 1.15) and observed (1.45) vol
 # assumptions, which is the property that matters - the margin itself is noise.
-INCOME_UNIVERSE = ["SPY", "QQQ", "IWM", "SMH", "XLF", "XLE", "XOP", "KRE"]
+# E101 (2 Sep, evening). Re-pointed at names with a MEASURED variance premium.
+#
+# Dropped XLF, XLE, XOP, KRE: across 972 logged candidates they produced zero
+# trades. Measured live they quote 16-24% median spreads against a 15% cap, so
+# they consumed 58% of every scan while being structurally untradeable.
+#
+# Dropped SMH: IV/RV 0.91 - the one name where we were selling movement for
+# LESS than the stock delivers, and it had grown to 42% of committed risk.
+#
+# Added DIA (IV/RV 1.64), FXI (1.24), HYG (1.16), EEM (1.12) - all measured on
+# 2 Sep with >=14 strikes above the 500 open-interest floor and median spreads
+# inside the 15% cap. Kept SPY (1.40), IWM (1.18), QQQ (1.17).
+#
+# The premium is re-measured per candidate by gate_variance_premium, so this
+# list says where to LOOK. It is never a standing claim that these stay cheap.
+INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM"]
 
 
 @dataclass
@@ -271,7 +290,11 @@ def search_vertical(chain: dict, *, side: str, target_delta: float, width: float
         if strike is None:
             continue
         rows.append({"symbol": sym, "strike": strike, "delta": abs(d),
-                     "bid": bid, "ask": ask})
+                     "bid": bid, "ask": ask,
+                     # E101: the chain already carries implied vol. Capturing it
+                     # here costs nothing; solving it later would mean a second
+                     # pass over data we have already fetched.
+                     "iv": c.get("impliedVolatility")})
     if not rows:
         return None
 
@@ -325,6 +348,7 @@ def search_vertical(chain: dict, *, side: str, target_delta: float, width: float
                                      oi_by_symbol.get(lg["symbol"], 0)),
                 "expiry": parse_expiry(sh["symbol"]),
                 "score": score,
+                "implied_vol": sh.get("iv"),
                 "delta_distance": abs(sh["delta"] - target_delta),
             }
             # Best net edge; ties broken toward the requested delta.

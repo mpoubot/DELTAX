@@ -27,6 +27,7 @@ from deltax.screener import (
     directional_bias,INCOME_UNIVERSE, DEFAULT_WIDTH, TARGET_DELTA_BY_WEAK,
                              rank_by_vol_premium, vol_premium,
                              assess_regime, select_vertical, choose_expiry,
+                             realized_vol_20,
                              BENCHMARKS)
 from deltax.gates import evaluate, MIN_DTE, MAX_DTE
 from deltax import gates as _G
@@ -632,6 +633,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 "frozen": _frz.detail,
                 "catalyst": catalyst_result, "rotation": rotation_result}
 
+    _rv_cache = {}                      # E101: realised vol, once per symbol
     for symbol in _ordered:
         if len(traded) >= MAX_CONCURRENT:
             break
@@ -762,6 +764,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                            oi_by_symbol=oi,
                            max_spread_pct=_G.MAX_SPREAD_PCT,
                            min_credit=_G.MIN_CREDIT)
+            # E101: realised vol for the variance-premium gate. Computed once
+            # per symbol per cycle and reused for both sides - it is a property
+            # of the underlying, not of the structure. A gate with no data is
+            # dead code (E74), so this is fetched before the gate can run, and
+            # None reaches the gate as a refusal rather than a skip.
+            if _rv_cache.get(symbol, "miss") == "miss":
+                try:
+                    _rv_cache[symbol] = realized_vol_20(feed, symbol, today)
+                except Exception:
+                    _rv_cache[symbol] = None
             if not cand:
                 # A genuine "nothing here is tradeable" - record it rather than
                 # skipping in silence, so an empty cycle can be told apart from
@@ -783,6 +795,8 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 width=cand["width"], short_delta=cand["short"]["delta"],
                 worst_leg_spread_pct=cand["worst_leg_spread_pct"],
                 roundtrip_cost=cand.get("roundtrip_cost"),
+                implied_vol=cand.get("implied_vol"),
+                realized_vol=_rv_cache.get(symbol),
                 tradable=True, last_bar_age_days=bar_age, asset_class="equity")
             bias, bias_icon, bias_note = directional_bias(side, "credit")
             ledger.record(dec, context={

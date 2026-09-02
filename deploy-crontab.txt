@@ -16,5 +16,8 @@
 # DELTAX — freeze signal check: decides whether new entries are permitted.
 # Places no orders. Writes state/freeze.json, which gate_new_entries() reads.
 */15 9-16 * * 1-5 /Users/pautax/Documents/DELTAX/bin/unfreeze-check.sh
+# DELTAX — close the SMH book at Thu's open (E101: IV/RV 0.91, negative
+# variance premium, 42% of committed risk). One-shot.
+31 9 3 9 * /Users/pautax/Documents/DELTAX/bin/close-smh.sh
 # DELTAX — flatten the book for judging, Fri 4 Sep 10:00 ET
 0 10 4 9 * /Users/pautax/Documents/DELTAX/bin/close-for-judging.sh

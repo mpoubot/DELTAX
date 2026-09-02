@@ -230,5 +230,46 @@ check("E89 run.py records the account read failure",
 check("E89 run.py no longer zeroes equity on failure",
       "eq = csh = 0.0" not in _run_src)
 
+print("\n── E101: the variance-premium gate ──")
+# Selling a credit spread is selling volatility, so the only edge is implied
+# vol above what the underlying actually delivers. Nothing checked this for
+# three days: on 2 Sep six SMH spreads - $5,507 and 42% of committed risk - sat
+# at IV/RV 0.91 while DIA offered 1.64. A negative premium is a mathematically
+# losing trade that no strike selection rescues, because the market prices the
+# whole curve fairly and moving the short strike trades win rate against payoff
+# at roughly constant expectancy.
+from deltax.gates import gate_variance_premium, MIN_VARIANCE_PREMIUM
+_g = {g.gate: g for g in evaluate(**base(implied_vol=0.278, realized_vol=0.307)).gates}
+check("E101 the gate runs on a credit structure", "variance_premium" in _g)
+check("E101 the real SMH reading (0.91x) is refused",
+      not _g["variance_premium"].passed, _g["variance_premium"].detail)
+check("E101 the refusal names the shortfall",
+      "below what the stock delivers" in _g["variance_premium"].detail)
+_d = {g.gate: g for g in evaluate(**base(implied_vol=0.133, realized_vol=0.081)).gates}
+check("E101 the real DIA reading (1.64x) passes", _d["variance_premium"].passed,
+      _d["variance_premium"].detail)
+# fail closed on missing evidence - a premium we cannot measure is not one we sell
+for _iv, _rv, _why in ((None, 0.10, "implied vol missing"),
+                       (0.20, None, "realised vol missing"),
+                       (0.20, 0.0, "realised vol zero")):
+    _r = gate_variance_premium(_iv, _rv)
+    check(f"E101 fails closed when {_why}", _r.passed is False, _r.detail)
+check("E101 exactly at the floor passes",
+      gate_variance_premium(0.110, 0.100).passed is True)
+check("E101 a hair under the floor refuses",
+      gate_variance_premium(0.1099, 0.100).passed is False)
+check("E101 the floor is 1.10", abs(MIN_VARIANCE_PREMIUM - 1.10) < 1e-9)
+# a debit structure is BUYING vol - the gate must not invert onto it
+_deb = {g.gate: g for g in evaluate(**base(structure="debit",
+        max_profit_per_contract=900.0, implied_vol=0.10, realized_vol=0.30)).gates}
+check("E101 does not gate debit structures", "variance_premium" not in _deb)
+# and it must actually be fed - a gate with no data is dead code (E74)
+check("E101 run.py passes both readings",
+      "implied_vol=cand.get(\"implied_vol\")" in _run_src
+      and "realized_vol=_rv_cache.get(symbol)" in _run_src)
+check("E101 the screener captures implied vol from the chain",
+      '"iv": c.get("impliedVolatility")' in open(os.path.join(
+          os.path.dirname(__file__), "..", "deltax", "screener.py")).read())
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
