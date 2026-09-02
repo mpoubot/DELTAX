@@ -130,6 +130,7 @@ def run() -> dict:
     # and would again freeze forever for the wrong reason.
     exp_total = score_total = 0.0
     engine_ok = True
+    forecast = None
     try:
         structs = {}
         for p in pos:
@@ -164,6 +165,19 @@ def run() -> dict:
             stats = qc.summarize_distribution(book_pnl)
             exp_total = stats["expected_pnl"]
             score_total = stats["cvar05"]        # expected shortfall, joint
+            # E100: keep the whole forecast, not just the two numbers the
+            # signals need. The board asks what we EXPECT at judging and how
+            # confident that is; recomputing it there would run the simulation
+            # on every 3-minute publish for a figure this job already has.
+            forecast = {
+                "expected_pnl": round(stats["expected_pnl"], 2),
+                "median_pnl": round(stats["median_pnl"], 2),
+                "probability_gain": round(stats["probability_gain"], 4),
+                "p05": round(stats["p05"], 2),
+                "cvar05": round(stats["cvar05"], 2),
+                "paths": len(book_pnl),
+                "structures": len(cands),
+            }
     except Exception as e:
         engine_ok = False
         exp_total = score_total = 0.0
@@ -194,6 +208,8 @@ def run() -> dict:
     if _err:
         reason += f" | engine error {_err}"
         frozen = True                    # an engine error can only ever freeze
+    if forecast:
+        res["forecast"] = forecast
     return fz.write_state(frozen, reason, res)
 
 

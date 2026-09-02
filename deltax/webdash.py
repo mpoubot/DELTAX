@@ -235,6 +235,32 @@ def _equity_chart(history=None):
 </svg></div>"""
 
 
+def _forecast():
+    """What the agent expects at judging, and how confident that is.
+
+    Read from state/freeze.json, where the 15-minute signal check already
+    stored it. Recomputing here would rerun a 40,000-path simulation on every
+    3-minute publish for a number that job has already produced.
+
+    'Confidence' is the share of simulated paths that finish ABOVE where the
+    book stands now - a measured frequency, not an opinion. The board used to
+    print a hardcoded 58% under that word, which is exactly the kind of claim
+    this replaces.
+
+    Returns None when there is no usable forecast, and the caller shows an em
+    dash. An absent number is honest; a stale one is not.
+    """
+    import json as _json
+    try:
+        st = _json.load(open(os.path.join(_ROOT, "state", "freeze.json")))
+        f = (st.get("signals") or {}).get("forecast")
+        if not f or not f.get("paths"):
+            return None
+        return f
+    except Exception:
+        return None
+
+
 def _freeze_badge():
     """Whether new entries are permitted right now, and why. Reads live state."""
     try:
@@ -552,9 +578,21 @@ def build(account=None, positions=None, error=None, history=None) -> str:
     # 6 stats -> exactly two rows of three. Never an orphan.
     # E64: ACCOUNT is demoted into the mission grid - the top of the page
     # answers target/proof/confidence, not which account we are.
+    # EQUITY and P&L both moved to the block at the top of the page, which is
+    # where the CEO asked for them. Repeating them here is what made the same
+    # figure appear twice - the complaint that prompted this. What stays is
+    # what the top block does NOT say.
+    # Committed risk is the true worst case across the book, from the same
+    # paired-leg calculation the portfolio cap enforces - not a sum of premiums.
+    try:
+        from deltax.reconcile import reconcile as _rec
+        _committed = _rec(positions or [])["committed"]
+    except Exception:
+        _committed = None
     stats = "".join([
-        stat("EQUITY", money(eq), f"{acct} · Alpaca paper", "big"),
-        stat("P&amp;L", pnl_val, pnl_pct, f"big {pnl_cls}"),
+        stat("COMMITTED RISK",
+             "&mdash;" if _committed is None else f"${_committed:,.0f}",
+             "worst case if every spread loses · $30,000 cap"),
         stat("CASH", money(cash), "uncommitted"),
         # 4 legs is 2 spreads. A stakeholder reading "4 positions" would think
         # four trades are on, which is twice the truth.
@@ -562,9 +600,8 @@ def build(account=None, positions=None, error=None, history=None) -> str:
              f"{len(positions or []) // 2}" if positions else "0",
              (f"{len(positions or [])} legs · {len(positions or []) // 2} spread(s)"
               if positions else "flat")),
-        stat("DECISIONS LOGGED", len(dec), "every evaluation"),
-        stat("REFUSED", f"{len(ref)}",
-             f"{len(ref)/max(1,len(dec))*100:.0f}% of candidates screened"),
+        stat("DECISIONS", len(dec),
+             f"{len(ref)} refused · {len(ref)/max(1,len(dec))*100:.0f}% of candidates"),
     ])
 
     # A gate slug means nothing to anyone who did not write it. Each row now
@@ -718,7 +755,7 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     for root, legs in sorted(_books.items()):
         pl = _pl(legs)
         _book_rows += (f'<tr><td class="cy">{root}</td>'
-                       f'<td>{len(legs)}-leg spread</td>'
+                       f'<td>{len(legs)} legs &middot; {len(legs)//2} spread(s)</td>'
                        f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
                        f'<td class="num {_plc(pl)}">{_pct(pl)}</td></tr>')
     for p_ in _eq_legs:
@@ -747,6 +784,7 @@ refusal is enforced in code at the order boundary, not by convention.</div>
         _picks, _regime_txt, _regime_why = "—", "—", ""
 
     _tc_n, _tc_sub = _test_count()
+    _fc = _forecast()
     _frz = _freeze_badge()
     mission = f"""<div class="mission">
 <div class="m-hero">
@@ -773,8 +811,9 @@ refusal is enforced in code at the order boundary, not by convention.</div>
   </div>
 </div>
 <div class="ev-grid" style="margin-top:16px">
-  <div><span>OPEN POSITIONS</span><b class="{"ok" if _tot_pl>=0 else "bad"}">{_tot_pl:+,.2f}</b><i>{len(_opt_legs)} legs &middot; marked to market</i></div>
-  <div><span>MARKET</span><b class="ok">{_regime_txt}</b><i>{_regime_why[:38]}</i></div>
+  <div><span>PREDICTED AT JUDGING</span><b class="{"ok" if (_fc and _fc["expected_pnl"]>=0) else ("bad" if _fc else "")}">{("&mdash;" if not _fc else f"{_fc['expected_pnl']:+,.0f}")}</b><i>{("no forecast recorded" if not _fc else f"expected change from here &middot; Fri 10:00")}</i></div>
+  <div><span>CONFIDENCE</span><b class="{"ok" if (_fc and _fc["probability_gain"]>=0.5) else ("mixed" if _fc else "")}">{("&mdash;" if not _fc else f"{_fc['probability_gain']*100:.0f}%")}</b><i>{("&nbsp;" if not _fc else f"of {_fc['paths']:,} simulated paths end higher")}</i></div>
+  <div><span>MARKET</span><b class="ok">{_regime_txt}</b><i>{_regime_why[:40]}</i></div>
   <div><span>RISK GATES</span><b class="ok">{_ga["gate_count"]} ARMED</b><i>{_ga["refused"]} refused today</i></div>
   <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper &middot; {_tc_n} tests</i></div>
 </div>
@@ -919,7 +958,6 @@ h1 b{{color:var(--cy);font-weight:600}}
 
 /* ── stats: fixed 3 columns, always symmetric ── */
 .stats{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px}}
-.stats .stat:nth-child(1){{grid-column:span 2}}
 .stat{{background:linear-gradient(160deg,rgba(10,186,181,.05),transparent 60%),var(--panel);
  border:1px solid var(--line);padding:17px 19px;position:relative;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
