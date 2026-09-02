@@ -1,0 +1,31 @@
+name: Sync fork with upstream
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/pautax007/DELTAX.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Fast-forward merge upstream/main
+        run: git merge --ff-only upstream/main
+
+      - name: Push to fork
+        run: git push origin main
