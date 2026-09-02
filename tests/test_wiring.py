@@ -271,5 +271,23 @@ check("E101 the screener captures implied vol from the chain",
       '"iv": c.get("impliedVolatility")' in open(os.path.join(
           os.path.dirname(__file__), "..", "deltax", "screener.py")).read())
 
+print("\n── E102: the trailing exit must actually be FED ──")
+# Found by mutation testing: replacing peak_captured=_peaks.get(ssym) with None
+# broke no test. The trail would then be fully implemented, fully unit-tested,
+# and permanently inert - a peak of None can never exceed the arm threshold.
+# The E74 lesson: a rule with no data is dead code, and its own unit tests will
+# not notice.
+check("E102 run.py loads peaks before building the sweep",
+      "_peaks = _load_peaks()" in _run_src)
+check("E102 and passes each structure its own peak",
+      "peak_captured=_peaks.get(ssym)" in _run_src)
+check("E102 and persists the raised marks after the sweep",
+      "_update_peaks(live)" in _run_src)
+check("E102 peaks are read BEFORE this cycle's marks are folded in",
+      _run_src.index("_peaks = _load_peaks()") < _run_src.index("_update_peaks(live)"))
+check("E102 the peak store is anchored to the repo, not the CWD",
+      "PEAKS_PATH = _os.path.join(" in open(os.path.join(
+          os.path.dirname(__file__), "..", "deltax", "manage.py")).read())
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

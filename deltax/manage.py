@@ -26,6 +26,32 @@ from deltax import execute
 from datetime import date, datetime, timezone, timedelta
 
 TAKE_PROFIT_FRACTION = 0.50    # E5 / E15
+
+# E102 — TRAILING TAKE-PROFIT.
+#
+# Measured 2 Sep: the account peaked at $100,144 at 10:45 ET and finished the
+# session at $99,559. $585 of the day's loss was profit handed back. There was
+# a fixed target at 50% and nothing whatsoever between 0% and 50%, so anything
+# that rose to 40% and reversed captured nothing.
+#
+# This is the operator's trailing stop, adapted to a credit spread. Three
+# differences from the stock version, and each one shapes the numbers:
+#
+#   1. The sign inverts. We SOLD the spread, so profit is its value FALLING.
+#      What trails is the fraction of credit captured, never a price.
+#   2. Friction dominates. A trailing stop on a share costs a cent to trigger;
+#      our measured round trip is 9-15% of the credit (E74). A tight trail fires
+#      on quote noise and pays that spread every time - so the give-back
+#      threshold must sit well outside it.
+#   3. Theta pays us to wait. Every hour moves a short spread in our favour,
+#      which a stock position never does. Room is close to free here, so the
+#      trail is deliberately loose.
+#
+# ARM at 25%: below that the give-back is smaller than the cost of reacting.
+# GIVE BACK 15 points: comfortably outside the 9-15% friction band, so a
+# trigger means the position genuinely reversed rather than the quote wobbling.
+TRAIL_ARM_AT = 0.25            # start trailing once 25% of credit is captured
+TRAIL_GIVE_BACK = 0.15         # exit after surrendering 15 points from the peak
 # E57: 2 -> 1 so MIN_DTE (2) stays STRICTLY above it, preserving the E45
 # invariant. A position opened 2 Sep now closes 3 Sep rather than being
 # time-stopped on arrival. This DOES hold one day deeper into the gamma zone,
@@ -57,6 +83,10 @@ class Managed:
     entry_credit: float
     current: Optional[float]
     dte: Optional[int]
+    # E102: highest fraction of credit this structure has EVER captured, carried
+    # in from state. Each cycle is a fresh process, so a peak held only in memory
+    # would reset every five minutes and the trail could never trigger.
+    peak_captured: Optional[float] = None
 
     @property
     def captured(self) -> Optional[float]:
@@ -75,6 +105,15 @@ class Managed:
         c = self.captured
         if c is not None and c >= TAKE_PROFIT_FRACTION:
             return f"target hit — {c*100:.0f}% of credit captured"
+        # E102: trailing take-profit. Only armed once the position has actually
+        # made something worth protecting, and only fires on a give-back larger
+        # than the round-trip cost of reacting to it.
+        if (c is not None and self.peak_captured is not None
+                and self.peak_captured >= TRAIL_ARM_AT
+                and (self.peak_captured - c) >= TRAIL_GIVE_BACK):
+            return (f"trailing exit — peaked at {self.peak_captured*100:.0f}% "
+                    f"of credit, now {c*100:.0f}%, gave back "
+                    f"{(self.peak_captured - c)*100:.0f} points")
         if self.dte is not None and self.dte <= TIME_STOP_DTE:
             return f"time stop — {self.dte} DTE, gamma zone"
         return None
@@ -162,3 +201,61 @@ def manage(positions: list, *, ledger=None, dry_run: bool = True,
             ledger.record_raw(rec)
     return {"closed": closed, "held": held, "unpriceable": unpriceable,
             "failed": failed}
+
+
+# ── E102: peak persistence ───────────────────────────────────────────────────
+# A trailing exit needs to remember the best a position has ever been. Each
+# cycle is a fresh process invoked by cron, so an in-memory high-water mark
+# would reset every five minutes and the trail could never fire. Peaks live in
+# state/peaks.json, keyed by the short leg's OCC symbol.
+#
+# Reading is fail-soft, unlike the freeze state: a lost peak means the trail
+# simply does not fire and the fixed 50% target and time stop still stand, so
+# the safe direction here is to carry on rather than to refuse.
+
+import json as _json
+import os as _os
+
+PEAKS_PATH = _os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    "state", "peaks.json")
+
+
+def load_peaks(path: Optional[str] = None) -> dict:
+    """Best captured fraction seen per structure. {} on any problem."""
+    try:
+        with open(path or PEAKS_PATH) as fh:
+            d = _json.load(fh)
+        return {k: float(v) for k, v in d.items()
+                if isinstance(v, (int, float))}
+    except Exception:
+        return {}
+
+
+def update_peaks(managed: list, path: Optional[str] = None) -> dict:
+    """Raise each structure's high-water mark, then persist.
+
+    Peaks only ever RISE while a position is open. A structure that has closed
+    is dropped, so a symbol later reopened starts fresh rather than inheriting
+    a stale peak from a different trade and triggering the trail immediately.
+    """
+    path = path or PEAKS_PATH
+    peaks = load_peaks(path)
+    live = set()
+    for m in managed:
+        c = m.captured
+        if c is None:
+            continue
+        live.add(m.symbol)
+        prev = peaks.get(m.symbol)
+        peaks[m.symbol] = c if prev is None else max(prev, c)
+    peaks = {k: v for k, v in peaks.items() if k in live}
+    try:
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as fh:
+            _json.dump(peaks, fh, indent=1, sort_keys=True)
+        _os.replace(tmp, path)          # atomic; a reader never sees a partial file
+    except Exception:
+        pass                            # fail soft - see the note above
+    return peaks

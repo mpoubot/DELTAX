@@ -85,6 +85,7 @@ ET = timezone(timedelta(hours=-4))
 # that constant moves, and can never fail. Pin the judging moment instead.
 _before = datetime(2026, 9, 4,  9, 59, tzinfo=ET)
 _at     = datetime(2026, 9, 4, 10,  0, tzinfo=ET)
+BEFORE_DEADLINE = datetime(2026, 9, 3, 12, 0, tzinfo=ET)
 _after  = datetime(2026, 9, 5,  9,  0, tzinfo=ET)
 check("E91 the judging date is pinned to Fri 4 Sep 2026",
       str(CONTEST_CLOSE) == "2026-09-04", str(CONTEST_CLOSE))
@@ -132,6 +133,70 @@ finally:
     _mg.past_contest_deadline = _saved
 check("E91 the deadline function is restored",
       _mg.past_contest_deadline is _saved)
+
+print("\n── E102: trailing take-profit ──")
+# The operator's stock trailing stop, adapted to a credit spread. Measured 2
+# Sep: the account peaked at $100,144 and closed at $99,559 - $585 of the day's
+# loss was profit handed back, because there was a fixed 50% target and nothing
+# at all between 0% and 50%.
+from deltax.manage import (TRAIL_ARM_AT, TRAIL_GIVE_BACK, load_peaks,
+                           update_peaks)
+import tempfile as _tf, os as _os, json as _js
+
+def _m(entry, now, peak=None, dte=9):
+    return Managed(symbol="SPY260918P00760000", qty=1, entry_credit=entry,
+                   current=now, dte=dte, peak_captured=peak)
+
+# 2.00 credit now worth 1.40 => 30% captured, having peaked at 50%
+_r = _m(2.00, 1.40, peak=0.50).reason(BEFORE_DEADLINE)
+check("E102 a 20-point give-back from a 50% peak exits",
+      "trailing exit" in (_r or ""), str(_r))
+check("E102 the reason states peak, current and give-back",
+      all(x in (_r or "") for x in ("peaked at", "gave back")), str(_r))
+# same position, peak only 30% => give-back is 0 points, hold
+check("E102 no give-back means hold",
+      _m(2.00, 1.40, peak=0.30).reason(BEFORE_DEADLINE) is None)
+# a 10-point give-back is inside the 9-15% round-trip cost band - hold
+check("E102 a give-back smaller than the friction band holds",
+      _m(2.00, 1.60, peak=0.30).reason(BEFORE_DEADLINE) is None,
+      str(_m(2.00, 1.60, peak=0.30).reason(BEFORE_DEADLINE)))
+# never armed below the arm threshold, however large the retrace
+check("E102 an unarmed position (peak 20%) never trails",
+      _m(2.00, 2.00, peak=0.20).reason(BEFORE_DEADLINE) is None)
+check("E102 arm threshold is 25%", abs(TRAIL_ARM_AT - 0.25) < 1e-9)
+check("E102 give-back threshold is 15 points", abs(TRAIL_GIVE_BACK - 0.15) < 1e-9)
+# ranking: the fixed target and the deadline both outrank the trail
+check("E102 the 50% target still wins when both would fire",
+      "target hit" in (_m(2.00, 0.90, peak=0.95).reason(BEFORE_DEADLINE) or ""))
+check("E102 the contest deadline outranks the trail",
+      "DEADLINE" in (_m(2.00, 1.40, peak=0.50).reason(_at) or ""))
+# a missing peak must not crash or fire
+check("E102 no recorded peak simply holds",
+      _m(2.00, 1.40, peak=None).reason(BEFORE_DEADLINE) is None)
+check("E102 an unpriceable position still reports no reason",
+      _m(2.00, None, peak=0.50).reason(BEFORE_DEADLINE) is None)
+
+print("\n── E102: peaks must survive across cycles ──")
+# Each cycle is a fresh process. A peak held only in memory resets every five
+# minutes and the trail could never fire.
+_d = _tf.mkdtemp(); _p = _os.path.join(_d, "peaks.json")
+check("E102 a missing peaks file reads as empty", load_peaks(_p) == {})
+_a = Managed(symbol="AAA", qty=1, entry_credit=2.0, current=1.0, dte=9)   # 50%
+update_peaks([_a], _p)
+check("E102 a peak is persisted", abs(load_peaks(_p).get("AAA", 0) - 0.50) < 1e-9)
+_b = Managed(symbol="AAA", qty=1, entry_credit=2.0, current=1.6, dte=9)   # 20%
+update_peaks([_b], _p)
+check("E102 peaks only ever rise, never fall",
+      abs(load_peaks(_p).get("AAA", 0) - 0.50) < 1e-9, str(load_peaks(_p)))
+_c = Managed(symbol="BBB", qty=1, entry_credit=2.0, current=1.5, dte=9)
+update_peaks([_c], _p)
+check("E102 a closed structure is dropped so a reopen starts clean",
+      "AAA" not in load_peaks(_p) and "BBB" in load_peaks(_p), str(load_peaks(_p)))
+open(_p, "w").write("{not json")
+check("E102 a corrupt peaks file reads as empty rather than raising",
+      load_peaks(_p) == {})
+check("E102 writing to an unwritable path does not raise",
+      update_peaks([_a], "/nonexistent-dir-e102/peaks.json") is not None)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

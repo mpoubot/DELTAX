@@ -170,6 +170,12 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
         # value now is short_mark - long_mark. dte was hard-coded None, which
         # also meant TIME_STOP_DTE could never fire for the income book.
         from deltax.reconcile import parse_occ as _parse
+        # E102: peaks are read BEFORE this cycle's marks are folded in, so a
+        # structure is compared against its best PREVIOUS reading rather than
+        # against itself - otherwise peak == current on every cycle and the
+        # give-back is always zero.
+        from deltax.manage import load_peaks as _load_peaks, update_peaks as _update_peaks
+        _peaks = _load_peaks()
         legs = {}
         for p_ in feed.positions():
             sym = p_.get("symbol", "")
@@ -238,7 +244,9 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             live.append(Managed(symbol=ssym, qty=min(sq, lq),
                                 entry_credit=credit,
                                 current=mark_now if mark_now > 0 else None,
-                                dte=d))
+                                dte=d,
+                                # E102: the high-water mark from previous cycles
+                                peak_captured=_peaks.get(ssym)))
         if live:
             # E78: give the sweep a real closer. Without one it reported closes
             # it never made. Marketable-limit at the current mark plus a small
@@ -259,6 +267,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                         context={"strategy": "E78 exit sweep"})
                 raise RuntimeError(f"no paired legs found for {sym}")
             swept = manage(live, ledger=ledger, dry_run=dry_run, closer=_closer)
+            _update_peaks(live)         # E102: raise the high-water marks
     except Exception as e:
         ledger.record_raw({"action": "exit_sweep_failed", "error": str(e)[:160]})
     # E84: surface unreadable positions on the RESULT, not only in the log. A
