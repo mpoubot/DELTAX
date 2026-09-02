@@ -42,6 +42,10 @@ DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
 #   mid    - mid-to-mid. Assumes a perfect fill at the midpoint.
 #   haircut- mid, giving back HAIRCUT of the combined spread. Realistic.
 MIN_LIQUID_STRIKES = 5     # chain is tradeable at all; not a ranking key
+# E69: the shortest DTE at which CREDIT_SURFACE is a valid benchmark. The
+# surface was measured on 11- and 18-DTE chains and has no DTE term, so it
+# systematically over-demands credit from anything much shorter.
+MIN_BENCHMARK_DTE = 5
 PRICING_MODE = "haircut"
 SPREAD_HAIRCUT = 0.25
 # The chain endpoint pages from the lowest strike, so an unbounded request
@@ -275,6 +279,22 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
     worst_spread = max(filter(None, [spread_pct(short["bid"], short["ask"]),
                                      spread_pct(long_leg["bid"], long_leg["ask"])]),
                        default=None)
+    # E74: the DOLLAR cost of crossing both books, opening and closing. A
+    # percentage of each option's own price says nothing about what the spread
+    # costs relative to what it PAYS - SMH quoted 9% legs and still handed 57%
+    # of the credit to the market maker. gate_spread_quality needs this number,
+    # and until now nothing computed it, so the friction check never ran.
+    def _width_of(leg):
+        b, a = leg.get("bid"), leg.get("ask")
+        try:
+            if b is None or a is None or a <= 0:
+                return None
+            return max(float(a) - float(b), 0.0)
+        except (TypeError, ValueError):
+            return None
+    _w = [_width_of(short), _width_of(long_leg)]
+    roundtrip = sum(x for x in _w if x is not None) if all(
+        x is not None for x in _w) else None
     return {
         "structure": "credit",
         "side": side,
@@ -284,6 +304,7 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
         "max_loss_per_contract": (width - credit) * 100,
         "max_profit_per_contract": credit * 100,
         "worst_leg_spread_pct": worst_spread,
+        "roundtrip_cost": roundtrip,
         "open_interest": min(oi_by_symbol.get(short["symbol"], 0),
                              oi_by_symbol.get(long_leg["symbol"], 0)),
         "expiry": parse_expiry(short["symbol"]),
@@ -346,9 +367,25 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
     for exp in sorted(by_exp):                      # ascending date = nearest first
         oi = by_exp[exp]
         liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
-        if liquid >= MIN_LIQUID_STRIKES:
-            best = (exp, oi, liquid)
-            break                                   # nearest qualifying wins
+        if liquid < MIN_LIQUID_STRIKES:
+            continue
+        # E69: skip expiries the CREDIT BENCHMARK cannot judge. CREDIT_SURFACE
+        # was measured on 11- and 18-DTE chains (E34) and is keyed on
+        # (delta, width) with no DTE term. A 2-DTE option correctly pays less
+        # than an 11-DTE one, so gate_credit_fraction was rejecting properly
+        # priced near-dated spreads for missing a benchmark that never applied
+        # to them - SPY 4 Sep quoted $1.73 against a $1.80 floor built from
+        # 11-18 DTE quotes, and refused, while 18 Sep quoted $2.77 and passed.
+        # Until the surface carries a DTE dimension, only judge expiries inside
+        # the range it was measured on.
+        try:
+            dte = (datetime.strptime(exp, "%Y-%m-%d").date() - date.today()).days
+        except (ValueError, TypeError):
+            continue
+        if dte < MIN_BENCHMARK_DTE:
+            continue
+        best = (exp, oi, liquid)
+        break                                       # nearest QUALIFYING wins
     return (best[0], best[1]) if best else None
 
 
@@ -409,6 +446,7 @@ def screen_income_book(feed, ledger, *, equity: float, today: date,
             structure="credit", width=cand["width"],
             short_delta=cand["short"]["delta"],
             worst_leg_spread_pct=cand["worst_leg_spread_pct"],
+                roundtrip_cost=cand.get("roundtrip_cost"),
         )
         ledger.record(decision, context={
             "book": "income", "side": side, "regime": regime.note,

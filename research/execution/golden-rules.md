@@ -1907,3 +1907,52 @@ internally consistent.
 **Rule.** Detail that a reader may want is not detail every reader must scroll
 past. Progressive disclosure — headline visible, evidence one click deep — is
 what lets a board serve both a judge and a teammate.
+
+## E65 — A year of real option prices: the gate is the edge, not the structure
+
+Pautax asked for a backtest going as far back as the data allows, to justify a
+larger position. The data was retrieved (252 sessions, 46 usable expiries, real
+OPRA prices) and it argues the opposite.
+
+**Unconditionally the structure loses.** ATM 5-wide call debit spread, entered
+two sessions out, exited at a resting 2×, across all 46 expiries:
+
+| | |
+|---|---|
+| win rate | 46% |
+| 2× exit hit | 39% |
+| mean return | **−9% of debit** |
+| $10k per trade | **$100,000 → $60,094** |
+| max drawdown | **−89.9%** |
+| bootstrap P(mean < 0) | **74%** |
+
+**The catalyst gate separates two different populations.**
+
+| | n | win | mean | P(mean<0) |
+|---|---|---|---|---|
+| CATALYST (gate fires) | 10 | 60% | **+15%** | 29% |
+| everything else | 36 | 42% | **−15%** | 84% |
+
+Restricted to catalyst weeks: **$100,000 → $114,601 over 10 trades.** The filter
+is the entire edge. The structure is a vehicle; the gate is the strategy.
+
+**Why this forbids a larger position.** The outcome distribution is binary —
+five trades at +100%, four at −100%, almost nothing between. **Three total
+losses landed consecutively** (20 Mar, 1 May, 12 Jun). At $10,000 that sequence
+costs $30,000; at the $20,000 escalation it costs **$60,000**, inside a contest
+with no time to recover. n=10 with a 29% chance the mean is negative is a thin
+edge, not a strong one.
+
+**Rule.** When asked to justify more size, the honest test is whether the data
+supports it — and a larger sample that reveals a **−89.9% unconditional
+drawdown** is a reason to hold size, not raise it. The request was for
+confidence; the finding was calibration.
+
+**Rule.** Report the conditional and the unconditional result together. "Our
+catalyst weeks return +15%" is true and would be misleading alone: the same
+structure applied without the gate loses 40% of the account. The gate's value is
+only visible against the population it excludes.
+
+**What this does validate.** E62's physical-confirmation ceiling was written on
+reasoning alone; a year of prices now independently supports it. The escalation
+to $15k/$20k stays gated.

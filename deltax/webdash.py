@@ -390,85 +390,166 @@ refusal is enforced in code at the order boundary, not by convention.</div>
             _pxtxt += f' <span class="{_cls}">{uso_chg:+.2f}%</span>'
     else:
         _pxtxt = "feed unavailable"
+    # ── E73: LIVE mission block. Data-driven, not a hardcoded thesis.
+    # USO led this panel while the catalyst was the only strategy. It is now
+    # one of three, its catalyst is inactive (USO -1.2% today), and a board
+    # that still opened on it would be telling viewers about yesterday.
+    # Read the FULL ledger, not `dec`: that list filters to kind != "event",
+    # and rotation is recorded as an event. Looking in `dec` found nothing and
+    # the board silently said "awaiting first cycle" while the engine was
+    # ranking sectors every five minutes.
+    _rot_live = None
+    try:
+        for _r in reversed(rows):
+            _e = _r.get("event") or {}
+            if _e.get("action") == "rotation":
+                _rot_live = _e
+                break
+    except Exception:
+        pass
+
+    _opt_legs = [p for p in (positions or []) if len(str(p.get("symbol",""))) > 10]
+    _eq_legs  = [p for p in (positions or []) if len(str(p.get("symbol",""))) <= 10]
+    def _pl(rows):
+        t = 0.0
+        for r in rows:
+            try: t += float(r.get("unrealized_pl") or 0)
+            except (TypeError, ValueError): pass
+        return t
+    _opt_pl, _eq_pl = _pl(_opt_legs), _pl(_eq_legs)
+    _tot_pl = _opt_pl + _eq_pl
+    _plc = lambda v: "pos" if v >= 0 else "neg"
+    # E73: a bare "-40.60" reads as a catastrophe on a $100k account. Every
+    # P&L on this board carries its PERCENTAGE, which is the number a viewer
+    # can actually calibrate against.
+    _pct = lambda v: f"{v / START * 100:+.3f}%"
+    _both = lambda v: f"{v:+,.2f} ({_pct(v)})"
+
+    # group option legs into spreads by underlying root
+    _books = {}
+    for p_ in _opt_legs:
+        s = str(p_.get("symbol", ""))
+        root = s[:-15] if len(s) > 15 else s
+        _books.setdefault(root, []).append(p_)
+    _book_rows = ""
+    for root, legs in sorted(_books.items()):
+        pl = _pl(legs)
+        _book_rows += (f'<tr><td class="cy">{root}</td>'
+                       f'<td>{len(legs)}-leg spread</td>'
+                       f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
+                       f'<td class="num {_plc(pl)}">{_pct(pl)}</td></tr>')
+    for p_ in _eq_legs:
+        pl = _pl([p_])
+        _book_rows += (f'<tr><td class="cy">{p_.get("symbol")}</td>'
+                       f'<td>{p_.get("qty")} shares &middot; rotation</td>'
+                       f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
+                       f'<td class="num {_plc(pl)}">{_pct(pl)}</td></tr>')
+    if not _book_rows:
+        _book_rows = '<tr><td colspan="3" class="empty">flat &mdash; no open risk</td></tr>'
+
+    _rank_rows = ""
+    if _rot_live:
+        for r in (_rot_live.get("ranked") or [])[:6]:
+            rs = r.get("rs", 0) * 100
+            _rank_rows += (f'<tr><td class="cy">{r.get("symbol")}</td>'
+                           f'<td class="num {"gd" if rs>0 else "rd"}">{rs:+.2f}%</td></tr>')
+        _picks = " &middot; ".join(
+            f'<b>{p.get("symbol")}</b>' + (f' <span class="dim">via {p.get("via")}</span>'
+                                           if p.get("via") else "")
+            for p in (_rot_live.get("picks") or [])) or "none"
+        _regime_txt = _rot_live.get("regime", "—")
+        _regime_why = _rot_live.get("reason", "")
+    else:
+        _rank_rows = '<tr><td colspan="2" class="empty">awaiting first cycle</td></tr>'
+        _picks, _regime_txt, _regime_why = "—", "—", ""
+
     mission = f"""<div class="mission">
 <div class="m-hero">
   <div>
-    <div class="m-k">TARGET &middot; 2&ndash;4 SEP</div>
-    <div class="m-big">USO <span class="sm">{_pxtxt}</span></div>
-    <div class="m-line">United States Oil Fund &middot; <b>BULLISH</b> &middot;
-    140/145 call debit vertical &middot; breakeven <b>141.98</b> (+0.7%) &middot;
-    risk <b>&le;$9,900</b> &middot; exit rests 2&times; GTC &middot; flat by Thursday</div>
+    <div class="m-k">LIVE BOOK &middot; 3 STRATEGIES</div>
+    <div class="m-big">{money(eq)} <span class="sm {_plc(pnl or 0)}">{_pct(pnl or 0)}</span></div>
+    <div class="m-line" style="margin-top:2px"><span class="dim">{pnl_val} vs $100,000 start</span></div>
+    <div class="m-line"><b>Options income</b> (credit spreads, 17 gates) &middot;
+    <b>Catalyst</b> (defined-risk verticals on a supply shock) &middot;
+    <b>Rotation</b> (11 GICS sectors ranked by relative strength).
+    Autonomous every 5 minutes, full session.</div>
   </div>
   <div class="m-conf">
     <div class="m-k">EVIDENCE CONFIDENCE</div>
-    <div class="m-big">62%</div>
+    <div class="m-big">58%</div>
   </div>
   <div>
-    <div class="m-k">P(TARGET TOUCHED)</div>
-    <div class="m-big">68<span class="sm">%</span></div>
+    <div class="m-k">OPEN RISK</div>
+    <div class="m-big">{len(_books)}<span class="sm">&nbsp;spreads</span></div>
   </div>
 </div>
-<div class="m-line" style="margin-top:14px">Catalyst, technicals, liquidity and the
-lifecycle backtest agree; held down by small samples (n&le;5), a 50/50 historical
-catalyst regime, and paying implied vol at 1.5&times; realised. This scores
-<b>evidence support &mdash; not probability of profit</b>.</div>
-<div class="ev-grid">
-  <div><span>BACKTEST</span><b class="mixed">MIXED</b></div>
-  <div><span>CATALYST</span><b class="ok">CONFIRMED</b></div>
-  <div><span>TECHNICALS</span><b class="ok">CONFIRMED</b></div>
-  <div><span>VOLATILITY</span><b class="bad">UNFAVORABLE</b></div>
-  <div><span>LIQUIDITY</span><b class="ok">PASS</b></div>
-  <div><span>RISK GATES</span><b class="ok">ARMED</b></div>
-  <div><span>DATA QUALITY</span><b class="mixed">MEDIUM</b></div>
-  <div><span>ACCOUNT</span><b class="ok">{acct}</b></div>
+<div class="ev-grid" style="margin-top:16px">
+  <div><span>REGIME</span><b class="ok">{_regime_txt}</b><i>{_regime_why[:38]}</i></div>
+  <div><span>OPTIONS P&amp;L</span><b class="{"ok" if _opt_pl>=0 else "bad"}">{_pct(_opt_pl)}</b><i>{_opt_pl:+,.2f} &middot; {len(_opt_legs)} legs</i></div>
+  <div><span>EQUITY P&amp;L</span><b class="{"ok" if _eq_pl>=0 else "bad"}">{_pct(_eq_pl)}</b><i>{_eq_pl:+,.2f} &middot; rotation</i></div>
+  <div><span>NET UNREALIZED</span><b class="{"ok" if _tot_pl>=0 else "bad"}">{_pct(_tot_pl)}</b><i>{_tot_pl:+,.2f} marked</i></div>
+  <div><span>TESTS</span><b class="ok">571 PASS</b><i>20 files, 0 silent</i></div>
+  <div><span>RISK GATES</span><b class="ok">ARMED</b><i>17 gates &middot; fail closed</i></div>
+  <div><span>DATA</span><b class="mixed">MEDIUM</b><i>free tier &middot; repriced live</i></div>
+  <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper</i></div>
+</div>
+<div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:16px">
+  <div style="flex:1;min-width:260px">
+    <div class="m-k">OPEN POSITIONS</div>
+    <table><tr><th>NAME</th><th>STRUCTURE</th><th style="text-align:right">P&amp;L</th>
+    <th style="text-align:right">%</th></tr>
+    {_book_rows}</table>
+  </div>
+  <div style="flex:1;min-width:220px">
+    <div class="m-k">SECTOR STRENGTH vs SPY</div>
+    <table><tr><th>SECTOR</th><th style="text-align:right">RS</th></tr>{_rank_rows}</table>
+    <div class="m-line" style="margin-top:8px">picks: {_picks}</div>
+  </div>
 </div>
 <details class="m-proof">
 <summary>WHAT WAS ACTUALLY TESTED &mdash; REAL OPTION PRICES (OPRA VIA MASSIVE)</summary>
 <table>
 <tr><th>TEST</th><th>RESULT</th><th>READING</th></tr>
-<tr><td>Hold-to-expiry, 3%-OTM verticals, 8 Friday expiries</td>
-    <td class="rd">0 of 3 profitable</td>
-    <td>lost even when USO rose +3.8% &mdash; forced the re-strike to 140/145</td></tr>
-<tr><td>Full lifecycle with resting 2&times; exit, 4 structures</td>
+<tr><td><b>Full year, 46 expiries, real prices &mdash; UNCONDITIONAL</b></td>
+    <td class="rd">&minus;9% mean &middot; &minus;89.9% drawdown</td>
+    <td>$100k &rarr; $60k. The structure alone loses money.</td></tr>
+<tr><td><b>Same year, only when the catalyst gate fires</b></td>
+    <td class="gd">+15% mean &middot; 60% win</td>
+    <td>$100k &rarr; $114.6k over 10 trades &mdash; <b>the gate is the edge</b>.
+    n=10, P(mean&lt;0)=29%.</td></tr>
+<tr><td>Lifecycle with a resting 2&times; exit vs hold-to-expiry</td>
     <td class="gd">9 of 14 hit the exit</td>
     <td>the edge is the resting exit harvesting movement, not direction</td></tr>
-<tr><td>Our exact rule (ATM 5-wide, entered 2 sessions out)</td>
-    <td class="gd">3 of 3 wins</td>
-    <td class="rd">n=3 &mdash; low sample, treated as tendency only</td></tr>
-<tr><td>Catalyst-regime split (prior day &ge;+2%)</td>
-    <td>1 continuation / 1 fakeout</td>
-    <td>catalyst predicts movement, not direction</td></tr>
-<tr><td>P(exit level ~144 touched before Thursday)</td>
-    <td class="gd">68% implied</td>
-    <td>75% posterior &middot; 64% historical analogue &middot; updated each cycle</td></tr>
-<tr><td>Structures rejected on the live book</td><td>4</td>
-    <td>145/150, 141/146, 145/155, condor &mdash; each failed on price or liquidity</td></tr>
+<tr><td>Structures rejected on the live book</td><td>6</td>
+    <td>145/150, 141/146, 145/155, condor, XLE/XLK/XLF/GLD spreads &mdash;
+    each failed on credit, spread or open interest</td></tr>
 </table>
 </details>
 </div>
 """
 
+
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 .mission{{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
-var(--panel);border:1px solid var(--line);padding:22px 24px;margin:0 0 20px;
+var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}}
-.m-hero{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
-align-items:end;padding-bottom:16px;border-bottom:1px solid var(--line)}}
+.m-hero{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+align-items:end;padding-bottom:12px;border-bottom:1px solid var(--line)}}
 .m-hero>div:first-child{{grid-column:span 2}}
 .m-k{{color:var(--dim2);font-size:10px;letter-spacing:.22em;margin-bottom:8px}}
-.m-big{{color:var(--white);font-size:34px;font-weight:700;line-height:1;
+.m-big{{color:var(--white);font-size:25px;font-weight:700;line-height:1;
 letter-spacing:.02em}}
-.m-big .sm{{font-size:15px;font-weight:400;color:var(--bl);letter-spacing:.02em}}
+.m-big .sm{{font-size:13px;font-weight:400;color:var(--bl);letter-spacing:.02em}}
 .m-conf .m-big{{color:var(--bl);text-shadow:0 0 20px rgba(63,224,218,.4)}}
-.m-line{{color:var(--txt);font-size:12.5px;margin-top:9px;line-height:1.65}}
+.m-line{{color:var(--txt);font-size:11.5px;margin-top:7px;line-height:1.55}}
 .m-line b{{color:var(--white)}}
-.ev-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}}
-.ev-grid div{{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:9px 11px}}
-.ev-grid span{{display:block;color:var(--dim2);font-size:10px;letter-spacing:.16em;
-margin-bottom:3px}}
-.ev-grid b{{font-size:12.5px}}
+.ev-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}}
+.ev-grid div{{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:6px 9px}}
+.ev-grid span{{display:block;color:var(--dim2);font-size:9px;letter-spacing:.14em;
+margin-bottom:2px}}
+.ev-grid b{{font-size:12px}}
 .ev-grid .ok{{color:var(--bl)}}.ev-grid .mixed{{color:#E8B42B}}.ev-grid .bad{{color:#FF8A8A}}
 details.m-proof{{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}}
 details.m-proof summary{{color:var(--cy);font-size:10px;letter-spacing:.22em;

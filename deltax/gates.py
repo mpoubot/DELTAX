@@ -9,7 +9,7 @@ See STRATEGY.md and research/options/golden-rules.md for provenance.
 """
 
 from dataclasses import dataclass, field, asdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 import json
 
@@ -270,19 +270,34 @@ def gate_trading_enabled() -> GateResult:
 
 
 def gate_contest_window(expiry: date) -> GateResult:
-    """Refuse any expiry that finishes after judging.
+    """Bound how far past judging an expiry may run. E68.
 
-    A credit spread pays when it decays, and decay lands in its final days. An
-    18-DTE spread opened in a 4-day contest hands the judges a mid-decay mark,
-    not the result. This was written into the corpus as E17 on 31 Aug and then
-    violated the same afternoon, because nothing enforced it (E37).
+    E17/E37 refused ANY expiry after CONTEST_CLOSE, reasoning that a spread
+    still open at judging "hands the judges a mid-decay mark, not the result".
+    Half of that is right: you do not capture full decay. The other half is
+    wrong, and it is the half that mattered - Alpaca marks options to market
+    and account equity INCLUDES unrealized P&L, so partial decay is a real,
+    counted gain. The rule conflated *realized* profit with *account value*.
+
+    It was also the right rule while a tradeable 4 Sep book existed. Measured
+    on 2 Sep it does not: energy weeklies quote 45-111% spreads, and the index
+    names fail on credit. The live choice is a partial-decay mark on a deep
+    book (SPY 18 Sep: 0% spread, OI 2,710, credit/width 0.139 - above the
+    measured market benchmark) or no trade at all.
+
+    The horizon still has to be bounded: an expiry far past judging decays too
+    little to show anything by Friday, so MAX_DTE remains the outer limit and
+    is what actually constrains this now.
     """
-    ok = expiry <= CONTEST_CLOSE
-    return GateResult(
-        "contest_window", ok,
-        f"expiry {expiry} vs contest close {CONTEST_CLOSE}"
-        + ("" if ok else " - profit would arrive after judging"),
-    )
+    horizon = CONTEST_CLOSE + timedelta(days=MAX_DTE)
+    ok = expiry <= horizon
+    past = expiry > CONTEST_CLOSE
+    note = (f"expiry {expiry} vs contest close {CONTEST_CLOSE}")
+    if ok and past:
+        note += " - past judging, marked to market (partial decay counts)"
+    elif not ok:
+        note += f" - beyond the {MAX_DTE}-day horizon, too little decay to show"
+    return GateResult("contest_window", ok, note)
 
 
 def gate_dte(expiry: date, today: date) -> GateResult:
@@ -328,18 +343,54 @@ def gate_quote_sanity(credit: Optional[float], structure: str,
     return GateResult("quote_sanity", True, "quotes internally consistent")
 
 
-def gate_spread_quality(worst_leg_spread_pct: Optional[float]) -> GateResult:
-    """Bid/ask width on the worst leg, as a fraction of that leg's mid.
+# E74: the round-trip bid/ask cost may not eat more than this share of the
+# credit. Measured live on SMH 540/530: legs quoted 9% and 8% of their own mid,
+# both inside MAX_SPREAD_PCT, but $1.32 of round-trip cost against $2.30 of
+# credit is 57% of the entire trade's profit handed to the market maker. A
+# percentage of the OPTION price says nothing about what the spread costs
+# relative to what the spread PAYS.
+MAX_FRICTION_OF_CREDIT = 0.35
+
+
+def gate_spread_quality(worst_leg_spread_pct: Optional[float],
+                        roundtrip_cost: Optional[float] = None,
+                        credit: Optional[float] = None) -> GateResult:
+    """Two tests: each leg quotes tightly, AND the round trip is affordable.
 
     Wide quotes are a direct tax on entry and, worse, on exit - a spread you
-    cannot close at a fair price is not really defined-risk in practice. Closes
-    the bid/ask criterion AURA specified but our first gate set omitted.
+    cannot close at a fair price is not really defined-risk in practice.
+
+    The second test is E74. `roundtrip_cost` is the sum of both legs' bid/ask
+    widths - what it costs to open and close at the wrong side of each quote -
+    and it is judged against the credit collected, not against the option
+    price. Passing the first test and failing this one is exactly the SMH case:
+    tight-looking legs on a dollar-priced option, more than half the profit
+    consumed before the trade has done anything.
     """
     if worst_leg_spread_pct is None:
         return GateResult("spread_quality", False, "quote missing on at least one leg")
-    ok = worst_leg_spread_pct <= MAX_SPREAD_PCT
+    if worst_leg_spread_pct > MAX_SPREAD_PCT:
+        return GateResult(
+            "spread_quality", False,
+            f"worst leg spread {worst_leg_spread_pct:.1%} vs max {MAX_SPREAD_PCT:.0%}",
+            round(worst_leg_spread_pct, 4), MAX_SPREAD_PCT,
+        )
+    if roundtrip_cost is not None and credit:
+        share = roundtrip_cost / credit
+        if share > MAX_FRICTION_OF_CREDIT:
+            return GateResult(
+                "spread_quality", False,
+                f"round-trip bid/ask ${roundtrip_cost:.2f} is {share:.0%} of the "
+                f"${credit:.2f} credit (max {MAX_FRICTION_OF_CREDIT:.0%})",
+                round(share, 4), MAX_FRICTION_OF_CREDIT,
+            )
+        return GateResult(
+            "spread_quality", True,
+            f"legs <= {MAX_SPREAD_PCT:.0%}, round trip {share:.0%} of credit",
+            round(share, 4), MAX_FRICTION_OF_CREDIT,
+        )
     return GateResult(
-        "spread_quality", ok,
+        "spread_quality", True,
         f"worst leg spread {worst_leg_spread_pct:.1%} vs max {MAX_SPREAD_PCT:.0%}",
         round(worst_leg_spread_pct, 4), MAX_SPREAD_PCT,
     )
@@ -551,6 +602,7 @@ def evaluate(
     width: Optional[float] = None,
     short_delta: Optional[float] = None,
     worst_leg_spread_pct: Optional[float] = None,
+    roundtrip_cost: Optional[float] = None,   # E74: sum of both legs' bid/ask
     quote_age_hours: Optional[float] = None,
     tradable: Optional[bool] = None,
     last_bar_age_days: Optional[float] = None,
@@ -602,7 +654,8 @@ def evaluate(
     if tradable is not None or last_bar_age_days is not None:
         gates.insert(2, gate_listed(tradable, last_bar_age_days, asset_class))
     if worst_leg_spread_pct is not None:
-        gates.append(gate_spread_quality(worst_leg_spread_pct))
+        gates.append(gate_spread_quality(worst_leg_spread_pct,
+                                         roundtrip_cost, credit))
     # Structure-aware payoff gate: a 2:1 floor would refuse every OTM credit
     # spread (its payoff is its probability), so credit structures are judged
     # on credit/width instead.

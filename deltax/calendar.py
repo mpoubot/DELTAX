@@ -7,8 +7,20 @@ Both answer questions the price data cannot: *may we trade right now*, and
 from datetime import date, datetime, time, timezone, timedelta
 from typing import Optional
 
-# ── Session windows (E1/E2), US Eastern ──────────────────────────────────────
-ENTRY_WINDOWS = [(time(9, 45), time(10, 30)), (time(14, 30), time(15, 15))]
+# ── Session windows (E1/E2 -> E67), US Eastern ───────────────────────────────
+# E67: opened to the FULL session on Pautax's instruction. E1 confined entries
+# to 09:45-10:30 and 14:30-15:15 as a proxy for "the book is deep" - but that is
+# now measured directly on every candidate by gate_liquidity (OI >= 500),
+# gate_spread_quality (worst leg <= 15% of mid) and MAX_QUOTE_AGE_HOURS. A clock
+# cannot see a book; those gates can, and they refuse per-contract rather than
+# per-hour. Two windows also cost roughly 5 of the session's 6.5 hours, which in
+# a four-day contest is most of the opportunity.
+#
+# What is genuinely LOST, and is not covered by any gate: E2's observation that
+# 15:00-16:00 carries closing/hedging flow and that a position opened late has
+# no time to breathe before it inherits overnight gap risk. The gates measure
+# spread and depth; they do not measure how long a trade has to work.
+ENTRY_WINDOWS = [(time(9, 30), time(16, 0))]
 
 
 def _eastern(now_utc: datetime) -> datetime:

@@ -114,12 +114,22 @@ def place_exit(legs: list, qty: int, entry_credit: float, *, ledger=None,
     return record
 
 
-def manage(positions: list, *, ledger=None, dry_run: bool = True) -> dict:
+def manage(positions: list, *, ledger=None, dry_run: bool = True,
+           closer=None) -> dict:
     """Sweep open positions and close anything that has met its exit rule.
 
-    A safety net behind the resting GTC order, not a replacement for it.
+    E78: this used to RECORD a close and never submit one. On a triggered stop
+    or time stop it wrote `{"action": "close", "result": "SWEEP"}` to the
+    ledger, appended the symbol to `closed`, and left the position open - the
+    board then rendered "position closed" for something still live. A sweep
+    that reports an action it did not take is worse than no sweep, because it
+    removes the operator's reason to look.
+
+    `closer` is the callable that actually submits: closer(symbol, qty) -> dict.
+    Without one the sweep still reports, but every entry is marked explicitly
+    as NOT closed so the distinction can never be lost again.
     """
-    closed, held, unpriceable = [], [], []
+    closed, held, unpriceable, failed = [], [], [], []
     for p in positions:
         why = p.reason()
         if p.captured is None:
@@ -130,8 +140,25 @@ def manage(positions: list, *, ledger=None, dry_run: bool = True) -> dict:
             continue
         rec = {"action": "close", "symbol": p.symbol, "qty": p.qty,
                "reason": why, "captured": round(p.captured, 4), "dry_run": dry_run}
-        rec["result"] = "DRY_RUN — not closed" if dry_run else "SWEEP"
+        if dry_run:
+            rec["result"] = "DRY_RUN — not closed"
+            closed.append((p.symbol, why))
+        elif closer is None:
+            # Report honestly: the rule fired and nothing acted on it.
+            rec["result"] = "NOT CLOSED — no closer wired; resting GTC order is the only exit"
+            rec["submitted"] = False
+            failed.append((p.symbol, "no closer wired"))
+        else:
+            try:
+                out = closer(p.symbol, p.qty)
+                rec["result"] = str(out.get("result", "SUBMITTED"))
+                rec["submitted"] = True
+                closed.append((p.symbol, why))
+            except Exception as e:
+                rec["result"] = f"CLOSE FAILED — {type(e).__name__}: {str(e)[:120]}"
+                rec["submitted"] = False
+                failed.append((p.symbol, f"{type(e).__name__}"))
         if ledger is not None:
             ledger.record_raw(rec)
-        closed.append((p.symbol, why))
-    return {"closed": closed, "held": held, "unpriceable": unpriceable}
+    return {"closed": closed, "held": held, "unpriceable": unpriceable,
+            "failed": failed}

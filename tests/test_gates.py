@@ -290,6 +290,63 @@ check("E57 sized-vs-capped divergence is logged", "demo_size_cap" in _run)
 check("E57 committed risk follows the capped size",
       "dec.max_loss * (qty / dec.contracts" in _run)
 
+
+print("\n── E74: round-trip friction must not eat the credit ──")
+from deltax.gates import gate_spread_quality, MAX_FRICTION_OF_CREDIT
+# the SMH trade: legs looked fine (9%), round trip ate 57% of the credit
+r = gate_spread_quality(0.09, 0.83 + 0.49, 2.30)
+check("E74 refuses the SMH case tight legs would have passed", not r.passed, r.detail)
+check("E74 refusal names the share of credit", "% of the" in r.detail, r.detail)
+r = gate_spread_quality(0.02, 0.07, 0.96)
+check("E74 passes IWM-style tight legs", r.passed, r.detail)
+r = gate_spread_quality(0.20, 0.01, 5.00)
+check("E74 still refuses a wide LEG even when friction is cheap",
+      not r.passed and "worst leg" in r.detail, r.detail)
+r = gate_spread_quality(0.02, None, None)
+check("E74 without friction data behaves as before", r.passed, r.detail)
+r = gate_spread_quality(None, 0.10, 2.00)
+check("missing quote still refuses", not r.passed)
+r = gate_spread_quality(0.02, 0.70, 2.00)   # exactly 35%
+check("exactly at the ceiling passes", r.passed, r.detail)
+r = gate_spread_quality(0.02, 0.71, 2.00)   # just over
+check("one cent over the ceiling refuses", not r.passed, r.detail)
+check("friction ceiling is a fraction", 0 < MAX_FRICTION_OF_CREDIT < 1)
+_g = open("deltax/gates.py").read()
+check("E74 is WIRED into evaluate()", "gate_spread_quality(worst_leg_spread_pct,\n" in _g
+      or "roundtrip_cost, credit)" in _g)
+
+
+print("\n── E74 WIRING: the gate must receive real data, not just exist ──")
+# The first version of E74 passed 10 unit tests and did NOTHING live: the
+# screener never computed roundtrip_cost, so it was always None and the branch
+# never ran. Testing a function directly proves the function; it does not prove
+# the caller feeds it. These assertions check the DATA PATH.
+_scr = open("deltax/screener.py").read()
+_run_src = open("deltax/run.py").read()
+check("screener COMPUTES roundtrip_cost", '"roundtrip_cost": roundtrip' in _scr)
+check("screener PASSES it to evaluate", "roundtrip_cost=cand.get" in _scr)
+check("run.py PASSES it to evaluate", "roundtrip_cost=cand.get" in _run_src)
+check("evaluate ACCEPTS it", "roundtrip_cost: Optional[float]" in open("deltax/gates.py").read())
+
+# End-to-end: the exact SMH quotes that cost us $625 must now REFUSE.
+d = evaluate(symbol="SMH", equity=EQUITY, structure="credit", width=10.0,
+             max_loss_per_contract=740.0, max_profit_per_contract=260.0,
+             credit=2.30, expiry=date(2026, 9, 18), today=date(2026, 9, 2),
+             open_interest=4179, short_delta=0.36,
+             worst_leg_spread_pct=0.09, roundtrip_cost=0.83 + 0.49)
+check("the real SMH trade is now REFUSED end-to-end",
+      d.decision == Decision.REFUSE and d.failed_gate == "spread_quality",
+      f"{d.decision}/{d.failed_gate}")
+check("and the reason names the friction",
+      any("round-trip" in g.detail for g in d.gates if g.gate == "spread_quality"))
+# ...while a tight book still trades
+d2 = evaluate(symbol="IWM", equity=EQUITY, structure="credit", width=5.0,
+              max_loss_per_contract=404.0, max_profit_per_contract=96.0,
+              credit=0.96, expiry=date(2026, 9, 18), today=date(2026, 9, 2),
+              open_interest=65798, short_delta=0.30,
+              worst_leg_spread_pct=0.02, roundtrip_cost=0.07)
+check("a tight book still TRADES", d2.decision == Decision.TRADE, d2.failed_gate or "")
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
 

@@ -10,6 +10,7 @@ a feed object, so the screener and gates stay testable with the market closed.
 from typing import Optional
 import json
 import subprocess
+import time
 
 
 class FeedError(RuntimeError):
@@ -22,21 +23,58 @@ class AlpacaFeed:
     def __init__(self, timeout: int = 30):
         self.timeout = timeout
 
+    # E76: a transient network blip must not cost a whole cycle. On 2 Sep a TLS
+    # handshake timeout killed a run outright; E75 made that fail closed, which
+    # is safe but still surrenders five minutes of exit management and
+    # reconciliation. The right answer is to RETRY: these failures clear in
+    # under a second, and the previous behaviour treated a hiccup like an
+    # outage.
+    #
+    # Retried ONLY for transport faults. An API-level rejection - bad symbol,
+    # unauthorised, malformed order - is a real answer and must surface on the
+    # first attempt; retrying it would hammer the broker and hide the fault.
+    TRANSIENT = ("tls handshake", "timeout", "connection refused", "connection reset",
+                 "eof", "no such host", "temporary failure", "i/o timeout",
+                 "502", "503", "504", "bad gateway", "service unavailable")
+    RETRIES = 3
+    BACKOFF = 0.6          # seconds; 0.6, 1.2, 2.4 - well inside a 5-minute cycle
+
+    @classmethod
+    def _is_transient(cls, msg: str) -> bool:
+        low = (msg or "").lower()
+        return any(t in low for t in cls.TRANSIENT)
+
     def _run(self, args: list) -> dict:
         cmd = ["alpaca"] + args + ["--quiet"]
-        try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout)
-        except subprocess.TimeoutExpired as e:
-            raise FeedError(f"timeout: {' '.join(cmd)}") from e
-        if out.returncode != 0:
-            raise FeedError(f"{' '.join(cmd)} -> {out.stderr.strip()[:200]}")
-        try:
-            payload = json.loads(out.stdout)
-        except json.JSONDecodeError as e:
-            raise FeedError(f"bad JSON from {' '.join(cmd)}") from e
-        if isinstance(payload, dict) and payload.get("error"):
-            raise FeedError(str(payload["error"])[:200])
-        return payload
+        last = None
+        for attempt in range(self.RETRIES):
+            if attempt:
+                time.sleep(self.BACKOFF * (2 ** (attempt - 1)))
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True,
+                                     timeout=self.timeout)
+            except subprocess.TimeoutExpired as e:
+                last = FeedError(f"timeout after {self.timeout}s: {' '.join(cmd)}")
+                continue                      # a timeout is always worth retrying
+            if out.returncode != 0:
+                err = out.stderr.strip()[:200]
+                last = FeedError(f"{' '.join(cmd)} -> {err}")
+                if self._is_transient(err):
+                    continue
+                raise last                    # a real rejection: surface it now
+            try:
+                payload = json.loads(out.stdout)
+            except json.JSONDecodeError as e:
+                last = FeedError(f"bad JSON from {' '.join(cmd)}")
+                continue                      # truncated response - retry
+            if isinstance(payload, dict) and payload.get("error"):
+                msg = str(payload["error"])[:200]
+                last = FeedError(msg)
+                if self._is_transient(msg):
+                    continue
+                raise last
+            return payload
+        raise FeedError(f"{self.RETRIES} attempts failed - {last}")
 
     # ── account state ───────────────────────────────────────────────────────
 
@@ -131,8 +169,39 @@ def intraday_vwap(snapshot: dict) -> Optional[float]:
 
 
 def previous_close(snapshot: dict) -> Optional[float]:
-    b = snapshot.get("prevDailyBar") or {}
-    return float(b["c"]) if b.get("c") is not None else None
+    """Close of the last COMPLETED session — not blindly prevDailyBar.
+
+    E66: before the open the bars have not rolled. On 2 Sep at 09:29 the
+    snapshot carried dailyBar = 1 Sep (140.98) and prevDailyBar = 31 Aug
+    (133.715), so reading prevDailyBar made USO look +4.12% when it was
+    actually DOWN 1.26% against Tuesday's close. The catalyst gate would have
+    fired on a fading move, and every downstream number - posterior, evidence
+    flags, size band - would have inherited the error.
+
+    Rule: if dailyBar is today's session, the previous close is prevDailyBar.
+    If dailyBar is an EARLIER session (pre-market, or a stale feed), then
+    dailyBar IS the last completed session and is the correct reference.
+    """
+    from datetime import datetime, timezone, timedelta
+    daily = snapshot.get("dailyBar") or {}
+    prev = snapshot.get("prevDailyBar") or {}
+
+    def _date(bar):
+        t = bar.get("t")
+        if not t:
+            return None
+        try:
+            return datetime.fromisoformat(str(t).replace("Z", "+00:00")).date()
+        except (ValueError, TypeError):
+            return None
+
+    d_day = _date(daily)
+    # Session date in ET; UTC would roll the day at 20:00 ET and mislabel bars.
+    today_et = datetime.now(timezone(timedelta(hours=-4))).date()
+
+    if d_day is not None and d_day < today_et and daily.get("c") is not None:
+        return float(daily["c"])          # bars have not rolled yet
+    return float(prev["c"]) if prev.get("c") is not None else None
 
 
 def quote(contract: dict) -> tuple:

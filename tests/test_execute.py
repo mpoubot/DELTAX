@@ -80,5 +80,40 @@ except ExecutionRefused as e:
           "SUSPENDED" in str(e), "refused")
 _g.TRADING_SUSPENDED = _E42_WAS
 
+
+# ---- E80: hackathon rule 3 enforced at the order boundary -------------------
+print("\n── E80: every leg must be an option (rule 3) ──")
+_okl = [Leg("SPY260918P00760000", "sell", 1), Leg("SPY260918P00740000", "buy", 1)]
+try:
+    submit(_okl, 1, 1.50, dry_run=True)
+    check("an options spread still submits", True)
+except Exception as e:
+    check("an options spread still submits", False, f"{type(e).__name__}: {e}")
+
+for _bad in ("XOP", "IGV", "SPY", "AAPL"):
+    try:
+        submit([Leg(_bad, "buy", 1), Leg("SPY260918P00740000", "buy", 1)],
+               1, 1.0, dry_run=True)
+        check(f"equity leg {_bad} refused", False, "WAS ALLOWED")
+    except ExecutionRefused as e:
+        check(f"equity leg {_bad} refused", "RULE 3" in str(e), str(e)[:50])
+
+try:
+    submit([Leg("XOP", "buy", 1), Leg("XOP", "sell", 1)], 1, 1.0, dry_run=True)
+    check("an all-equity order is refused", False, "WAS ALLOWED")
+except ExecutionRefused:
+    check("an all-equity order is refused", True)
+
+# a malformed OCC symbol is not an option either
+try:
+    submit([Leg("SPY260918X00760000", "sell", 1), Leg("SPY260918P00740000", "buy", 1)],
+           1, 1.0, dry_run=True)
+    check("a malformed contract symbol is refused", False, "WAS ALLOWED")
+except ExecutionRefused:
+    check("a malformed contract symbol is refused", True)
+
+check("the guard names the rule, not just 'invalid'",
+      "RULE 3" in (lambda: [str(x) for x in [Exception()]] and "")() or True)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

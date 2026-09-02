@@ -130,6 +130,22 @@ def submit(legs: list, qty: int, limit_price: float, *, ledger=None,
     _g = gate_trading_enabled()
     if not _g.passed:
         raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
+
+    # E80: hackathon rule 3 - "All strategies must incorporate options trading."
+    # HACKATHON-RULES.md cites the compliance basis as "no equity or crypto leg
+    # trades", and on 2 Sep the rotation engine put $19,830 of plain XOP and IGV
+    # shares in the submission account. Odd lots, so no covered call could be
+    # written against them; they were simply non-compliant. Discipline is not a
+    # control - every leg must now BE an option, checked at the one boundary
+    # every order crosses.
+    from deltax.reconcile import parse_occ as _occ
+    for _l in legs:
+        _sym = getattr(_l, "symbol", None) or (
+            _l.get("symbol") if isinstance(_l, dict) else None)
+        if _occ(_sym or "") is None:
+            raise ExecutionRefused(
+                f"RULE 3 - '{_sym}' is not an options contract. Every strategy "
+                f"must incorporate options; equity legs are refused here.")
     args = (build_close_args(legs, qty, limit_price) if close
             else build_mleg_args(legs, qty, limit_price))
     record = {

@@ -44,13 +44,34 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     # permission state so the pipeline can be exercised outside session
     # hours. It is inert whenever real orders are possible.
     analysis = force_window and dry_run
-    clock = feed.clock()
+    # E75: a transient network failure must not kill the cycle. On 2 Sep a TLS
+    # handshake timeout on `alpaca clock` raised FeedError out of run() and the
+    # whole scheduled run died with a traceback - no reconciliation, no exit
+    # sweep, no ledger entry, and the next five minutes were blind. Every
+    # feed call in the pre-trade path is now caught, logged, and FAILS CLOSED:
+    # if the market state is unreadable we do not trade, but we exit cleanly
+    # and the following cycle proceeds normally.
+    try:
+        clock = feed.clock()
+    except Exception as e:
+        ledger.record_raw({"action": "clock_unreadable", "failing": "closed",
+                           "error": f"{type(e).__name__}: {str(e)[:160]}"})
+        return {"traded": [], "refused": [], "committed": 0.0,
+                "skipped": f"market clock unreadable ({type(e).__name__}) "
+                           f"- failing closed, no orders this cycle"}
     allowed, why = entry_allowed(now, bool(clock.get("is_open")))
     if not allowed and not analysis:
         ledger.record_raw({"action": "skip", "reason": why})
         return {"traded": [], "refused": [], "skipped": why}
 
-    snaps = feed.snapshots(BENCHMARKS)
+    try:
+        snaps = feed.snapshots(BENCHMARKS)
+    except Exception as e:
+        ledger.record_raw({"action": "benchmarks_unreadable", "failing": "closed",
+                           "error": f"{type(e).__name__}: {str(e)[:160]}"})
+        return {"traded": [], "refused": [], "committed": 0.0,
+                "skipped": f"benchmark snapshots unreadable ({type(e).__name__}) "
+                           f"- failing closed"}
     regime = assess_regime(snaps)
     target = TARGET_DELTA_BY_WEAK[min(regime.weak_count, 3)]
 
@@ -72,13 +93,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 "skipped": f"{perm.state}: {perm.reasons[0]}"}
 
     gte = str(today.fromordinal(today.toordinal() + MIN_DTE))
-    # Never search past the contest close. choose_expiry takes the nearest
-    # qualifying expiry, so an unbounded window finds Sep 11 or Sep 18, builds a
-    # candidate, and only then has it refused by gate_contest_window - a wasted
-    # chain query and a refusal that reads like a data problem (E41).
-    from deltax.gates import CONTEST_CLOSE as _CC
-    _far = today.fromordinal(today.toordinal() + MAX_DTE)
-    lte = str(min(_far, _CC))
+    # E69: the search window is MAX_DTE, no longer clamped to the contest close.
+    # E41 clamped it because gate_contest_window would refuse anything later
+    # anyway, so searching further was wasted work. E68 changed that gate -
+    # expiries past judging are marked to market and their partial decay counts
+    # - so the clamp became the thing that hid every tradeable chain. Measured
+    # 2 Sep: the 4 Sep book fails on credit against a benchmark built from
+    # 11-18 DTE quotes, while 11 and 18 Sep pass every gate with 0-4% spreads
+    # and thousands of contracts of open interest. Searching only to the close
+    # returned nothing at all, which read on the board as "no action".
+    lte = str(today.fromordinal(today.toordinal() + MAX_DTE))
 
     # What do we ALREADY hold? Without this, every cycle believes the book is
     # empty and re-opens the same positions - 96 times a day on the live
@@ -108,20 +132,73 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     # order silently caps the book at whatever was opened earliest (E39).
     swept = {"closed": [], "held": [], "unpriceable": []}
     try:
-        live = []
+        # E77: pair the legs. This previously modelled each SHORT leg alone -
+        # entry_credit was the short leg's own price and `current` its own mark,
+        # with the long leg ignored entirely. Measured live on 2 Sep the error
+        # was 54 percentage points: the sweep believed SMH was -5.0% when the
+        # spread was -58.7%. Take-profit fires at 50% CAPTURED, so it was
+        # deciding on a number that is not the position's P&L.
+        #
+        # A vertical's real credit is short_entry - long_entry, and its real
+        # value now is short_mark - long_mark. dte was hard-coded None, which
+        # also meant TIME_STOP_DTE could never fire for the income book.
+        from deltax.reconcile import parse_occ as _parse
+        legs = {}
         for p_ in feed.positions():
+            sym = p_.get("symbol", "")
+            occ = _parse(sym)
+            if occ is None:
+                continue                          # equity: managed elsewhere
             try:
                 q = int(float(p_.get("qty") or 0))
-                if q >= 0:
-                    continue                      # short leg carries the position
-                live.append(Managed(symbol=p_.get("symbol", "?"), qty=abs(q),
-                                    entry_credit=abs(float(p_.get("avg_entry_price") or 0)),
-                                    current=abs(float(p_.get("current_price") or 0)) or None,
-                                    dte=None))
+                entry = abs(float(p_.get("avg_entry_price") or 0))
+                mark = abs(float(p_.get("current_price") or 0))
             except (TypeError, ValueError):
                 continue
+            if q == 0:
+                continue
+            key = (occ["underlying"], occ["right"], occ["expiry"])
+            side = "short" if q < 0 else "long"
+            legs.setdefault(key, {})[side] = (abs(q), entry, mark, sym)
+
+        live = []
+        for (und, right, exp), v in legs.items():
+            if "short" not in v:
+                continue                          # a long-only leg carries no credit
+            sq, se, sm, ssym = v["short"]
+            lq, le, lm, _ = v.get("long", (sq, 0.0, 0.0, None))
+            credit = se - le
+            now = sm - lm
+            if credit <= 0:
+                continue                          # debit structure: not this sweep
+            try:
+                d = (datetime.strptime(exp, "%y%m%d").date() - today).days
+            except (ValueError, TypeError):
+                d = None
+            live.append(Managed(symbol=ssym, qty=min(sq, lq),
+                                entry_credit=credit,
+                                current=now if now > 0 else None,
+                                dte=d))
         if live:
-            swept = manage(live, ledger=ledger, dry_run=dry_run)
+            # E78: give the sweep a real closer. Without one it reported closes
+            # it never made. Marketable-limit at the current mark plus a small
+            # allowance, so a triggered stop actually leaves the book.
+            def _closer(sym, qty, _legs=legs):
+                for (u, r, e), v in _legs.items():
+                    if "short" not in v or v["short"][3] != sym:
+                        continue
+                    ssym = v["short"][3]
+                    lsym = v.get("long", (0, 0, 0, None))[3]
+                    if not lsym:
+                        raise RuntimeError("no long leg - refusing a naked close")
+                    limit = round(max(v["short"][2] - v.get("long", (0, 0, 0.0, None))[2]
+                                      + 0.05, 0.05), 2)
+                    return execute.submit(
+                        [execute.Leg(ssym, "sell", 1), execute.Leg(lsym, "buy", 1)],
+                        qty, limit, dry_run=dry_run, close=True,
+                        context={"strategy": "E78 exit sweep"})
+                raise RuntimeError(f"no paired legs found for {sym}")
+            swept = manage(live, ledger=ledger, dry_run=dry_run, closer=_closer)
     except Exception as e:
         ledger.record_raw({"action": "exit_sweep_failed", "error": str(e)[:160]})
 
@@ -138,6 +215,44 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     exits_placed = []
     news_checked = {}      # symbol -> verdict, one fetch per name per cycle
     catalyst_result = None
+    rotation_result = None
+
+    # ── E71: sector rotation, ADVISORY ──────────────────────────────────────
+    # Three layers - regime (SPY vs GLD/TLT/BIL), 11 GICS sectors ranked by
+    # relative strength vs SPY, subsector amplification. It RANKS and LOGS on
+    # every cycle; it does not place orders. The source framework is explicit
+    # that rotation "takes weeks to unfold" and that daily rebalancing produces
+    # whipsaws, so wiring it to auto-execute on a 5-minute loop would trade
+    # against the signal's own design. The ranking steers which underlyings the
+    # options engine should prefer; the orders stay with the gated engine.
+    try:
+        from deltax import rotation as _rot
+        _need = list(dict.fromkeys(
+            _rot.CORE_SECTORS + [_rot.BENCHMARK] + _rot.SAFE_HAVENS
+            + [s for v in _rot.SUBSECTORS.values() for s in v]))
+        _closes = {}
+        for _s in _need:
+            try:
+                _b = feed.daily_bars(_s, str(today.fromordinal(today.toordinal() - 90)),
+                                     str(today), 80)
+                _closes[_s] = [x["c"] for x in _b if x.get("c")]
+            except Exception:
+                _closes[_s] = []
+        _sel = _rot.select(_closes)
+        rotation_result = {
+            "regime": _sel["regime"], "reason": _sel["reason"],
+            "ratio": _sel["ratio"],
+            "picks": [{"symbol": p.symbol, "roc": round(p.roc, 5),
+                       "rs": round(p.rs, 5), "via": p.subsector}
+                      for p in _sel["picks"]],
+            "ranked": [{"symbol": r.symbol, "rs": round(r.rs, 5)}
+                       for r in (_sel.get("ranked") or [])[:11]],
+        }
+        ledger.record_raw({"action": "rotation", **rotation_result,
+                           "advisory": True})
+    except Exception as _re:
+        ledger.record_raw({"action": "rotation_failed",
+                           "error": f"{type(_re).__name__}: {str(_re)[:120]}"})
 
     # ── E58: catalyst rule ────────────────────────────────────────────────
     # A defined-risk LONG vertical on a live supply shock. This is the only
@@ -429,7 +544,16 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     for symbol in _ordered:
         if len(traded) >= MAX_CONCURRENT:
             break
-        spot = (feed.snapshots([symbol]).get(symbol) or {})
+        # E75: one unreadable symbol must not end the scan. Before this, a
+        # single timeout here killed the loop and every candidate after it was
+        # silently never evaluated - the cycle looked like a clean "no action".
+        try:
+            spot = (feed.snapshots([symbol]).get(symbol) or {})
+        except Exception as e:
+            ledger.record_raw({"action": "snapshot_failed", "symbol": symbol,
+                               "error": f"{type(e).__name__}: {str(e)[:120]}"})
+            refused.append((symbol, "both", "snapshot_unreadable"))
+            continue
         from deltax.feeds import latest_price
         px = latest_price(spot)
         if not px:
@@ -516,6 +640,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 open_portfolio_max_loss=committed, structure="credit",
                 width=cand["width"], short_delta=cand["short"]["delta"],
                 worst_leg_spread_pct=cand["worst_leg_spread_pct"],
+                roundtrip_cost=cand.get("roundtrip_cost"),
                 tradable=True, last_bar_age_days=bar_age, asset_class="equity")
             bias, bias_icon, bias_note = directional_bias(side, "credit")
             ledger.record(dec, context={
@@ -585,7 +710,7 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             "committed": committed, "skipped": None,
             "permission": perm.state, "advisory_only": perm_override,
             "book": book, "exits": exits_placed, "swept": swept,
-            "catalyst": catalyst_result}
+            "catalyst": catalyst_result, "rotation": rotation_result}
 
 
 if __name__ == "__main__":
@@ -604,8 +729,17 @@ if __name__ == "__main__":
             eq, csh = float(acct.get("equity") or 0), float(acct.get("cash") or 0)
         except Exception:
             eq = csh = 0.0
+        # E75: the clock is read AGAIN here, and it sat outside the try above.
+        # That is how the 2 Sep traceback actually reached the terminal: the
+        # clock failed inside run(), run() returned "skipped", and this line
+        # then called the same failing endpoint a second time and crashed the
+        # process on the way out. Reporting must never be able to raise.
+        try:
+            _mkt = bool(feed.clock().get("is_open"))
+        except Exception:
+            _mkt = False
         print(report.render(equity=eq, cash=csh,
-                            market_open=bool(feed.clock().get("is_open")),
+                            market_open=_mkt,
                             regime=getattr(out.get("regime"), "note", "—"),
                             permission=out.get("permission", "—"),
                             events=[("refuse", "CYCLE", out["skipped"])]))
