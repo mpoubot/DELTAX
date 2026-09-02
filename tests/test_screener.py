@@ -255,5 +255,49 @@ _rs = open(os.path.join(os.path.dirname(__file__), "..", "deltax", "run.py")).re
 check("E88 run.py distinguishes the two refusal reasons",
       "unreadable_oi" in _rs and "no_liquid_expiry" in _rs)
 
+print("\n-- E92: width is MEASURED, and payoff follows from it --")
+# Found by MUTATION TESTING: hard-coding `width = 5.0` in select_vertical, and
+# inflating max_profit_per_contract 10x, both survived the whole suite. width
+# is not cosmetic - it feeds max_loss_per_contract, which drives position
+# sizing and the portfolio cap, and it feeds gate_credit_fraction. A requested
+# width that is silently substituted for the ACTUAL strike distance understates
+# risk exactly the way E79 did.
+#
+# The requested long strike often does not exist, so select_vertical falls back
+# to the nearest qualifying strike. width must then describe the spread that
+# was actually built. Asking for 2.0 here yields 177.5/175.0 - a MEASURED 2.5,
+# which differs from the request AND from any hard-coded default.
+_narrow = select_vertical(chain, side="put", target_delta=0.30, width=2.0,
+                          oi_by_symbol=oi, pricing="worst")
+check("E92 fallback picks the nearest available long leg",
+      _narrow["long"]["strike"] == 175.0, str(_narrow["long"]["strike"]))
+check("E92 width reports the ACTUAL distance, not the requested 2.0",
+      _narrow["width"] == 2.5, str(_narrow["width"]))
+check("E92 width is not a hard-coded default either",
+      _narrow["width"] != 5.0, str(_narrow["width"]))
+check("E92 max loss follows the measured width",
+      abs(_narrow["max_loss_per_contract"]
+          - (2.5 - _narrow["credit"]) * 100) < 1e-9,
+      str(_narrow["max_loss_per_contract"]))
+_wide4 = select_vertical(chain, side="put", target_delta=0.30, width=4.0,
+                         oi_by_symbol=oi, pricing="worst")
+check("E92 asking 4.0 that does not exist still reports the built 5.0",
+      _wide4["width"] == 5.0, str(_wide4["width"]))
+check("E92 and its max loss follows that 5.0",
+      abs(_wide4["max_loss_per_contract"] - (5.0 - _wide4["credit"]) * 100) < 1e-9,
+      str(_wide4["max_loss_per_contract"]))
+
+# max_profit on a credit spread is the credit, full stop. A 10x error here
+# misreports the payoff on the board and, for debit structures, feeds
+# gate_reward_risk directly.
+for _c, _lbl in ((_narrow, "2.5-wide"), (_wide4, "5-wide")):
+    check(f"E92 max profit == credit x 100 ({_lbl})",
+          abs(_c["max_profit_per_contract"] - _c["credit"] * 100) < 1e-9,
+          f'{_c["max_profit_per_contract"]} vs {_c["credit"] * 100}')
+check("E92 max profit and max loss sum to the width",
+      abs((_narrow["max_profit_per_contract"] + _narrow["max_loss_per_contract"])
+          - 2.5 * 100) < 1e-9,
+      str(_narrow["max_profit_per_contract"] + _narrow["max_loss_per_contract"]))
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
