@@ -1833,3 +1833,77 @@ line.
 **Rule.** A system whose closes are records and whose exits are resting orders
 has exactly one exit mechanism. Anything that weakens a resting order — wrong
 intent, day tif, wrong sign — silently removes the only exit there is.
+
+## E61 — Estimate the probability that actually pays you
+
+The number the agent needed was never P(USO goes up). With a resting exit, the
+position pays when the target is **touched** at any point before the close —
+so the quantity to estimate is **P(level touched before exit)**, which is
+roughly double P(finishing above it) over a short horizon.
+
+`deltax/probability.py` computes it in two layers:
+
+- **Base rate from the option market itself** — driftless GBM reflection,
+  `P = 2·N(−d)` with `d = ln(L/S) / (σ√T)` and σ taken from ATM implied vol.
+  This matters for honesty: a large prior move raises IV, which raises both the
+  base probability *and* the debit we pay. "Yesterday's +5.4% already priced
+  some of this in" is therefore handled by the arithmetic, not by argument.
+- **Evidence in log-odds** — physical disruption, confirmed supply loss, crude
+  breakout, price confirmation move it up; de-escalation, reversal and lost
+  momentum move it down. Bounded to [2%, 95%], each event counted once.
+
+Measured live: **P(USO touches 150 by Thursday) = 23%**, while the armed
+structure's exit level near 144 sits at **68%**. The same catalyst supports one
+trade and not the other, and only the explicit calculation shows which.
+
+**Rule.** State the question the position actually asks. Estimating a related
+but different probability is a silent way to be precisely wrong.
+
+**Rule.** An unknown probability must propagate as unknown. `None` returns
+`None`, sizing returns `$0`, and a mistyped evidence key raises rather than
+counting as absent — a typo must never read as "no evidence".
+
+## E62 — The ladder climbs only on evidence the price cannot contain
+
+Risk size is derived from the posterior, not chosen: under 45% → $2,500;
+under 60% → $5,000; under 75% → $7,500; at or above 75% → $10,000. Above that
+ceiling the ladder continues to **$15,000** with one physical confirmation and
+**$20,000** with two at ≥85%.
+
+**The gate is what makes it safe.** Escalation past $10,000 requires *physical*
+evidence — impaired Hormuz traffic, confirmed barrels lost, a crude breakout
+that holds. **Price momentum alone can never unlock it.** Tonight's posterior
+reached 0.75 on price confirmation only; without this rule, a quiet gap-up
+would have bought $20,000 of two-day options on nothing but the market's
+reflection of itself.
+
+The same machinery runs in reverse: a fading posterior shrinks the position,
+and a posterior that sizes below one contract returns NO TRADE.
+
+**Rule.** Evidence that is already inside the option price cannot also justify
+paying more for that option. Only information the market has not yet priced
+earns extra size.
+
+## E64 — Build inside the design system you already have
+
+The mission block shipped with **eleven distinct font sizes**, a lopsided 2:1
+flex split, `auto-fit` grids that ragged at every viewport, and a flat gradient
+in place of the established glass treatment. Pautax's verdict was accurate:
+*"looks like shit… weird fonting… should be one big block."*
+
+The dashboard already contained every answer: `.stat` defines the glass
+(`linear-gradient(160deg, rgba(10,186,181,.06), transparent 62%)` over the
+panel), `.stats` defines a symmetric `repeat(4,1fr)` grid, and table styling
+existed. I had written a **parallel design system** beside a working one.
+
+Rebuilt: four font sizes, the existing glass and grid reused verbatim, the
+proof table collapsed into a `<details>` dropdown so the summary reads in
+seconds and the receipts stay one click away.
+
+**Rule.** Before adding a component, read the CSS that is already there. A new
+visual language beside an existing one reads as broken even when each half is
+internally consistent.
+
+**Rule.** Detail that a reader may want is not detail every reader must scroll
+past. Progressive disclosure — headline visible, evidence one click deep — is
+what lets a board serve both a judge and a teammate.
