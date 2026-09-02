@@ -224,6 +224,29 @@ DEMO_NEVER_OVERRIDE  = ("HALT", "NO_NEW_POSITIONS")   # ...but never through
                               # drawdown kill switch. Those are not opinions
                               # about direction - they mean something is broken.
 
+# E96: freeze OPENS only, on the operator's instruction (2 Sep, after the
+# team's risk review). The book is 4.7:1 risk/reward - $14,918 at risk against
+# $3,182 of credit - which needs an 82.4% win rate to break even while the
+# strikes imply about 68%. Held to expiry that is negative; the strategy relies
+# on the resting 50% exits and the Friday 10:00 flatten instead. Freezing new
+# entries fixes the exposure at today's book and lets time decay work on it.
+#
+# This is deliberately NOT TRADING_SUSPENDED. That flag is checked in
+# execute.submit() before anything else and would block CLOSING orders too,
+# which would trap the book. A freeze must never be able to prevent an exit.
+NEW_ENTRIES_FROZEN = True
+FREEZE_REASON = ("E96: new entries frozen on operator instruction - 4.7:1 "
+                 "risk/reward needs 82.4% win rate vs ~68% implied. Exits, the "
+                 "50% targets and the Friday 10:00 flatten all remain active.")
+
+
+def gate_new_entries() -> GateResult:
+    """May the agent OPEN a position? Exits are never gated by this."""
+    if NEW_ENTRIES_FROZEN:
+        return GateResult("new_entries", False, FREEZE_REASON)
+    return GateResult("new_entries", True, "new entries permitted")
+
+
 TRADING_SUSPENDED = False
 SUSPENSION_REASON = ("E42 lifted 1 Sep after E44 rebuilt the backtest. "
                      "Re-arm by setting TRADING_SUSPENDED = True.")

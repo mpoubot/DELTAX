@@ -609,6 +609,29 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
     except Exception:
         _ordered = list(INCOME_UNIVERSE)
 
+    # E96: entry freeze. Checked HERE as well as in execute.submit() so a frozen
+    # cycle does not spend 20s and ~100 broker calls screening candidates it can
+    # never act on. Exits ran above and are untouched by this.
+    _frz = _G.gate_new_entries()
+    if not _frz.passed:
+        ledger.record_raw({"action": "entries_frozen", "reason": _frz.detail,
+                           "exits_active": True,
+                           "committed": round(committed, 2),
+                           "note": "resting 50% exits, the time stop and the "
+                                   "Friday 10:00 flatten all remain in force"})
+        return {"regime": regime, "traded": [], "refused": [],
+                "committed": committed, "permission": perm.state,
+                # E96: carry the REAL advisory flag through. Hard-coding False
+                # here made an analysis run (--force + dry_run, which sets
+                # perm_override) report itself as a live decision the moment the
+                # freeze short-circuited the cycle. An early return must preserve
+                # the semantics of the path it is short-circuiting, not invent
+                # simpler ones.
+                "advisory_only": perm_override, "book": book, "swept": swept,
+                "equities": _eq, "exits": exits_placed,
+                "frozen": _frz.detail,
+                "catalyst": catalyst_result, "rotation": rotation_result}
+
     for symbol in _ordered:
         if len(traded) >= MAX_CONCURRENT:
             break

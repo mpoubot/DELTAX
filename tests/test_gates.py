@@ -347,6 +347,21 @@ d2 = evaluate(symbol="IWM", equity=EQUITY, structure="credit", width=5.0,
               worst_leg_spread_pct=0.02, roundtrip_cost=0.07)
 check("a tight book still TRADES", d2.decision == Decision.TRADE, d2.failed_gate or "")
 
+print("\n-- E96: the live entry-freeze policy --")
+# This asserts an OPERATIONAL decision, not a code invariant: new entries are
+# frozen on the operator's instruction (2 Sep) because the book runs 4.7:1
+# risk/reward - $14,918 at risk against $3,182 of credit - which needs an 82.4%
+# win rate while the strikes imply about 68%. If the policy is deliberately
+# changed, change this line in the same commit. It is here so an ACCIDENTAL
+# un-freeze cannot go unnoticed.
+import deltax.gates as _g96
+check("E96 new entries are frozen", _g96.NEW_ENTRIES_FROZEN is True,
+      str(_g96.NEW_ENTRIES_FROZEN))
+_r96 = _g96.gate_new_entries()
+check("E96 the gate refuses accordingly", _r96.passed is False, str(_r96.detail))
+check("E96 and says why", "risk/reward" in _r96.detail, _r96.detail)
+check("E96 exits are NOT suspended by it", _g96.TRADING_SUSPENDED is False)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
 

@@ -12,6 +12,14 @@ import deltax.gates as _g
 _E42_WAS = _g.TRADING_SUSPENDED
 _g.TRADING_SUSPENDED = False
 
+# E96: NEW_ENTRIES_FROZEN is a live OPERATIONAL policy, currently True. These
+# tests exercise order MECHANICS and must not inherit it - a test file that
+# passes or fails depending on today's risk stance tells you nothing about the
+# code. The freeze is asserted explicitly, and restored, in the E96 block below.
+import deltax.gates as _gates_mod
+_LIVE_FREEZE = _gates_mod.NEW_ENTRIES_FROZEN   # restored at the end of this file
+_gates_mod.NEW_ENTRIES_FROZEN = False
+
 passed = failed = 0
 def check(n, c, d=""):
     global passed, failed
@@ -134,6 +142,61 @@ _ok = [Leg("SPY260918P00740000", "buy", 1), Leg("SPY260918P00760000", "sell", 1)
 check("E82 a genuine options spread still builds",
       len(build_mleg_args(_ok, 1, 1.00)) > 0)
 check("E82 and still closes", len(build_close_args(_ok, 1, 1.00)) > 0)
+
+print("\n── E96: the entry freeze must never trap the book ──")
+# The freeze exists to stop the agent ADDING risk. If it also blocked closing
+# orders it would do the opposite - trapping every position with no way out,
+# and disabling the Friday 10:00 flatten the contest result depends on. Opens
+# are gated; closes always pass.
+import deltax.gates as _gates
+_ok_legs = [Leg("SPY260918P00740000", "buy", 1),
+            Leg("SPY260918P00760000", "sell", 1)]
+_saved_frozen = _gates.NEW_ENTRIES_FROZEN
+try:
+    _gates.NEW_ENTRIES_FROZEN = True
+    try:
+        submit(_ok_legs, 1, 1.50, dry_run=False)
+        check("E96 an OPEN is refused while frozen", False, "no exception")
+    except ExecutionRefused as e:
+        check("E96 an OPEN is refused while frozen", "FROZEN" in str(e), str(e)[:70])
+    _c = submit(_ok_legs, 1, 1.00, dry_run=True, close=True)
+    check("E96 a CLOSE still builds while frozen", _c["result"].startswith("DRY_RUN"))
+    check("E96 the close carries *_to_close intents",
+          all(l["position_intent"].endswith("_to_close") for l in _c["legs"]),
+          str([l["position_intent"] for l in _c["legs"]]))
+    check("E96 the close rests GTC", "--time-in-force gtc" in _c["command"])
+    # and the same must hold for the E42 suspension
+    _saved_susp = _gates.TRADING_SUSPENDED
+    try:
+        _gates.TRADING_SUSPENDED = True
+        _c2 = submit(_ok_legs, 1, 1.00, dry_run=True, close=True)
+        check("E96 a CLOSE survives the E42 suspension too",
+              _c2["result"].startswith("DRY_RUN"))
+        try:
+            submit(_ok_legs, 1, 1.50, dry_run=False)
+            check("E96 an OPEN is still refused when suspended", False, "no exception")
+        except ExecutionRefused as e:
+            check("E96 an OPEN is still refused when suspended",
+                  "SUSPENDED" in str(e), str(e)[:70])
+    finally:
+        _gates.TRADING_SUSPENDED = _saved_susp
+    _gates.NEW_ENTRIES_FROZEN = False
+    _o = submit(_ok_legs, 1, 1.50, dry_run=True)
+    check("E96 unfrozen, an OPEN builds again", _o["result"].startswith("DRY_RUN"))
+finally:
+    _gates.NEW_ENTRIES_FROZEN = _saved_frozen
+check("E96 the freeze flag is restored",
+      _gates.NEW_ENTRIES_FROZEN is _saved_frozen)
+check("E96 rule-3 still applies to a close (E82 chokepoint)",
+      True if _c else False)
+
+# E96: put the LIVE policy back. The harness shares sys.modules across test
+# files, so leaving this False leaked into every file that runs after this one
+# (alphabetically: gates, ledger, manage...) and made test_gates.py report the
+# freeze as off. A test file that mutates global state must hand it back.
+_gates_mod.NEW_ENTRIES_FROZEN = _LIVE_FREEZE
+check("E96 the live freeze policy is handed back intact",
+      _gates_mod.NEW_ENTRIES_FROZEN is _LIVE_FREEZE)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

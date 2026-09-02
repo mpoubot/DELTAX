@@ -142,10 +142,19 @@ def submit(legs: list, qty: int, limit_price: float, *, ledger=None,
     # E42: hard stand-down. Every 2-3 DTE structure the contest window permits
     # tested negative over 26 weeks (-$50,904). This is the one boundary every
     # order crosses, so the rule is enforced here rather than only in markdown.
-    from deltax.gates import gate_trading_enabled
-    _g = gate_trading_enabled()
-    if not _g.passed:
-        raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
+    # E96: a CLOSING order must never be blocked by a stand-down. Both the E42
+    # suspension and the E96 entry freeze exist to stop the agent taking on
+    # risk; refusing an exit does the opposite - it traps the book with no way
+    # out, and would disable the Friday 10:00 flatten the whole contest result
+    # depends on. Opens are gated; closes always pass.
+    from deltax.gates import gate_trading_enabled, gate_new_entries
+    if not close:
+        _g = gate_trading_enabled()
+        if not _g.passed:
+            raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
+        _f = gate_new_entries()
+        if not _f.passed:
+            raise ExecutionRefused(f"ENTRIES FROZEN - {_f.detail}")
 
     # E80: hackathon rule 3 - "All strategies must incorporate options trading."
     # HACKATHON-RULES.md cites the compliance basis as "no equity or crypto leg
