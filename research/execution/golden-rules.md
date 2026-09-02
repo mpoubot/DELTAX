@@ -1600,3 +1600,48 @@ than a procedural one.
 
 **Consequence.** No position can be opened after 1 Sep. The paper account
 finishes the contest flat at $100,000.
+
+## E56 — R5 was a hard constraint, and it was eroded without a decision
+
+Asked who set the DTE rules and where, the trail is unambiguous and it does not
+flatter us.
+
+**Provenance.** The floor is **R5** in `research/options/golden-rules.md`, marked
+**⛔ hard constraint**, sourced to **E — the Wall Street Journal**, the only
+disinterested source in the corpus: a profiled trader whose largest losing day
+was ~$122k against a largest gain of ~$14k (**8.7×**), down ~$65k in year one.
+Its agent form is explicit — *"minimum-DTE floor as a hard precondition, **not a
+tunable parameter**."* It is not Matin's, and not a majority vote; it is a risk
+limit imposed *because* the unconflicted source reports the loss side.
+
+**Matin's actual contribution** was a warning against the opposite failure:
+his AVOID list cautions against picking DTE from "one historical sweet spot"
+(`research/aura/independent-review.md:96`).
+
+**Where it was tested.** Reviewing Matin's PLTR example we wrote, verbatim:
+
+> **"Sep 4"** is 4 DTE from Monday — inside the zone R5 exists to keep us out
+
+and refused the trade on that basis (`pltr-example-reviewed.md:18,103`).
+
+**Then we did it ourselves.** `MIN_DTE` went 7 → 4 (E37) → 2 (E41) → 3 (E45),
+and the whole contest book was built on a 4 Sep expiry at **3 DTE** — tighter
+than the trade we rejected when a teammate proposed it. Each step was locally
+correct: E37 removed a 18 Sep expiry from a 4 Sep contest, E41 unblocked an
+empty search window, E45 fixed an overlap with the time stop. **Not one of them
+recorded that it was crossing a hard constraint.**
+
+**Rule.** A constraint marked "not a tunable parameter" cannot be moved by a
+sequence of local fixes. Any edit to such a value must name the rule it
+overrides and argue against that rule's evidence, or it is not a decision — it
+is drift wearing the costume of maintenance.
+
+**Rule.** Applying a standard to a teammate's proposal and not to your own is
+the most expensive kind of inconsistency, because it looks like rigour from the
+inside. The refusal of the PLTR trade was correct. What followed should have
+been flagged by the same reviewer, and was not.
+
+**Standing.** E55 measured this independently and found 2 DTE genuinely negative
+(−1.9% to −11.3%), which vindicates R5's *direction* on our own data. That is
+luck, not process: the measurement came 5 days after the constraint was first
+moved, and only because Pautax asked.
