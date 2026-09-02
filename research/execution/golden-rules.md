@@ -1570,3 +1570,33 @@ derived, fifteen minutes before the last entry window of a contest, on a live
 account, with no backtest of the change, is the E50 mistake again — a mechanism
 argument implemented under time pressure. Per-symbol regime is a post-contest
 experiment with a pre-committed validation bar, or it is nothing.
+
+## E55 — MIN_DTE=3 is a measured boundary, not caution
+
+Asked directly whether the week was over, the honest check was not to restate
+the rule but to price what breaking it would buy. Measured on the live basket:
+
+| entry → exit | 26-week total | worst week |
+|---|---|---|
+| **Tue (3 DTE) → exit Wed** | **+3.1%** | **−505** |
+| Wed (2 DTE) → exit Thu | −1.9% | −2,863 |
+| Wed (2 DTE) → hold to Fri | −8.4% | −5,378 |
+| Thu (1 DTE) → hold to Fri | −0.9% | −6,357 |
+
+A Wednesday entry is negative at **every** vol assumption — −1.9% at IV/RV 1.45,
+−7.2% at 1.15, **−11.3%** at 1.00 — and its worst week runs 5–6× deeper than the
+Tuesday entry's.
+
+**Mechanism.** Strike distance scales with √time, so at 2 DTE the strikes sit
+~82% as far from spot as at 3 DTE while the credit barely moves. More breach
+risk, no more premium, inside the gamma zone. The Thursday row is the same trap
+dressed up: an **85% win rate** with a **−6,357** worst week.
+
+**Rule.** When a constraint blocks the only remaining action, price the
+violation before defending the rule. If breaking it were profitable, the rule
+would be wrong and should change; here it is negative under every assumption, so
+the rule holds and the answer to "can we still trade?" is a measured no rather
+than a procedural one.
+
+**Consequence.** No position can be opened after 1 Sep. The paper account
+finishes the contest flat at $100,000.
