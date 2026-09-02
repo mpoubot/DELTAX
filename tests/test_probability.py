@@ -58,9 +58,29 @@ check("unknown -> $0", size_band(None)[0] == 0.0)
 check("weak -> $2,500", size_band(0.40)[0] == 2500.0)
 check("good -> $5,000", size_band(0.55)[0] == 5000.0)
 check("very strong -> $7,500", size_band(0.69)[0] == 7500.0)
-check("exceptional -> $10,000 and never more", size_band(0.90)[0] == 10000.0)
+check("exceptional on PRICE evidence alone caps at $10,000",
+      size_band(0.90, physical=0)[0] == 10000.0)
 check("bands are monotone", size_band(0.40)[0] <= size_band(0.55)[0]
       <= size_band(0.69)[0] <= size_band(0.90)[0])
+
+print("\n── E62: the escalation ladder needs PHYSICAL confirmation ──")
+from deltax.probability import HARD_MAX_RISK, physical_count
+check("one physical confirmation -> $15,000",
+      size_band(0.80, physical=1)[0] == 15000.0)
+check("two physical + p>=0.85 -> $20,000 hard max",
+      size_band(0.88, physical=2)[0] == HARD_MAX_RISK)
+check("two physical but p<0.85 stays at $15,000",
+      size_band(0.80, physical=2)[0] == 15000.0)
+check("physical evidence cannot rescue a weak posterior",
+      size_band(0.50, physical=2)[0] == 5000.0)
+check("nothing exceeds HARD_MAX_RISK",
+      all(size_band(p, ph)[0] <= HARD_MAX_RISK
+          for p in (0.5, 0.8, 0.95) for ph in (0, 1, 2, 3)))
+check("physical_count reads only the physical flags",
+      physical_count({"hormuz_physical_disruption": True, "uso_confirms": True,
+                      "wti_breakout_holds": True}) == 2)
+_run = open("deltax/run.py").read()
+check("run.py passes physical count into sizing", "physical" in _run and "size_band(_post.p" in _run)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

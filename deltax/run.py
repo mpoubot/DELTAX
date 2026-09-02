@@ -148,9 +148,98 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
         _u = _cat.UNDERLYING
         _already = any(u == _u for u, _s in held)
         if _already:
-            catalyst_result = {"skipped": f"{_u} already held"}
-            ledger.record_raw({"action": "catalyst_skipped",
-                               "reason": catalyst_result["skipped"]})
+            # E62: escalation ADD-ON. Already holding is no longer an automatic
+            # skip - if the catalyst is ESCALATING with physical confirmation
+            # and the size band now exceeds the risk already committed, add the
+            # difference. Every ambiguity fails closed to a plain skip.
+            _added = False
+            try:
+                from deltax import probability as _prob
+                from deltax.feeds import (previous_close as _pc,
+                                          latest_price as _lp,
+                                          intraday_vwap as _vw)
+                _pending_uso = any(
+                    str(_o.get("symbol", "")).startswith(_u)
+                    or any(str(_l.get("symbol", "")).startswith(_u)
+                           for _l in (_o.get("legs") or []))
+                    for _o in feed.open_orders())
+                _sn = feed.snapshots([_u]).get(_u) or {}
+                _on, _why = _cat.catalyst_active(_pc(_sn), _lp(_sn))
+                if not _pending_uso and _on:
+                    _v = _cat.price_vertical(feed)
+                    if _v.ok and _v.debit:
+                        _spotpx, _vwap, _prev = _lp(_sn), _vw(_sn), _pc(_sn)
+                        _ev = {"uso_confirms": bool(_spotpx and _vwap and _prev
+                                and _spotpx > _vwap and _spotpx > _prev),
+                               "momentum_lost": bool(_spotpx and _vwap
+                                and _spotpx < _vwap),
+                               "options_reasonably_priced": True}
+                        _lvl = _cat.LONG_STRIKE + (_v.exit_limit or 0)
+                        _base = _prob.p_touch_base(_spotpx, _lvl, None, 1.9)
+                        # IV fetch as in the entry path; None fails closed
+                        try:
+                            _chn = feed.option_chain(_u, option_type="call",
+                                expiry_gte=str(_cat.EXPIRY), expiry_lte=str(_cat.EXPIRY),
+                                strike_gte=round((_spotpx or 0)-1, 2),
+                                strike_lte=round((_spotpx or 0)+1, 2))
+                            for _nd in _chn.values():
+                                if _nd.get("impliedVolatility"):
+                                    _base = _prob.p_touch_base(
+                                        _spotpx, _lvl, _nd["impliedVolatility"], 1.9)
+                                    break
+                        except Exception:
+                            _base = None
+                        _post = _prob.update(_base, _ev)
+                        _phys = _prob.physical_count(_ev)
+                        _band, _lab = _prob.size_band(_post.p, _phys)
+                        # committed risk from the actual fills, or fail closed
+                        _committed_uso = None
+                        try:
+                            _lq = _sq = None
+                            for _p_ in feed.positions():
+                                if _p_.get("symbol") == _v.long_symbol:
+                                    _lq = (abs(float(_p_.get("qty") or 0)),
+                                           float(_p_.get("avg_entry_price") or 0))
+                                if _p_.get("symbol") == _v.short_symbol:
+                                    _sq = (abs(float(_p_.get("qty") or 0)),
+                                           float(_p_.get("avg_entry_price") or 0))
+                            if _lq and _sq:
+                                _committed_uso = min(_lq[0], _sq[0]) * (
+                                    _lq[1] - _sq[1]) * 100
+                        except Exception:
+                            _committed_uso = None
+                        _status = _prob.catalyst_status(_ev)
+                        if (_committed_uso is not None and _status == "ESCALATING"
+                                and _phys >= 1
+                                and _band - _committed_uso >= _v.debit * 100):
+                            _extra = int((_band - _committed_uso) // (_v.debit * 100))
+                            _oicap = int(min(_v.long_oi, _v.short_oi)
+                                         * _cat.MAX_OI_FRACTION)
+                            _extra = max(0, min(_extra, _oicap))
+                            if _extra >= 1:
+                                _rec = execute.submit(
+                                    _cat.legs_for(_v), _extra, _v.debit,
+                                    dry_run=dry_run,
+                                    context={"strategy": "E62 escalation add-on",
+                                             "band": _band, "posterior": _post.p,
+                                             "committed_before": _committed_uso})
+                                ledger.record_raw(_rec)
+                                catalyst_result = {"added": _extra,
+                                                   "band": _band,
+                                                   "result": _rec.get("result")}
+                                _added = True
+                        ledger.record_raw({"action": "catalyst_addon_check",
+                                           "status": _status, "physical": _phys,
+                                           "posterior": _post.p, "band": _band,
+                                           "committed": _committed_uso,
+                                           "added": _added})
+            except Exception as _ae:
+                ledger.record_raw({"action": "catalyst_addon_failed",
+                                   "error": f"{type(_ae).__name__}: {str(_ae)[:120]}"})
+            if not _added:
+                catalyst_result = {"skipped": f"{_u} already held"}
+                ledger.record_raw({"action": "catalyst_skipped",
+                                   "reason": catalyst_result["skipped"]})
         elif not demo_permits(perm.state) and not perm_override:
             # perm_override is analysis-only (force AND dry_run), so this can
             # never let a real order through a HALT.
@@ -197,23 +286,43 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                         "options_reasonably_priced": bool(_v.ok),
                     }
                     _post = _prob.update(_base, _ev)
-                    _band, _lab = _prob.size_band(_post.p)
+                    _phys = _prob.physical_count(_ev)
+                    _band, _lab = _prob.size_band(_post.p, _phys)
                     ledger.record_raw({"action": "catalyst_probability",
                                        "exit_level": round(_lvl, 2), "iv": _iv,
                                        "base": _base, "posterior": _post.p,
                                        "evidence": _post.applied,
+                                       "physical_confirmations": _phys,
                                        "status": _prob.catalyst_status(_ev),
                                        "size_band": _band, "band_label": _lab})
-                    # The posterior can only SHRINK the spend, never grow it.
-                    if _v.ok and _band < _v.max_loss:
-                        _scale = _band / (_v.debit * 100)
-                        _v.contracts = max(int(_scale), 0)
+                    # E62: the band sets the spend in BOTH directions - it can
+                    # escalate to HARD_MAX_RISK on physical confirmation and
+                    # shrink to zero on a fading posterior. The 5%-of-OI cap
+                    # and the debit ceiling still bind above it.
+                    if _v.ok and _v.debit:
+                        _want = int(_band // (_v.debit * 100))
+                        _oicap = int(min(_v.long_oi, _v.short_oi)
+                                     * _cat.MAX_OI_FRACTION)
+                        _n = max(0, min(_want, _oicap))
+                        if _n != _v.contracts:
+                            ledger.record_raw({"action": "catalyst_resize",
+                                               "from": _v.contracts, "to": _n,
+                                               "band": _band, "oi_cap": _oicap})
+                            _v.contracts = _n
+                        _w = _cat.SHORT_STRIKE - _cat.LONG_STRIKE
                         _v.max_loss = round(_v.debit * 100 * _v.contracts, 2)
-                        _v.max_profit = round(((_cat.SHORT_STRIKE - _cat.LONG_STRIKE)
-                                               - _v.debit) * 100 * _v.contracts, 2)
+                        _v.max_profit = round((_w - _v.debit) * 100 * _v.contracts, 2)
                         if _v.contracts < 1:
                             _v.ok = False
                             _v.reason = f"posterior {_post.p:.0%} sizes to zero - NO TRADE"
+                        else:
+                            # keep the human-readable record consistent with
+                            # the RESIZED position (E47: stale labels lie)
+                            _v.reason = (f"{_v.contracts}x {_cat.LONG_STRIKE:.0f}/"
+                                         f"{_cat.SHORT_STRIKE:.0f} @ ${_v.debit:.2f}"
+                                         f" - risk ${_v.max_loss:,.0f},"
+                                         f" max ${_v.max_profit:,.0f}"
+                                         f" [band ${_band:,.0f}, p={_post.p:.0%}]")
                 except Exception as _pe:
                     ledger.record_raw({"action": "catalyst_probability_failed",
                                        "error": f"{type(_pe).__name__}: {str(_pe)[:120]}"})

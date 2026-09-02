@@ -35,6 +35,18 @@ EVIDENCE_WEIGHTS = {
 
 P_FLOOR, P_CEIL = 0.02, 0.95
 
+# E62: the escalation ladder. Above the $10k base ceiling, size requires
+# PHYSICAL confirmation - flags the option price cannot already contain.
+# Price momentum alone (uso_confirms) can never unlock maximum size, or a
+# gap-up buys risk on nothing but its own reflection.
+HARD_MAX_RISK = 20_000.0
+PHYSICAL_FLAGS = ("hormuz_physical_disruption", "supply_confirmed_hit",
+                  "wti_breakout_holds")
+
+
+def physical_count(evidence: dict) -> int:
+    return sum(1 for k in PHYSICAL_FLAGS if evidence.get(k))
+
 
 def p_touch_base(spot: float, level: float, iv: float,
                  sessions: float) -> Optional[float]:
@@ -96,8 +108,9 @@ def catalyst_status(evidence: dict) -> str:
     return "UNCHANGED"
 
 
-def size_band(p: Optional[float]) -> tuple:
-    """Supervisor rule 5: risk follows evidence strength, ceiling $10k.
+def size_band(p: Optional[float], physical: int = 0) -> tuple:
+    """Risk follows evidence strength. E62: the ladder climbs past $10k only
+    on physical confirmation, and never past HARD_MAX_RISK.
 
     Returns (max_risk_dollars, label). Unknown probability -> $0.
     """
@@ -109,4 +122,8 @@ def size_band(p: Optional[float]) -> tuple:
         return 5_000.0, "good"
     if p < 0.75:
         return 7_500.0, "very strong"
-    return 10_000.0, "exceptionally strong"
+    if physical >= 2 and p >= 0.85:
+        return HARD_MAX_RISK, "MAX ESCALATION - 2+ physical confirmations"
+    if physical >= 1:
+        return 15_000.0, "escalated - physical confirmation"
+    return 10_000.0, "exceptionally strong (price evidence only)"
