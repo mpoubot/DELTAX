@@ -89,12 +89,11 @@ def _clean(line: str) -> str:
     return _re.sub(r"\s{2,}", "  ", line)
 
 def _tz_times():
-    """Local time for each team pill. 24-hour, because 21:00 read from Denmark
-    is unambiguous and 9 PM is not.
+    """Local time for each team pill, 12-hour with AM/PM.
 
-    Converted from ET each render rather than stored as fixed offsets: the US,
-    Latvia and Denmark leave daylight saving on different dates, so the gap
-    between them is not constant even though it is stable this week.
+    Still converted from ET each render rather than stored as fixed offsets:
+    the US, Latvia and Denmark leave daylight saving on different dates, so the
+    gap between them is not constant even though it is stable this week.
 
     Returns empty strings on any failure - a clock is decoration and must never
     be able to take the board down.
@@ -102,7 +101,9 @@ def _tz_times():
     from zoneinfo import ZoneInfo
     from datetime import datetime as _dt
     try:
-        return {k: _dt.now(ZoneInfo(z)).strftime("%H:%M")
+        # %-I drops the leading zero (9:05 AM, not 09:05 AM); lower-cased so it
+        # reads as a time rather than shouting inside a row of capitalised pills.
+        return {k: _dt.now(ZoneInfo(z)).strftime("%-I:%M %p").lower()
                 for k, z in (("us", "America/New_York"),
                              ("lv", "Europe/Riga"),
                              ("dk", "Europe/Copenhagen"))}
@@ -750,9 +751,7 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     mission = f"""<div class="mission">
 <div class="m-hero">
   <div>
-    <div class="m-k">LIVE BOOK &middot; 3 STRATEGIES</div>
-    <div class="m-big">{money(eq)} <span class="sm {_plc(pnl or 0)}">{"&mdash;" if pnl is None else _pct(pnl)}</span></div>
-    <div class="m-line" style="margin-top:2px"><span class="dim">{pnl_val} vs $100,000 start</span></div>
+    <div class="m-k">WHAT THE AGENT IS RUNNING</div>
     <div class="m-line"><b>Options income</b> &mdash; credit spreads through
     {_ga["gate_count"]} deterministic gates &middot; <b>Rotation</b> &mdash; 11 GICS
     sectors ranked by relative strength, advisory only &middot; <b>Catalyst</b>
@@ -774,14 +773,10 @@ refusal is enforced in code at the order boundary, not by convention.</div>
   </div>
 </div>
 <div class="ev-grid" style="margin-top:16px">
-  <div><span>REGIME</span><b class="ok">{_regime_txt}</b><i>{_regime_why[:38]}</i></div>
-  <div><span>OPTIONS P&amp;L</span><b class="{"ok" if _opt_pl>=0 else "bad"}">{_pct(_opt_pl)}</b><i>{_opt_pl:+,.2f} &middot; {len(_opt_legs)} legs</i></div>
-  <div><span>EQUITY P&amp;L</span><b class="{"ok" if _eq_pl>=0 else "bad"}">{_pct(_eq_pl)}</b><i>{_eq_pl:+,.2f} &middot; rotation</i></div>
-  <div><span>NET UNREALIZED</span><b class="{"ok" if _tot_pl>=0 else "bad"}">{_pct(_tot_pl)}</b><i>{_tot_pl:+,.2f} marked</i></div>
-  <div><span>TESTS</span><b class="ok">{_tc_n}</b><i>{_tc_sub}</i></div>
-  <div><span>RISK GATES</span><b class="ok">{_ga["gate_count"]} ARMED</b><i>fail closed &middot; every candidate</i></div>
-  <div><span>DATA</span><b class="mixed">MEDIUM</b><i>free tier &middot; repriced live</i></div>
-  <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper</i></div>
+  <div><span>OPEN POSITIONS</span><b class="{"ok" if _tot_pl>=0 else "bad"}">{_tot_pl:+,.2f}</b><i>{len(_opt_legs)} legs &middot; marked to market</i></div>
+  <div><span>MARKET</span><b class="ok">{_regime_txt}</b><i>{_regime_why[:38]}</i></div>
+  <div><span>RISK GATES</span><b class="ok">{_ga["gate_count"]} ARMED</b><i>{_ga["refused"]} refused today</i></div>
+  <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper &middot; {_tc_n} tests</i></div>
 </div>
 <div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:16px">
   <div style="flex:1;min-width:260px">
@@ -823,6 +818,20 @@ refusal is enforced in code at the order boundary, not by convention.</div>
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.pnl{{background:var(--panel);border:1px solid var(--line);
+padding:16px 20px;margin:0 0 14px;display:flex;flex-wrap:wrap;
+align-items:baseline;gap:26px}}
+.pnl-k{{display:block;color:var(--dim2);font-size:9px;letter-spacing:.2em;
+margin-bottom:5px}}
+.pnl-v{{color:var(--white);font-size:40px;font-weight:700;line-height:1;
+font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
+.pnl-d{{font-size:34px;font-weight:700;line-height:1;
+font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
+.pnl-d.up{{color:var(--bl)}}.pnl-d.down{{color:#FF8A8A}}
+.pnl-p{{font-size:17px;font-weight:400;margin-left:8px}}
+.pnl-n{{color:var(--dim2);font-size:10px;letter-spacing:.1em;margin-top:6px;
+display:block}}
+@media(max-width:640px){{.pnl-v{{font-size:30px}}.pnl-d{{font-size:26px}}}}
 .eqc{{background:var(--panel);border:1px solid var(--line);padding:12px 14px 6px;
 margin:0 0 14px}}
 .eqc-hd{{display:flex;justify-content:space-between;align-items:baseline;
@@ -843,7 +852,7 @@ letter-spacing:.02em}}
 .m-conf .m-big{{color:var(--bl);text-shadow:0 0 20px rgba(63,224,218,.4)}}
 .m-line{{color:var(--txt);font-size:11.5px;margin-top:7px;line-height:1.55}}
 .m-line b{{color:var(--white)}}
-.ev-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}}
+.ev-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}}
 .ev-grid div{{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:6px 9px}}
 .ev-grid span{{display:block;color:var(--dim2);font-size:9px;letter-spacing:.14em;
 margin-bottom:2px}}
@@ -1017,6 +1026,14 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 </div>
 {standdown}
 {warn}
+<div class="pnl">
+  <div><span class="pnl-k">ACCOUNT VALUE</span>
+    <span class="pnl-v">{money(eq)}</span></div>
+  <div><span class="pnl-k">{"PROFIT" if (pnl or 0) >= 0 else "LOSS"} TODAY</span>
+    <span class="pnl-d {"up" if (pnl or 0) >= 0 else "down"}">{pnl_val}<span
+      class="pnl-p">{"&mdash;" if pnl is None else _pct(pnl)}</span></span>
+    <span class="pnl-n">against the $100,000 start &middot; paper account</span></div>
+</div>
 {_equity_chart(history)}
 {mission}
 <div class="stats">{stats}</div>
