@@ -2,23 +2,23 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 .mission{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
-var(--panel);border:1px solid var(--line);padding:22px 24px;margin:0 0 20px;
+var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}
-.m-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
-align-items:end;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.m-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+align-items:end;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .m-hero>div:first-child{grid-column:span 2}
 .m-k{color:var(--dim2);font-size:10px;letter-spacing:.22em;margin-bottom:8px}
-.m-big{color:var(--white);font-size:34px;font-weight:700;line-height:1;
+.m-big{color:var(--white);font-size:25px;font-weight:700;line-height:1;
 letter-spacing:.02em}
-.m-big .sm{font-size:15px;font-weight:400;color:var(--bl);letter-spacing:.02em}
+.m-big .sm{font-size:13px;font-weight:400;color:var(--bl);letter-spacing:.02em}
 .m-conf .m-big{color:var(--bl);text-shadow:0 0 20px rgba(63,224,218,.4)}
-.m-line{color:var(--txt);font-size:12.5px;margin-top:9px;line-height:1.65}
+.m-line{color:var(--txt);font-size:11.5px;margin-top:7px;line-height:1.55}
 .m-line b{color:var(--white)}
-.ev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
-.ev-grid div{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:9px 11px}
-.ev-grid span{display:block;color:var(--dim2);font-size:10px;letter-spacing:.16em;
-margin-bottom:3px}
-.ev-grid b{font-size:12.5px}
+.ev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}
+.ev-grid div{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:6px 9px}
+.ev-grid span{display:block;color:var(--dim2);font-size:9px;letter-spacing:.14em;
+margin-bottom:2px}
+.ev-grid b{font-size:12px}
 .ev-grid .ok{color:var(--bl)}.ev-grid .mixed{color:#E8B42B}.ev-grid .bad{color:#FF8A8A}
 details.m-proof{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
 details.m-proof summary{color:var(--cy);font-size:10px;letter-spacing:.22em;
@@ -186,70 +186,68 @@ td.bar span{display:block;height:6px;background:linear-gradient(90deg,var(--bl),
 <div class="mission">
 <div class="m-hero">
   <div>
-    <div class="m-k">TARGET &middot; 2&ndash;4 SEP</div>
-    <div class="m-big">USO <span class="sm">$140.03 <span class="neg">-0.67%</span></span></div>
-    <div class="m-line">United States Oil Fund &middot; <b>BULLISH</b> &middot;
-    140/145 call debit vertical &middot; breakeven <b>141.98</b> (+0.7%) &middot;
-    risk <b>&le;$9,900</b> &middot; exit rests 2&times; GTC &middot; flat by Thursday</div>
+    <div class="m-k">LIVE BOOK &middot; 3 STRATEGIES</div>
+    <div class="m-big">$99,926 <span class="sm neg">-0.074%</span></div>
+    <div class="m-line" style="margin-top:2px"><span class="dim">-74.23 vs $100,000 start</span></div>
+    <div class="m-line"><b>Options income</b> (credit spreads, 17 gates) &middot;
+    <b>Catalyst</b> (defined-risk verticals on a supply shock) &middot;
+    <b>Rotation</b> (11 GICS sectors ranked by relative strength).
+    Autonomous every 5 minutes, full session.</div>
   </div>
   <div class="m-conf">
     <div class="m-k">EVIDENCE CONFIDENCE</div>
     <div class="m-big">58%</div>
   </div>
   <div>
-    <div class="m-k">P(TARGET TOUCHED)</div>
-    <div class="m-big">68<span class="sm">%</span></div>
+    <div class="m-k">OPEN RISK</div>
+    <div class="m-big">3<span class="sm">&nbsp;spreads</span></div>
   </div>
 </div>
-<div class="m-line" style="margin-top:14px">Catalyst, technicals, liquidity and the
-lifecycle backtest agree; held down by a thin edge: across a full year of real option prices the
-structure is <b>&minus;9% unconditionally</b> and only <b>+15% inside the
-catalyst regime</b> (n=10), with binary outcomes and three consecutive total
-losses on record. This scores
-<b>evidence support &mdash; not probability of profit</b>.</div>
-<div class="ev-grid">
-  <div><span>BACKTEST</span><b class="mixed">MIXED</b></div>
-  <div><span>CATALYST</span><b class="ok">CONFIRMED</b></div>
-  <div><span>TECHNICALS</span><b class="ok">CONFIRMED</b></div>
-  <div><span>VOLATILITY</span><b class="bad">UNFAVORABLE</b></div>
-  <div><span>LIQUIDITY</span><b class="ok">PASS</b></div>
-  <div><span>RISK GATES</span><b class="ok">ARMED</b></div>
-  <div><span>DATA QUALITY</span><b class="mixed">MEDIUM</b></div>
-  <div><span>ACCOUNT</span><b class="ok">PA397N6FXXIE</b></div>
+<div class="ev-grid" style="margin-top:16px">
+  <div><span>REGIME</span><b class="ok">—</b><i></i></div>
+  <div><span>OPTIONS P&amp;L</span><b class="bad">-0.067%</b><i>-67.00 &middot; 6 legs</i></div>
+  <div><span>EQUITY P&amp;L</span><b class="bad">-0.007%</b><i>-6.63 &middot; rotation</i></div>
+  <div><span>NET UNREALIZED</span><b class="bad">-0.074%</b><i>-73.63 marked</i></div>
+  <div><span>TESTS</span><b class="ok">571 PASS</b><i>20 files, 0 silent</i></div>
+  <div><span>RISK GATES</span><b class="ok">ARMED</b><i>17 gates &middot; fail closed</i></div>
+  <div><span>DATA</span><b class="mixed">MEDIUM</b><i>free tier &middot; repriced live</i></div>
+  <div><span>ACCOUNT</span><b class="ok">PA397N6FXXIE</b><i>Alpaca paper</i></div>
+</div>
+<div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:16px">
+  <div style="flex:1;min-width:260px">
+    <div class="m-k">OPEN POSITIONS</div>
+    <table><tr><th>NAME</th><th>STRUCTURE</th><th style="text-align:right">P&amp;L</th>
+    <th style="text-align:right">%</th></tr>
+    <tr><td class="cy">IWM</td><td>2-leg spread</td><td class="num neg">-110.00</td><td class="num neg">-0.110%</td></tr><tr><td class="cy">QQQ</td><td>2-leg spread</td><td class="num pos">+30.00</td><td class="num pos">+0.030%</td></tr><tr><td class="cy">SPY</td><td>2-leg spread</td><td class="num pos">+13.00</td><td class="num pos">+0.013%</td></tr><tr><td class="cy">XOP</td><td>51 shares &middot; rotation</td><td class="num neg">-6.63</td><td class="num neg">-0.007%</td></tr></table>
+  </div>
+  <div style="flex:1;min-width:220px">
+    <div class="m-k">SECTOR STRENGTH vs SPY</div>
+    <table><tr><th>SECTOR</th><th style="text-align:right">RS</th></tr><tr><td colspan="2" class="empty">awaiting first cycle</td></tr></table>
+    <div class="m-line" style="margin-top:8px">picks: —</div>
+  </div>
 </div>
 <details class="m-proof">
 <summary>WHAT WAS ACTUALLY TESTED &mdash; REAL OPTION PRICES (OPRA VIA MASSIVE)</summary>
 <table>
 <tr><th>TEST</th><th>RESULT</th><th>READING</th></tr>
-<tr><td><b>Full year, 46 expiries, real OPRA prices &mdash; UNCONDITIONAL</b></td>
+<tr><td><b>Full year, 46 expiries, real prices &mdash; UNCONDITIONAL</b></td>
     <td class="rd">&minus;9% mean &middot; &minus;89.9% drawdown</td>
-    <td>$100k &rarr; $60k. The structure alone is a losing strategy.</td></tr>
-<tr><td><b>Same year, restricted to CATALYST weeks (what we trade)</b></td>
+    <td>$100k &rarr; $60k. The structure alone loses money.</td></tr>
+<tr><td><b>Same year, only when the catalyst gate fires</b></td>
     <td class="gd">+15% mean &middot; 60% win</td>
-    <td>$100k &rarr; $114.6k over 10 trades &mdash; <b>the gate is the edge</b>,
-    not the structure. n=10, P(mean&lt;0)=29%.</td></tr>
-<tr><td>Hold-to-expiry, 3%-OTM verticals</td>
-    <td class="rd">0 of 3 profitable</td>
-    <td>lost even when USO rose +3.8% &mdash; forced the re-strike to 140/145</td></tr>
-<tr><td>Full lifecycle with resting 2&times; exit, 4 structures</td>
+    <td>$100k &rarr; $114.6k over 10 trades &mdash; <b>the gate is the edge</b>.
+    n=10, P(mean&lt;0)=29%.</td></tr>
+<tr><td>Lifecycle with a resting 2&times; exit vs hold-to-expiry</td>
     <td class="gd">9 of 14 hit the exit</td>
     <td>the edge is the resting exit harvesting movement, not direction</td></tr>
-<tr><td>Our exact rule (ATM 5-wide, entered 2 sessions out)</td>
-    <td class="gd">3 of 3 wins</td>
-    <td class="rd">n=3 &mdash; low sample, treated as tendency only</td></tr>
-<tr><td>Catalyst-regime split (prior day &ge;+2%)</td>
-    <td>1 continuation / 1 fakeout</td>
-    <td>catalyst predicts movement, not direction</td></tr>
-<tr><td>P(exit level ~144 touched before Thursday)</td>
-    <td class="gd">68% implied</td>
-    <td>75% posterior &middot; 64% historical analogue &middot; updated each cycle</td></tr>
-<tr><td>Structures rejected on the live book</td><td>4</td>
-    <td>145/150, 141/146, 145/155, condor &mdash; each failed on price or liquidity</td></tr>
+<tr><td>Structures rejected on the live book</td><td>6</td>
+    <td>145/150, 141/146, 145/155, condor, XLE/XLK/XLF/GLD spreads &mdash;
+    each failed on credit, spread or open interest</td></tr>
 </table>
 </details>
 </div>
 
-<div class="stats"><div class="stat big"><div class="k">EQUITY</div><div class="v">$99,993</div><div class="n">PA397N6FXXIE · Alpaca paper</div></div><div class="stat big neg"><div class="k">P&amp;L</div><div class="v">-6.87</div><div class="n">-0.01% of $100,000 start</div></div><div class="stat "><div class="k">CASH</div><div class="v">$91,504</div><div class="n">uncommitted</div></div><div class="stat "><div class="k">OPEN POSITIONS</div><div class="v">3</div><div class="n">7 legs · 3 spread(s)</div></div><div class="stat "><div class="k">DECISIONS LOGGED</div><div class="v">415</div><div class="n">every evaluation</div></div><div class="stat "><div class="k">REFUSED</div><div class="v">413</div><div class="n">100% of candidates screened</div></div></div>
+<div class="stats"><div class="stat big"><div class="k">EQUITY</div><div class="v">$99,926</div><div class="n">PA397N6FXXIE · Alpaca paper</div></div><div class="stat big neg"><div class="k">P&amp;L</div><div class="v">-74.23</div><div class="n">-0.07% of $100,000 start</div></div><div class="stat "><div class="k">CASH</div><div class="v">$91,504</div><div class="n">uncommitted</div></div><div class="stat "><div class="k">OPEN POSITIONS</div><div class="v">3</div><div class="n">7 legs · 3 spread(s)</div></div><div class="stat "><div class="k">DECISIONS LOGGED</div><div class="v">415</div><div class="n">every evaluation</div></div><div class="stat "><div class="k">REFUSED</div><div class="v">413</div><div class="n">100% of candidates screened</div></div></div>
 
 <h2>WHY THE AGENT SAID NO</h2><div class="rule"></div>
 <div class="lead">Every evaluation is recorded — approvals and refusals alike — in a
@@ -265,7 +263,7 @@ the stock stays in range.</div>
 <div class="tw"><table>
 <tr><th>STOCK</th><th>WHAT WE DID</th><th class="n">SIZE</th>
 <th class="n">MONEY IN</th><th class="n">MAX LOSS</th><th class="n">P&amp;L NOW</th></tr>
-<tr><td class="cy"><b>IWM</b><div class="sub">18 Sep · 📈 bullish</div></td><td>sold the $288 put<div class="sub">bought the $283 put as protection</div></td><td class="num">10<div class="sub">contracts</div></td><td class="num">$960<div class="sub">collected up front</div></td><td class="num">$4,040<div class="sub">most it can lose</div></td><td class="num rd">-80<div class="sub">wins if stays above $288</div></td></tr><tr><td class="cy"><b>QQQ</b><div class="sub">08 Sep · 📈 bullish</div></td><td>sold the $700 put<div class="sub">bought the $680 put as protection</div></td><td class="num">1<div class="sub">contracts</div></td><td class="num">$215<div class="sub">collected up front</div></td><td class="num">$1,785<div class="sub">most it can lose</div></td><td class="num gd">+41<div class="sub">wins if stays above $700</div></td></tr><tr><td class="cy"><b>SPY</b><div class="sub">08 Sep · 📈 bullish</div></td><td>sold the $760 put<div class="sub">bought the $740 put as protection</div></td><td class="num">1<div class="sub">contracts</div></td><td class="num">$174<div class="sub">collected up front</div></td><td class="num">$1,826<div class="sub">most it can lose</div></td><td class="num gd">+21<div class="sub">wins if stays above $760</div></td></tr></table></div>
+<tr><td class="cy"><b>IWM</b><div class="sub">18 Sep · 📈 bullish</div></td><td>sold the $288 put<div class="sub">bought the $283 put as protection</div></td><td class="num">10<div class="sub">contracts</div></td><td class="num">$960<div class="sub">collected up front</div></td><td class="num">$4,040<div class="sub">most it can lose</div></td><td class="num rd">-110<div class="sub">wins if stays above $288</div></td></tr><tr><td class="cy"><b>QQQ</b><div class="sub">08 Sep · 📈 bullish</div></td><td>sold the $700 put<div class="sub">bought the $680 put as protection</div></td><td class="num">1<div class="sub">contracts</div></td><td class="num">$215<div class="sub">collected up front</div></td><td class="num">$1,785<div class="sub">most it can lose</div></td><td class="num gd">+30<div class="sub">wins if stays above $700</div></td></tr><tr><td class="cy"><b>SPY</b><div class="sub">08 Sep · 📈 bullish</div></td><td>sold the $760 put<div class="sub">bought the $740 put as protection</div></td><td class="num">1<div class="sub">contracts</div></td><td class="num">$174<div class="sub">collected up front</div></td><td class="num">$1,826<div class="sub">most it can lose</div></td><td class="num gd">+13<div class="sub">wins if stays above $760</div></td></tr></table></div>
 
 <div class="two">
 <div>
@@ -349,7 +347,7 @@ Retrieved 1&ndash;2 Sep 2026 unless noted.</div>
 <div class="lead">Probed live at every page generation. Per the corpus, news can
 veto a trade, never originate one — a stale feed is disarmed, not trusted.</div>
 <table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
-<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 1.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 1.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 1.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">50</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13987.3h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
+<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 1.0h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 1.6h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 1.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.4h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">50</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13987.4h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
 
 <h2>1 SEP — WHAT THE AGENT REFUSED, AND WHY</h2><div class="rule"></div>
 <div class="lead" style="margin-bottom:12px">The tape sold off through the
@@ -480,7 +478,7 @@ Nothing summarised, nothing hidden. Refreshes with the page.</div>
 </div>
 
 <div class="foot">
-GENERATED 2026-09-02 14:45 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
+GENERATED 2026-09-02 14:48 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
 &nbsp;·&nbsp; PAPER TRADING ONLY — NO REAL CAPITAL &nbsp;·&nbsp; ACCOUNT PA397N6FXXIE
 </div>
 </div>
