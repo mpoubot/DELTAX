@@ -234,17 +234,40 @@ DEMO_NEVER_OVERRIDE  = ("HALT", "NO_NEW_POSITIONS")   # ...but never through
 # This is deliberately NOT TRADING_SUSPENDED. That flag is checked in
 # execute.submit() before anything else and would block CLOSING orders too,
 # which would trap the book. A freeze must never be able to prevent an exit.
-NEW_ENTRIES_FROZEN = True
+# E97: the live value now lives in state/freeze.json, not here, so the
+# scheduled signal check can lift or reapply it without editing and
+# redeploying source. This constant remains ONLY as the override tests use and
+# as the fallback when the state file cannot be read - in both cases frozen.
+# False = no MANUAL override; state/freeze.json governs. Set to True to force a
+# freeze that no scheduled job can lift - the override is one-directional and
+# only ever toward more caution.
+NEW_ENTRIES_FROZEN = False
 FREEZE_REASON = ("E96: new entries frozen on operator instruction - 4.7:1 "
                  "risk/reward needs 82.4% win rate vs ~68% implied. Exits, the "
                  "50% targets and the Friday 10:00 flatten all remain active.")
 
 
 def gate_new_entries() -> GateResult:
-    """May the agent OPEN a position? Exits are never gated by this."""
+    """May the agent OPEN a position? Exits are never gated by this.
+
+    Reads the state file first. A hard-coded True here still wins, so a manual
+    freeze cannot be undone by a scheduled job - the override is one-directional
+    and only ever toward MORE caution.
+    """
     if NEW_ENTRIES_FROZEN:
         return GateResult("new_entries", False, FREEZE_REASON)
-    return GateResult("new_entries", True, "new entries permitted")
+    try:
+        from deltax.freeze import read_state
+        st = read_state()
+    except Exception as e:                      # import or IO trouble: freeze
+        return GateResult("new_entries", False,
+                          f"freeze state unreadable ({type(e).__name__}) - "
+                          f"failing closed")
+    if st.get("frozen", True):
+        return GateResult("new_entries", False,
+                          str(st.get("source") or st.get("reason") or "frozen"))
+    return GateResult("new_entries", True,
+                      f"unfrozen by signal check {st.get('age_min', '?')} min ago")
 
 
 TRADING_SUSPENDED = False
