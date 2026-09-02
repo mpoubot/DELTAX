@@ -1532,3 +1532,41 @@ just fallen and might keep falling.
 **Rule.** A filter is only worth what it costs you on the day you least want to
 obey it. One that is overridden whenever it binds has no value, and its
 backtested contribution was never real.
+
+## E54 — The regime filter is broad-market; the opportunity was sector-divergent
+
+S&P's own factsheet for the Energy Select Sector index (21 constituents, as of
+31 Aug 2026) shows **29.0% in the largest constituent and 80.4% in the top ten**.
+XLE is not diversified energy — it is a levered position in two or three
+mega-caps inside a wrapper. That explains E52's finding directly: the option
+volume lives in the constituents, not the ETF.
+
+Tested against the top ten by weight, exactly one name cleared every gate:
+
+| | IV/RV | OI | spread | credit | |
+|---|---|---|---|---|---|
+| **XOM** +2.18% | 1.47 | 619 | 15% | $0.76 | **passes** |
+| CVX +2.32% | 1.61 | 13 | 27% | $0.63 | OI, spread, credit |
+| PSX +2.09% | 1.75 | 0 | 154% | −$0.05 | negative credit |
+| KMI −0.43% | 1.83 | 248 | 143% | $0.14 | spread, credit |
+
+XOM is the 29% weight, so it *is* the energy expression — and it passed on a
+knife edge: spread exactly at the 15% cap, credit one cent over the floor.
+
+**The design question this exposes.** `DEFENSIVE` is set from
+`assess_regime(BENCHMARKS)` — SPY, QQQ, IWM — and it blocks the put side
+**globally**. On 1 Sep the broad tape was 3/3 weak while energy was strongly
+bid: XOM +2.18%, CVX +2.32%, USO +4.28%. A broad-market state therefore vetoed a
+trade in a sector moving the other way.
+
+That may well be correct — correlations converge in a selloff, and energy
+strength during an equity decline often signals an oil shock that reverses
+violently. But it is currently an **accident of implementation**, not a decision:
+nothing in the code considered per-symbol regime, and no measurement supports
+global-versus-per-symbol either way.
+
+**Rule.** Record the limitation; do not fix it live. Changing how permission is
+derived, fifteen minutes before the last entry window of a contest, on a live
+account, with no backtest of the change, is the E50 mistake again — a mechanism
+argument implemented under time pressure. Per-symbol regime is a post-contest
+experiment with a pre-committed validation bar, or it is nothing.
