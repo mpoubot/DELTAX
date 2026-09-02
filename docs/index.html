@@ -1,35 +1,36 @@
-<title>DELTAX — Autonomous Options Agent</title>
+wrote docs/index.html (45,257 bytes)
+Agent</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-.mission{border:1px solid var(--line);background:linear-gradient(180deg,#03100F,#020808);
-padding:20px 22px;margin:0 0 18px}
-.m-top{display:flex;gap:26px;flex-wrap:wrap}
-.m-target{flex:2;min-width:300px}
-.m-conf{flex:1;min-width:230px;border-left:1px solid var(--line);padding-left:22px}
-.m-k{color:var(--dim2);font-size:10px;letter-spacing:.22em;margin-bottom:7px}
-.m-tick{color:var(--white);font-size:34px;font-weight:700;letter-spacing:.02em}
-.m-px{font-size:20px;font-weight:400;color:var(--bl)}
-.m-sub{color:var(--txt);font-size:13px;margin-top:5px}
-.m-struct{color:var(--txt);font-size:12.5px;margin-top:9px;line-height:1.6;
-border-top:1px solid var(--line);padding-top:9px}
-.m-struct b,.m-sub b{color:var(--white)}
-.m-pct{color:var(--bl);font-size:52px;font-weight:700;line-height:1;
-text-shadow:0 0 18px rgba(63,224,218,.35)}
-.m-why{color:var(--dim2);font-size:11.5px;line-height:1.55;margin-top:9px}
-.m-why b{color:var(--txt)}
-.m-proof{margin-top:16px}
-.m-tbl{width:100%;border-collapse:collapse;font-size:12px}
-.m-tbl th{color:var(--dim2);font-size:10px;letter-spacing:.14em;text-align:left;
-padding:4px 8px;border-bottom:1px solid var(--line)}
-.m-tbl td{padding:5px 8px;border-bottom:1px solid #0C1F1D;color:var(--txt);
-vertical-align:top}
-.ev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
-gap:8px;margin-top:14px}
-.ev-grid div{border:1px solid var(--line);background:#040D0C;padding:8px 10px}
-.ev-grid span{display:block;color:var(--dim2);font-size:9.5px;letter-spacing:.16em}
-.ev-grid b{font-size:13px}
-.ev-grid i{display:block;color:var(--dim2);font-size:10px;font-style:normal;margin-top:2px}
-.ev-grid .ok{color:#3FE0DA}.ev-grid .mixed{color:#E8B42B}.ev-grid .bad{color:#FF8A8A}
+.mission{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
+var(--panel);border:1px solid var(--line);padding:22px 24px;margin:0 0 20px;
+position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}
+.m-hero{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
+align-items:end;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.m-hero>div:first-child{grid-column:span 2}
+.m-k{color:var(--dim2);font-size:10px;letter-spacing:.22em;margin-bottom:8px}
+.m-big{color:var(--white);font-size:34px;font-weight:700;line-height:1;
+letter-spacing:.02em}
+.m-big .sm{font-size:15px;font-weight:400;color:var(--bl);letter-spacing:.02em}
+.m-conf .m-big{color:var(--bl);text-shadow:0 0 20px rgba(63,224,218,.4)}
+.m-line{color:var(--txt);font-size:12.5px;margin-top:9px;line-height:1.65}
+.m-line b{color:var(--white)}
+.ev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.ev-grid div{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:9px 11px}
+.ev-grid span{display:block;color:var(--dim2);font-size:10px;letter-spacing:.16em;
+margin-bottom:3px}
+.ev-grid b{font-size:12.5px}
+.ev-grid .ok{color:var(--bl)}.ev-grid .mixed{color:#E8B42B}.ev-grid .bad{color:#FF8A8A}
+details.m-proof{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+details.m-proof summary{color:var(--cy);font-size:10px;letter-spacing:.22em;
+cursor:pointer;list-style:none;text-shadow:0 0 12px rgba(10,186,181,.4)}
+details.m-proof summary::-webkit-details-marker{display:none}
+details.m-proof summary::before{content:"B8  ";display:inline-block;
+transition:transform .15s}
+details.m-proof[open] summary::before{content:"BE  "}
+details.m-proof table{margin-top:12px}
+@media(max-width:820px){.m-hero,.ev-grid{grid-template-columns:repeat(2,1fr)}
+.m-hero>div:first-child{grid-column:span 2}}
 .sd{border:1px solid #6B5A1E;background:linear-gradient(180deg,#161200,#0B0900);
 border-left:3px solid #E8B42B;padding:18px 20px;margin:0 0 18px}
 .sd-h{color:#F0C44C;font-weight:700;letter-spacing:.14em;font-size:12px;
@@ -184,60 +185,60 @@ td.bar span{display:block;height:6px;background:linear-gradient(90deg,var(--bl),
 
 
 <div class="mission">
-<div class="m-top">
-  <div class="m-target">
-    <div class="m-k">TARGET</div>
-    <div class="m-tick">USO <span class="m-px">$140.98 <span class="pos">+5.43%</span></span></div>
-    <div class="m-sub">United States Oil Fund &middot; <b class="gd">BULLISH</b> &middot;
-    window <b>2&ndash;4 Sep</b> &middot; flat by Thu (never holds NFP Friday)</div>
-    <div class="m-struct">140/145 call debit vertical &middot; ~50x @ &le;$2.50 ceiling &middot;
-    breakeven <b>141.98 (+0.7%)</b> &middot; risk &le;$9,900 &middot; exit rests 2&times; GTC
-    &middot; escalation ladder to $20k on physical confirmation only</div>
+<div class="m-hero">
+  <div>
+    <div class="m-k">TARGET &middot; 2&ndash;4 SEP</div>
+    <div class="m-big">USO <span class="sm">$140.98 <span class="pos">+5.43%</span></span></div>
+    <div class="m-line">United States Oil Fund &middot; <b>BULLISH</b> &middot;
+    140/145 call debit vertical &middot; breakeven <b>141.98</b> (+0.7%) &middot;
+    risk <b>&le;$9,900</b> &middot; exit rests 2&times; GTC &middot; flat by Thursday</div>
   </div>
   <div class="m-conf">
     <div class="m-k">EVIDENCE CONFIDENCE</div>
-    <div class="m-pct">62%</div>
-    <div class="m-why">Catalyst, technicals, liquidity and the lifecycle backtest agree;
-    held down by tiny samples (n&le;5), a 50/50 historical catalyst regime, and paying
-    IV at 1.5&times; realised vol. This scores evidence support &mdash; <b>not</b>
-    P(profit).</div>
+    <div class="m-big">62%</div>
+  </div>
+  <div>
+    <div class="m-k">P(TARGET TOUCHED)</div>
+    <div class="m-big">68<span class="sm">%</span></div>
   </div>
 </div>
-<div class="m-proof">
-  <div class="m-k">WHAT WAS ACTUALLY TESTED &mdash; REAL OPTION PRICES (OPRA via Massive)</div>
-  <table class="m-tbl">
-  <tr><th>test</th><th>result</th><th>reading</th></tr>
-  <tr><td>Hold-to-expiry, 3%-OTM verticals, 8 Friday expiries</td>
-      <td class="rd">0/3 profitable &middot; 5 never traded</td>
-      <td>lost <i>even when USO rose +3.8%</i> &mdash; forced the re-strike to 140/145</td></tr>
-  <tr><td>Full lifecycle with resting 2&times; exit, 4 structures</td>
-      <td class="gd">9/14 hit the exit intraday</td>
-      <td>the edge is the resting exit harvesting movement, not direction</td></tr>
-  <tr><td>Our exact rule (ATM 5-wide, 2 sessions out)</td>
-      <td class="gd">3/3 wins via 2&times; exit</td>
-      <td class="rd">n=3 &mdash; LOW SAMPLE, treated as tendency only</td></tr>
-  <tr><td>Catalyst-regime split (prior day &ge;+2%)</td>
-      <td>1 continuation / 1 fakeout</td>
-      <td>catalyst predicts <b>movement</b>, not direction (Jul 10 &minus;100%, Jul 24 +100%)</td></tr>
-  <tr><td>P(exit level ~144 touched before Thu)</td>
-      <td class="gd">68% IV-implied &middot; 75% posterior</td>
-      <td>historical analogue 64% (9/14); updated live each cycle</td></tr>
-  <tr><td>Structures rejected on the live book</td>
-      <td>4</td>
-      <td>145/150 (debit ate a +3.8% move) &middot; 141/146 (OI caps at 11) &middot;
-      145/155 (155c bid $0.00, dominated) &middot; condor (pays zero above 160)</td></tr>
-  </table>
-</div>
+<div class="m-line" style="margin-top:14px">Catalyst, technicals, liquidity and the
+lifecycle backtest agree; held down by small samples (n&le;5), a 50/50 historical
+catalyst regime, and paying implied vol at 1.5&times; realised. This scores
+<b>evidence support &mdash; not probability of profit</b>.</div>
 <div class="ev-grid">
-  <div><span>BACKTEST</span><b class="mixed">MIXED</b><i>lifecycle +, expiry-hold &minus;, n small</i></div>
-  <div><span>CATALYST</span><b class="ok">CONFIRMED</b><i>US&ndash;Iran strikes &middot; 33 headlines &middot; crude &gt;$90</i></div>
-  <div><span>TECHNICALS</span><b class="ok">CONFIRMED</b><i>above VWAP &amp; prior close at last read</i></div>
-  <div><span>VOLATILITY</span><b class="bad">UNFAVORABLE</b><i>buying IV at 1.5&times; realised</i></div>
-  <div><span>LIQUIDITY</span><b class="ok">PASS</b><i>OI 2,421 / 7,745 &middot; legs 5% / 4% wide</i></div>
-  <div><span>RISK GATES</span><b class="ok">ARMED</b><i>16 income gates &middot; 7 catalyst checks &middot; fail closed</i></div>
-  <div><span>DATA QUALITY</span><b class="mixed">MEDIUM</b><i>free-tier delays &middot; repriced at 09:30</i></div>
-  <div><span>ACCOUNT</span><b class="ok">PA397N6FXXIE</b><i>Alpaca paper &middot; equity $100,000</i></div>
+  <div><span>BACKTEST</span><b class="mixed">MIXED</b></div>
+  <div><span>CATALYST</span><b class="ok">CONFIRMED</b></div>
+  <div><span>TECHNICALS</span><b class="ok">CONFIRMED</b></div>
+  <div><span>VOLATILITY</span><b class="bad">UNFAVORABLE</b></div>
+  <div><span>LIQUIDITY</span><b class="ok">PASS</b></div>
+  <div><span>RISK GATES</span><b class="ok">ARMED</b></div>
+  <div><span>DATA QUALITY</span><b class="mixed">MEDIUM</b></div>
+  <div><span>ACCOUNT</span><b class="ok">PA397N6FXXIE</b></div>
 </div>
+<details class="m-proof">
+<summary>WHAT WAS ACTUALLY TESTED &mdash; REAL OPTION PRICES (OPRA VIA MASSIVE)</summary>
+<table>
+<tr><th>TEST</th><th>RESULT</th><th>READING</th></tr>
+<tr><td>Hold-to-expiry, 3%-OTM verticals, 8 Friday expiries</td>
+    <td class="rd">0 of 3 profitable</td>
+    <td>lost even when USO rose +3.8% &mdash; forced the re-strike to 140/145</td></tr>
+<tr><td>Full lifecycle with resting 2&times; exit, 4 structures</td>
+    <td class="gd">9 of 14 hit the exit</td>
+    <td>the edge is the resting exit harvesting movement, not direction</td></tr>
+<tr><td>Our exact rule (ATM 5-wide, entered 2 sessions out)</td>
+    <td class="gd">3 of 3 wins</td>
+    <td class="rd">n=3 &mdash; low sample, treated as tendency only</td></tr>
+<tr><td>Catalyst-regime split (prior day &ge;+2%)</td>
+    <td>1 continuation / 1 fakeout</td>
+    <td>catalyst predicts movement, not direction</td></tr>
+<tr><td>P(exit level ~144 touched before Thursday)</td>
+    <td class="gd">68% implied</td>
+    <td>75% posterior &middot; 64% historical analogue &middot; updated each cycle</td></tr>
+<tr><td>Structures rejected on the live book</td><td>4</td>
+    <td>145/150, 141/146, 145/155, condor &mdash; each failed on price or liquidity</td></tr>
+</table>
+</details>
 </div>
 
 <div class="stats"><div class="stat big"><div class="k">EQUITY</div><div class="v">$100,000</div><div class="n">PA397N6FXXIE · Alpaca paper</div></div><div class="stat big pos"><div class="k">P&amp;L</div><div class="v">+0.00</div><div class="n">+0.00% of $100,000 start</div></div><div class="stat "><div class="k">CASH</div><div class="v">$100,000</div><div class="n">uncommitted</div></div><div class="stat "><div class="k">OPEN POSITIONS</div><div class="v">0</div><div class="n">flat</div></div><div class="stat "><div class="k">DECISIONS LOGGED</div><div class="v">298</div><div class="n">every evaluation</div></div><div class="stat "><div class="k">REFUSED</div><div class="v">298</div><div class="n">100% of candidates screened</div></div></div>
@@ -340,7 +341,7 @@ Retrieved 1&ndash;2 Sep 2026 unless noted.</div>
 <div class="lead">Probed live at every page generation. Per the corpus, news can
 veto a trade, never originate one — a stale feed is disarmed, not trusted.</div>
 <table><tr><th>FEED</th><th>BUCKET</th><th style="text-align:right">ITEMS</th>
-<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 6.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 20.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.7h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 1.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">49</td><td>newest 15.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13979.6h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
+<th>FRESHNESS</th><th>STATUS</th></tr><tr><td class="cy">cnbc_finance</td><td>equities</td><td class="num">30</td><td>newest 6.9h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">cnbc_markets</td><td>equities</td><td class="num">30</td><td>newest 20.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">coindesk</td><td>crypto</td><td class="num">25</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">ft_markets</td><td>macro</td><td class="num">25</td><td>newest 0.3h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">investing_news</td><td>equities</td><td class="num">10</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">marketwatch_top</td><td>equities</td><td class="num">10</td><td>newest 0.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">nasdaq_markets</td><td>equities</td><td class="num">15</td><td>newest 0.7h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">oilprice</td><td>macro</td><td class="num">15</td><td>newest 1.1h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">seeking_alpha</td><td>equities</td><td class="num">7</td><td>newest 0.2h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">yahoo_finance</td><td>equities</td><td class="num">49</td><td>newest 15.5h ago</td><td><span class="pill gd">● LIVE</span></td></tr><tr><td class="cy">wsj_markets</td><td>equities</td><td class="num">20</td><td>newest 13979.6h ago</td><td><span class="pill" style="color:#F0C674">● STALE</span></td></tr><tr><td class="cy">sec_8k</td><td>equities</td><td class="num">—</td><td>per-symbol (earnings gate)</td><td><span class="pill" style="color:#5B807D">SEC 8-K</span></td></tr></table>
 
 <h2>1 SEP — WHAT THE AGENT REFUSED, AND WHY</h2><div class="rule"></div>
 <div class="lead" style="margin-bottom:12px">The tape sold off through the
@@ -471,7 +472,7 @@ Nothing summarised, nothing hidden. Refreshes with the page.</div>
 </div>
 
 <div class="foot">
-GENERATED 2026-09-02 07:03 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
+GENERATED 2026-09-02 07:04 UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCHEDULED JOB
 &nbsp;·&nbsp; PAPER TRADING ONLY — NO REAL CAPITAL &nbsp;·&nbsp; ACCOUNT PA397N6FXXIE
 </div>
 </div>
