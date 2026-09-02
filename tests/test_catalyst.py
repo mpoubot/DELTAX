@@ -78,14 +78,14 @@ check("exit never exceeds 90% of width",
       str(deep.exit_limit))
 
 print("\n── sizing derives from the ACTUAL debit, never a fixed count ──")
-check("$1.98 -> 50 contracts", v.contracts == 50, str(v.contracts))
-check("risk is the debit paid", v.max_loss == 9900.0, str(v.max_loss))
+check("$1.98 -> 37 contracts at the $7,500 budget", v.contracts == 37, str(v.contracts))
+check("risk is the debit paid", v.max_loss == 7326.0, str(v.max_loss))
 check("max profit uses width minus debit",
-      v.max_profit == round((5.0 - 1.98) * 100 * 50, 2), str(v.max_profit))
+      v.max_profit == round((5.0 - 1.98) * 100 * 37, 2), str(v.max_profit))
 v220 = price_vertical(FakeFeed(long_ask=3.27))         # debit 2.20
-check("$2.20 -> 45 contracts", v220.contracts == 45, str(v220.contracts))
+check("$2.20 -> 34 contracts", v220.contracts == 34, str(v220.contracts))
 v250 = price_vertical(FakeFeed(long_ask=3.57))         # debit 2.50 = ceiling
-check("$2.50 (the ceiling) -> 40 contracts", v250.contracts == 40, str(v250.contracts))
+check("$2.50 (the ceiling) -> 30 contracts", v250.contracts == 30, str(v250.contracts))
 check("risk never exceeds the budget",
       all(x.max_loss <= RISK_BUDGET for x in (v, v220, v250)),
       f"{v.max_loss}, {v220.max_loss}, {v250.max_loss}")

@@ -1767,3 +1767,38 @@ they said something the model could not: this structure's failure mode is not
 
 **Rule.** When new data arrives hours before a live trade, its job is to inform
 the operator's decision, not to silently re-arm or disarm the system.
+
+## E60 — Independent supervisor review: the exit rule, not the strikes, is the edge
+
+A full 12-phase research pass (data integrity → candidates → real-price
+lifecycle backtest → regime split → bootstrap → falsification) re-derived the
+trade from scratch instead of validating the armed one.
+
+**The finding that reframes E59.** E59 held to expiry and concluded the
+structure loses even when right. Modelling the actual lifecycle — resting 2×
+exit, filled when the spread's high touches it — the SAME 24 Jul week flips
+from −38% to **+100%**. Across every measurable trade, 9 of 14 hit the 2× exit
+within two sessions at RV 40–67%. **The profitable mechanism is not predicting
+direction; it is the resting exit harvesting volatility.** The trade wins if
+USO merely *touches* ~144 at any point in two days.
+
+**Rule performance (all LOW_SAMPLE_CONFIDENCE, n ≤ 5):** ATM 5-wide 3/3 wins
+(all via 2× exit) · 3%-OTM 5-wide 60%, +20% mean · naked ATM call 50%, 0% —
+dominated. The armed 140/145 IS the ATM_w5 rule. Bootstrap on the OTM rule:
+P(mean<0) = 11%.
+
+**Regime honesty.** CATALYST weeks (prior day ≥ +2%) split exactly 50/50:
+10 Jul faked out (+3.0% then −3.1%), 24 Jul continued (+2.2% then +3.8%).
+The catalyst does not predict continuation; it predicts *movement*.
+
+**Phase-10 sizing.** Evidence MEDIUM at best → budget cut $10,000 → **$7,500**
+(37 spreads at $1.98). The ceiling is a ceiling, not a target.
+
+**Data defect caught mid-analysis.** The spot series silently truncated at the
+API's 60-bar limit, which fed two expiries wrong entry dates and phantom
+settles; first pass reported them as real losses. Filtered to the five clean
+expiries. A `limit` parameter is a correctness boundary, not a performance knob.
+
+**Special rule for this position.** Sep 4 is NFP Friday. The 1-DTE time stop
+closes the book Thursday, so the position cannot hold through the print; the
+resting 2× exit may end it sooner. Friday-morning risk is structurally excluded.

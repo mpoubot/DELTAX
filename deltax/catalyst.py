@@ -36,7 +36,11 @@ EXPIRY         = date(2026, 9, 4)
 LONG_STRIKE    = 140.0
 SHORT_STRIKE   = 145.0
 
-RISK_BUDGET    = 10_000.0   # total dollars at risk; the debit IS the max loss
+# Phase-10 sizing: the ceiling is $10k but evidence strength sets the spend.
+# The supporting backtests are ALL LOW_SAMPLE_CONFIDENCE (n<=5), the catalyst
+# regime itself split 50/50 continuation/reversal historically (Jul 10 fakeout
+# vs Jul 24 continuation), and IV is elevated. MEDIUM confidence -> 75% of max.
+RISK_BUDGET    = 7_500.0    # total dollars at risk; the debit IS the max loss
 # Ceiling keeps the payoff at worst 1:1 (width 5 - 2.50 = 2.50 max profit) and
 # the breakeven at worst 142.50. A debit above this means USO already gapped
 # and the entry edge is gone - NO TRADE rather than chase.
