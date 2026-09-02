@@ -168,6 +168,55 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 catalyst_result = {"skipped": f"catalyst inactive - {_why}"}
             else:
                 _v = _cat.price_vertical(feed)
+                # E61: P(exit level touched before the Thursday time stop),
+                # market-implied base moved by live evidence. Sizing follows
+                # the posterior; the $10k ceiling stays a ceiling.
+                try:
+                    from deltax import probability as _prob
+                    from deltax.feeds import intraday_vwap as _vw
+                    _iv = None
+                    try:
+                        _chn = feed.option_chain(_u, option_type="call",
+                                                 expiry_gte=str(_cat.EXPIRY),
+                                                 expiry_lte=str(_cat.EXPIRY),
+                                                 strike_gte=round((_lp(_sn) or 0)-1,2),
+                                                 strike_lte=round((_lp(_sn) or 0)+1,2))
+                        for _n in _chn.values():
+                            if _n.get("impliedVolatility"):
+                                _iv = _n["impliedVolatility"]; break
+                    except Exception:
+                        pass
+                    _spotpx = _lp(_sn); _vwap = _vw(_sn); _prev = _pc(_sn)
+                    _lvl = (_v.long_strike if hasattr(_v, "long_strike") else
+                            _cat.LONG_STRIKE) + (_v.exit_limit or 0)
+                    _base = _prob.p_touch_base(_spotpx, _lvl, _iv, 1.9)
+                    _ev = {
+                        "uso_confirms": bool(_spotpx and _vwap and _prev
+                                             and _spotpx > _vwap and _spotpx > _prev),
+                        "momentum_lost": bool(_spotpx and _vwap and _spotpx < _vwap),
+                        "options_reasonably_priced": bool(_v.ok),
+                    }
+                    _post = _prob.update(_base, _ev)
+                    _band, _lab = _prob.size_band(_post.p)
+                    ledger.record_raw({"action": "catalyst_probability",
+                                       "exit_level": round(_lvl, 2), "iv": _iv,
+                                       "base": _base, "posterior": _post.p,
+                                       "evidence": _post.applied,
+                                       "status": _prob.catalyst_status(_ev),
+                                       "size_band": _band, "band_label": _lab})
+                    # The posterior can only SHRINK the spend, never grow it.
+                    if _v.ok and _band < _v.max_loss:
+                        _scale = _band / (_v.debit * 100)
+                        _v.contracts = max(int(_scale), 0)
+                        _v.max_loss = round(_v.debit * 100 * _v.contracts, 2)
+                        _v.max_profit = round(((_cat.SHORT_STRIKE - _cat.LONG_STRIKE)
+                                               - _v.debit) * 100 * _v.contracts, 2)
+                        if _v.contracts < 1:
+                            _v.ok = False
+                            _v.reason = f"posterior {_post.p:.0%} sizes to zero - NO TRADE"
+                except Exception as _pe:
+                    ledger.record_raw({"action": "catalyst_probability_failed",
+                                       "error": f"{type(_pe).__name__}: {str(_pe)[:120]}"})
                 ledger.record_raw({"action": "catalyst_price", "ok": _v.ok,
                                    "reason": _v.reason, "debit": _v.debit,
                                    "contracts": _v.contracts,
