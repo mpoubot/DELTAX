@@ -323,5 +323,15 @@ check("E104 and sell_to_close on the long leg",
 check("E104 and it is a single multi-leg order, not four singles",
       "mleg" in _args and _args[_args.index("--qty") + 1] == "5")
 
+print("\n── E106: the entry check keys on the structure ──")
+check("E106 run.py tests (symbol, side, expiry) against held_exp",
+      '(symbol, side, _exp6) in book.get("held_exp"' in _run_src)
+check("E106 it normalises YYYY-MM-DD to the OCC YYMMDD before comparing",
+      '_exp6 = expiry_str.replace("-", "")[2:]' in _run_src)
+check("E106 the old (symbol, side) in held check is GONE",
+      "if (symbol, side) in held" not in _run_src)
+check("E106 and it runs AFTER choose_expiry so the expiry is known",
+      _run_src.index("picked = choose_expiry(") < _run_src.index("(symbol, side, _exp6) in book.get"))
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

@@ -712,9 +712,18 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             continue
 
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
-            if (symbol, side) in held:
-                refused.append((symbol, side, "already_held"))
-                continue
+            # E106: `already_held` used to fire on (underlying, side) - one
+            # spread per side per underlying, ever. On the last session it
+            # blocked SPY, DIA, QQQ and IWM (the four most tradeable names, all
+            # holding a 09-08 structure) from any 09-11 or 09-18 spread, and
+            # left the book at 28% of the cap. A second spread at a DIFFERENT
+            # expiry is a different structure; the $30k hard cap and the joint
+            # CVaR signal already bound the concentration. The check now keys
+            # on the structure and runs AFTER the expiry is chosen, below.
+            # Same-expiry duplicates are still refused - see the held_exp check
+            # after choose_expiry() below. The old (underlying, side) test is
+            # gone, not conditioned: a check that fires "only when frozen"
+            # would be a trap for the next reader.
             allowed, why = gate_permission(perm, side)
             # E57: DEMONSTRATION_MODE may proceed through DEFENSIVE - a
             # directional caution - because size is capped at one contract.
@@ -730,7 +739,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 refused.append((symbol, side, f"permission:{perm.state}"))
                 continue
             klo, khi = round(px*lo, 2), round(px*hi, 2)
-            picked = choose_expiry(feed, symbol, side, gte, lte, klo, khi)
+            # E106: hand the picker the expiries this (symbol, side) already
+            # holds - OCC YYMMDD -> YYYY-MM-DD - so it moves to the next date.
+            _skip = {f"20{e[:2]}-{e[2:4]}-{e[4:6]}"
+                     for (u, r, e) in book.get("held_exp", set())
+                     if u == symbol and r == side}
+            picked = choose_expiry(feed, symbol, side, gte, lte, klo, khi,
+                                   skip_expiries=_skip)
             if not picked:
                 # E88: a bare `continue` here could not distinguish "no expiry
                 # is liquid enough" - a real, expected outcome - from "the
@@ -753,6 +768,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                     refused.append((symbol, side, "no_liquid_expiry"))
                 continue
             expiry_str, oi = picked
+            # E106: refuse a duplicate of a structure already in the book or
+            # working at the broker. Expiry is YYYY-MM-DD here and YYMMDD in
+            # the OCC symbol; normalise before comparing.
+            _exp6 = expiry_str.replace("-", "")[2:]
+            if (symbol, side, _exp6) in book.get("held_exp", set()):
+                refused.append((symbol, side, "already_held"))
+                continue
             # One expiry per query - the endpoint pages by expiry then strike.
             chain = feed.option_chain(symbol, option_type=side,
                                       expiry_gte=expiry_str, expiry_lte=expiry_str,

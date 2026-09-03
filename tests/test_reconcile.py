@@ -302,5 +302,34 @@ _good = reconcile([{"symbol": "SPY", "asset_class": "us_equity",
 check("E85 a readable equity still counts its basis",
       _good["committed"] == 76000.0 and not _good["unparsed"], str(_good))
 
+print("\n-- E106: held is per STRUCTURE, not per underlying/side --")
+# already_held used to key on (underlying, right): one spread per side per
+# underlying, ever. On the last session it blocked SPY, DIA, QQQ and IWM - the
+# four most tradeable names, all holding a 09-08 structure - from any 09-11 or
+# 09-18 spread, and left the book at 28% of the cap. A second spread at a
+# different expiry is a different structure; the $30k cap and the joint CVaR
+# signal bound the concentration.
+_r = reconcile([{"symbol": "SPY260908P00760000", "qty": "-1", "avg_entry_price": "2.0"},
+                {"symbol": "SPY260908P00740000", "qty": "1",  "avg_entry_price": "0.3"}])
+check("E106 reconcile exposes held_exp", "held_exp" in _r)
+check("E106 held_exp keys on (underlying, right, expiry)",
+      ("SPY", "put", "260908") in _r["held_exp"], str(_r["held_exp"]))
+check("E106 a different expiry is NOT in held_exp",
+      ("SPY", "put", "260918") not in _r["held_exp"])
+check("E106 the 2-tuple held still exists for pending/order dedup",
+      ("SPY", "put") in _r["held"])
+# a working OPEN order counts against its expiry - two cycles cannot race the
+# same structure into the book
+_o = reconcile([], [{"legs": [
+        {"symbol": "QQQ260911C00715000", "position_intent": "sell_to_open"},
+        {"symbol": "QQQ260911C00725000", "position_intent": "buy_to_open"}]}])
+check("E106 a pending OPEN counts against its expiry",
+      ("QQQ", "call", "260911") in _o["held_exp"], str(_o["held_exp"]))
+_c = reconcile([], [{"legs": [
+        {"symbol": "QQQ260911C00715000", "position_intent": "buy_to_close"},
+        {"symbol": "QQQ260911C00725000", "position_intent": "sell_to_close"}]}])
+check("E106 a resting CLOSE does not count as a held structure",
+      ("QQQ", "call", "260911") not in _c["held_exp"], str(_c["held_exp"]))
+
 print(f"\n{chr(61)*52}\n  {passed} passed, {failed} failed\n{chr(61)*52}")
 sys.exit(1 if failed else 0)

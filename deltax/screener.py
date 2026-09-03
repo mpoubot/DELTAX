@@ -485,7 +485,8 @@ def directional_bias(side: str, structure: str = "credit") -> tuple:
 
 
 def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
-                  strike_lo: float, strike_hi: float) -> Optional[tuple]:
+                  strike_lo: float, strike_hi: float,
+                  skip_expiries=None) -> Optional[tuple]:
     """Pick the NEAREST expiry in the band that is liquid enough to trade.
 
     The chain endpoint pages by expiry-then-strike, so a multi-expiry request
@@ -513,7 +514,14 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
     for c in contracts:
         by_exp.setdefault(c["expiration_date"], {})[c["symbol"]] = _as_int(
             c.get("open_interest"), LAST_UNREADABLE_OI)
+    skip = set(skip_expiries or ())
     for exp in sorted(by_exp):                      # ascending date = nearest first
+        # E106: a structure already held or working on this expiry is refused
+        # downstream anyway, so do not stop here - try the NEXT expiry. Without
+        # this the nearest date always won, was always the held one, and the
+        # four most tradeable names were locked at one spread per side.
+        if exp in skip:
+            continue
         oi = by_exp[exp]
         liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
         if liquid < MIN_LIQUID_STRIKES:
