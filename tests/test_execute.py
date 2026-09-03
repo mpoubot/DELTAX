@@ -17,8 +17,22 @@ _g.TRADING_SUSPENDED = False
 # passes or fails depending on today's risk stance tells you nothing about the
 # code. The freeze is asserted explicitly, and restored, in the E96 block below.
 import deltax.gates as _gates_mod
-_LIVE_FREEZE = _gates_mod.NEW_ENTRIES_FROZEN   # restored at the end of this file
+import deltax.freeze as _freeze_mod
+import tempfile as _tmp, os as _osx, json as _jsonx
+from datetime import datetime as _dtx
+# The freeze has TWO inputs: the manual override constant and state/freeze.json.
+# Neutralising only the constant left these mechanics tests reading the LIVE
+# state file - which goes stale by design outside market hours, so the whole
+# file crashed at 479 minutes old. A test of order mechanics must not depend on
+# today's operational posture. Both inputs are redirected here and restored at
+# the end; the E96 block asserts the real behaviour explicitly.
+_LIVE_FREEZE = _gates_mod.NEW_ENTRIES_FROZEN
+_LIVE_STATE = _freeze_mod.STATE_PATH
 _gates_mod.NEW_ENTRIES_FROZEN = False
+_tf = _osx.path.join(_tmp.mkdtemp(), "freeze.json")
+_jsonx.dump({"frozen": False, "reason": "test fixture",
+             "evaluated_at": _dtx.now(_freeze_mod.ET).isoformat()}, open(_tf, "w"))
+_freeze_mod.STATE_PATH = _tf
 
 passed = failed = 0
 def check(n, c, d=""):
@@ -195,8 +209,11 @@ check("E96 rule-3 still applies to a close (E82 chokepoint)",
 # (alphabetically: gates, ledger, manage...) and made test_gates.py report the
 # freeze as off. A test file that mutates global state must hand it back.
 _gates_mod.NEW_ENTRIES_FROZEN = _LIVE_FREEZE
+_freeze_mod.STATE_PATH = _LIVE_STATE
 check("E96 the live freeze policy is handed back intact",
       _gates_mod.NEW_ENTRIES_FROZEN is _LIVE_FREEZE)
+check("E96 the live freeze STATE PATH is handed back too",
+      _freeze_mod.STATE_PATH == _LIVE_STATE)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
