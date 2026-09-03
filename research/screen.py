@@ -68,18 +68,29 @@ def score(sym: str) -> dict:
     out["criteria"].append(("option liquidity", min(liq / 20.0, 1.0),
                             f"{liq} strikes over the {G.MIN_OPEN_INTEREST} floor"))
 
-    # 2 spread quality
+    # 2 spread quality - measured on the LEGS THE GATES PRICE, not the chain.
+    # E115: this was a chain-wide median, which read 9-10% on XLI and RSP and
+    # scored them "tradeable" - while the specific pairs in the delta band at
+    # this expiry quoted wider than the 15% cap and production refused every
+    # one. A screener that measures a different thing than the gate it is
+    # predicting is not a screener. It now asks the same function production
+    # asks, with the same floors, and reports what THAT candidate quotes.
     chain = f.option_chain(sym, option_type="put", expiry_gte=exp, expiry_lte=exp)
-    sps = []
-    for k, c in (chain or {}).items():
-        b, a = fquote(c)
-        if b and a and a > 0 and b > 0:
-            sps.append((a - b) / ((a + b) / 2))
-    msp = median(sps) if sps else None
-    out["criteria"].append(("spread quality",
-                            0.0 if msp is None else max(0.0, min(1.0, (G.MAX_SPREAD_PCT * 2 - msp) / (G.MAX_SPREAD_PCT * 2))),
-                            "unreadable" if msp is None else
-                            f"{msp:.1%} median vs {G.MAX_SPREAD_PCT:.0%} cap"))
+    cand = S.search_vertical(chain or {}, side="put", target_delta=0.30,
+                             width=S.DEFAULT_WIDTH.get(sym, 5.0), oi_by_symbol=oi,
+                             max_spread_pct=G.MAX_SPREAD_PCT, min_credit=G.MIN_CREDIT)
+    if cand is None:
+        out["criteria"].append(("spread quality", 0.0,
+                                f"no (short,long) pair in the delta band clears the "
+                                f"{G.MAX_SPREAD_PCT:.0%} spread cap and ${G.MIN_CREDIT:.2f} "
+                                f"credit floor at {exp} - production refuses this"))
+    else:
+        msp = cand["worst_leg_spread_pct"]
+        out["criteria"].append(("spread quality",
+                                max(0.0, min(1.0, (G.MAX_SPREAD_PCT * 2 - msp) / (G.MAX_SPREAD_PCT * 2))),
+                                f"{msp:.1%} on the chosen legs "
+                                f"({cand['short']['strike']:g}/{cand['long']['strike']:g}, "
+                                f"credit {cand['credit']:.2f}) vs {G.MAX_SPREAD_PCT:.0%} cap"))
 
     # 3 variance premium - the thing that cost us money
     rv = S.realized_vol_20(f, sym, today)
