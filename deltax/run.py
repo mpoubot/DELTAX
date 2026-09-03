@@ -271,6 +271,38 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                            and _l.get("symbol") == short_sym for _l in _ls):
                         return _o
                 return None
+            # E118: a structure with NO resting exit is healed here, every
+            # cycle. The entry path places the 50% exit one second after the
+            # opening order (E5); when the open has not filled yet the broker
+            # infers buy_to_open on the close legs and refuses it - "position
+            # intent mismatch" - which is what happened to the QCOM 175/180
+            # call spread at 12:55 ET on 3 Sep: 12 contracts filled, exit
+            # recorded FAILED, and nothing ever tried again. Every entry runs
+            # that race; the 12:50 entries won it by 0.4 s. Whether the exit
+            # was refused, expired, or cancelled by hand, the invariant is
+            # the same: a live credit structure always has a *_to_close order
+            # working. Records what it placed, or that it could not.
+            for _m in live:
+                if _resting_exit(_m.symbol) is not None:
+                    continue
+                for (_u, _r, _e), _v in legs.items():
+                    if "short" not in _v or _v["short"][3] != _m.symbol:
+                        continue
+                    _lsym = _v.get("long", (0, 0, 0.0, None))[3]
+                    _rec = {"action": "exit_healed", "symbol": _m.symbol,
+                            "qty": _m.qty, "entry_credit": round(_m.entry_credit, 2),
+                            "reason": "E118: no resting *_to_close order found"}
+                    if not _lsym:
+                        _rec["result"] = "REFUSED — no long leg, will not rest a naked close"
+                    else:
+                        _ex = place_exit([execute.Leg(_m.symbol, "sell", 1),
+                                          execute.Leg(_lsym, "buy", 1)],
+                                         _m.qty, _m.entry_credit,
+                                         ledger=ledger, dry_run=dry_run)
+                        _rec["limit_price"] = _ex.get("limit_price")
+                        _rec["result"] = _ex.get("result")
+                    ledger.record_raw(_rec)
+                    break
             def _closer(sym, qty, _legs=legs):
                 for (u, r, e), v in _legs.items():
                     if "short" not in v or v["short"][3] != sym:

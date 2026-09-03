@@ -357,5 +357,25 @@ check("E116 the replace is recorded to the ledger with both limits",
 check("E116 submit remains the fallback when no exit is resting",
       "E78 exit sweep (no resting exit found)" in _run_src)
 
+print("\n── E118: a live structure with no resting exit is healed every cycle ──")
+# The entry path rests the 50% exit one second after the opening order. When
+# the open has not filled yet the broker infers buy_to_open on the close legs
+# and refuses it ("position intent mismatch"). QCOM 175/180 call, 12:55 ET on
+# 3 Sep: 12 contracts filled, exit FAILED, nothing retried. Every entry runs
+# that race. The sweep must place the missing exit, and only the missing one.
+_e118 = _run_src.split("# E118:")[1].split("def _closer")[0] if "# E118:" in _run_src else ""
+check("E118 the healer exists and runs before the closer is defined", bool(_e118))
+check("E118 it skips a structure that already has a resting exit",
+      "if _resting_exit(_m.symbol) is not None:" in _e118 and "continue" in _e118)
+check("E118 it places through place_exit with the ORIGINAL entry legs (sell short, buy long)",
+      'execute.Leg(_m.symbol, "sell", 1)' in _e118 and 'execute.Leg(_lsym, "buy", 1)' in _e118)
+check("E118 it refuses to rest a naked close when the long leg is missing",
+      "will not rest a naked close" in _e118)
+check("E118 it records what it did, including a refusal",
+      '"action": "exit_healed"' in _e118 and 'ledger.record_raw(_rec)' in _e118)
+check("E118 it honours dry_run", "dry_run=dry_run" in _e118)
+check("E118 it runs after the resting-exit lookup is defined",
+      _run_src.index("def _resting_exit") < _run_src.index("# E118:"))
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
