@@ -47,11 +47,15 @@ TAKE_PROFIT_FRACTION = 0.50    # E5 / E15
 #      which a stock position never does. Room is close to free here, so the
 #      trail is deliberately loose.
 #
-# ARM at 25%: below that the give-back is smaller than the cost of reacting.
-# GIVE BACK 15 points: comfortably outside the 9-15% friction band, so a
-# trigger means the position genuinely reversed rather than the quote wobbling.
-TRAIL_ARM_AT = 0.25            # start trailing once 25% of credit is captured
-TRAIL_GIVE_BACK = 0.15         # exit after surrendering 15 points from the peak
+# E109 (3 Sep 10:35, operator instruction: "aggressively low, quick in and
+# out"). ARM 0.25 -> 0.15, GIVE BACK 0.15 -> 0.10. This is the tightest setting
+# the measured friction permits: our round trip is 9-15% of credit (E74), so a
+# give-back of 10 points sits at the top of that band and still means a real
+# reversal. A give-back of 5 would sit INSIDE it - the trail would fire on the
+# bid/ask wobbling, pay the spread, and re-enter nothing, which is not "quick
+# profit", it is paying the market maker to churn. Held at 10 for that reason.
+TRAIL_ARM_AT = 0.15            # start trailing once 15% of credit is captured
+TRAIL_GIVE_BACK = 0.10         # exit after surrendering 10 points from the peak
 # E57: 2 -> 1 so MIN_DTE (2) stays STRICTLY above it, preserving the E45
 # invariant. A position opened 2 Sep now closes 3 Sep rather than being
 # time-stopped on arrival. This DOES hold one day deeper into the gamma zone,
