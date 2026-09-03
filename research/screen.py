@@ -105,8 +105,15 @@ def score(sym: str) -> dict:
                             f"IV/RV {ratio:.2f} (floor {G.MIN_VARIANCE_PREMIUM})"))
 
     # 4 event risk - a fresh gap means the excursion distribution, not the median
-    bars = (massive(f"/v2/aggs/ticker/{sym}/range/1/day/"
-                    f"{today - timedelta(days=400)}/{today}?limit=5000").get("results") or [])
+    # Alpaca, not Massive: Massive throttles after ~5 calls, so a 20-name scan
+    # scored every name past the fifth as "no history" - 0 on this criterion -
+    # and the ranking was wrong for reasons that had nothing to do with the
+    # names. Same lesson as the dashboard structure block.
+    try:
+        bars = f.daily_bars(sym, str(today - timedelta(days=60)), str(today), 60) or []
+        bars = [b for b in bars if b.get("c")]
+    except Exception:
+        bars = []
     gap = None
     if len(bars) >= 2:
         gap = (px / bars[-1]["c"] - 1) * 100
@@ -139,7 +146,9 @@ def render(r: dict) -> str:
     for name, v, why in r["criteria"]:
         bar = "#" * int(round(v * 10)) + "." * (10 - int(round(v * 10)))
         L.append(f"  {name:<18} {bar}  {v*100:>5.1f}%   {why}")
-    L += ["", f"  CONFIDENCE   {r['confidence']}%        VERDICT   {r['verdict']}"]
+    L += ["", f"  TRADEABILITY {r['confidence']}%        VERDICT   {r['verdict']}",
+          "  (confidence that a defined-risk spread can be entered cleanly -",
+          "   NOT a probability of profit; no signal here is validated as predictive)"]
     for n in r.get("notes", []):
         L.append(f"  note: {n}")
     return "\n".join(L)
