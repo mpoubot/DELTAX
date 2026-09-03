@@ -251,6 +251,26 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             # E78: give the sweep a real closer. Without one it reported closes
             # it never made. Marketable-limit at the current mark plus a small
             # allowance, so a triggered stop actually leaves the book.
+            # E116: a structure ALREADY has a resting 50% exit (E5), and that
+            # order holds the position's entire closing quantity. Submitting a
+            # second closing order was rejected by the broker every time -
+            # "insufficient qty available for order (requested: 1, available:
+            # 0)" - so the trailing exit (E102/E109) fired six times today and
+            # closed nothing, while recording CLOSE FAILED. The fix is to
+            # RE-PRICE the resting exit to a marketable limit via order replace:
+            # one atomic operation, the exit is never absent, no qty conflict.
+            # Only when no resting exit exists does it fall back to submitting.
+            try:
+                _working = list(feed.open_orders())
+            except Exception:
+                _working = []
+            def _resting_exit(short_sym):
+                for _o in _working:
+                    _ls = _o.get("legs") or [_o]
+                    if any(str(_l.get("position_intent", "")).endswith("_to_close")
+                           and _l.get("symbol") == short_sym for _l in _ls):
+                        return _o
+                return None
             def _closer(sym, qty, _legs=legs):
                 for (u, r, e), v in _legs.items():
                     if "short" not in v or v["short"][3] != sym:
@@ -261,10 +281,26 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                         raise RuntimeError("no long leg - refusing a naked close")
                     limit = round(max(v["short"][2] - v.get("long", (0, 0, 0.0, None))[2]
                                       + 0.05, 0.05), 2)
+                    _rest = _resting_exit(ssym)
+                    if _rest and _rest.get("id"):
+                        rec = {"action": "replace_exit", "symbol": ssym, "qty": qty,
+                               "order_id": _rest["id"], "old_limit": _rest.get("limit_price"),
+                               "new_limit": limit, "dry_run": dry_run,
+                               "context": {"strategy": "E116 trail re-prices the resting exit"}}
+                        if dry_run:
+                            rec["result"] = "DRY_RUN — not replaced"
+                        else:
+                            execute.preflight()
+                            _resp = execute._run(["order", "replace", "--order-id", _rest["id"],
+                                                  "--limit-price", f"{limit:.2f}"])
+                            rec["result"] = "REPLACED"
+                            rec["new_order_id"] = _resp.get("id")
+                        ledger.record_raw(rec)
+                        return rec
                     return execute.submit(
                         [execute.Leg(ssym, "sell", 1), execute.Leg(lsym, "buy", 1)],
                         qty, limit, dry_run=dry_run, close=True,
-                        context={"strategy": "E78 exit sweep"})
+                        context={"strategy": "E78 exit sweep (no resting exit found)"})
                 raise RuntimeError(f"no paired legs found for {sym}")
             swept = manage(live, ledger=ledger, dry_run=dry_run, closer=_closer)
             _update_peaks(live)         # E102: raise the high-water marks

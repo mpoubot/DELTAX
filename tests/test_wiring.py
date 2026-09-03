@@ -333,5 +333,29 @@ check("E106 the old (symbol, side) in held check is GONE",
 check("E106 and it runs AFTER choose_expiry so the expiry is known",
       _run_src.index("picked = choose_expiry(") < _run_src.index("(symbol, side, _exp6) in book.get"))
 
+print("\n── E116: the trail re-prices the resting exit, it does not compete with it ──")
+# Every structure carries a resting 50% GTC exit from entry (E5), and that
+# order holds the position's whole closing quantity. The trailing exit
+# submitted a SECOND closing order and the broker rejected it every time:
+# "insufficient qty available for order (requested: 1, available: 0)". Six
+# CLOSE FAILED records on 3 Sep, zero closes. The closer must find the
+# working exit on the short leg and replace its limit with a marketable one.
+check("E116 the closer looks for a resting exit on the short leg",
+      "def _resting_exit(short_sym)" in _run_src)
+check("E116 it matches on *_to_close intent, not on any order",
+      'endswith("_to_close")' in _run_src.split("def _resting_exit")[1][:400])
+check("E116 it uses order replace, not a second submit",
+      '["order", "replace", "--order-id"' in _run_src)
+check("E116 replace carries the marketable limit",
+      '"--limit-price", f"{limit:.2f}"' in _run_src)
+check("E116 preflight runs before a live replace",
+      "execute.preflight()" in _run_src.split("def _closer")[1].split("return execute.submit")[0])
+check("E116 dry run records without replacing",
+      'rec["result"] = "DRY_RUN — not replaced"' in _run_src)
+check("E116 the replace is recorded to the ledger with both limits",
+      '"old_limit": _rest.get("limit_price")' in _run_src and '"new_limit": limit' in _run_src)
+check("E116 submit remains the fallback when no exit is resting",
+      "E78 exit sweep (no resting exit found)" in _run_src)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

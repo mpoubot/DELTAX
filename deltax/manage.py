@@ -184,7 +184,25 @@ def manage(positions: list, *, ledger=None, dry_run: bool = True,
         rec = {"action": "close", "symbol": p.symbol, "qty": p.qty,
                "reason": why, "captured": round(p.captured, 4), "dry_run": dry_run}
         if dry_run:
-            rec["result"] = "DRY_RUN — not closed"
+            # E116: a dry run used to skip the closer entirely, so no dry run
+            # could ever exercise the exit path - the trail's replace logic was
+            # unreachable in analysis and its failure went unseen for hours.
+            # When a closer is wired, call it: it honours dry_run itself and
+            # returns a DRY_RUN record, so the path is traced without an order.
+            if closer is not None:
+                try:
+                    out = closer(p.symbol, p.qty)
+                    rec["result"] = str(out.get("result", "DRY_RUN"))
+                    rec["submitted"] = False
+                except Exception as e:
+                    rec["result"] = f"DRY_RUN CLOSE PATH FAILED — {type(e).__name__}: {str(e)[:100]}"
+                    rec["submitted"] = False
+                    failed.append((p.symbol, f"dry:{type(e).__name__}"))
+                    if ledger is not None:
+                        ledger.record_raw(rec)
+                    continue
+            else:
+                rec["result"] = "DRY_RUN — not closed"
             closed.append((p.symbol, why))
         elif closer is None:
             # Report honestly: the rule fired and nothing acted on it.
