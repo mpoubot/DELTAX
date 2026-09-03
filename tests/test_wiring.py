@@ -289,5 +289,39 @@ check("E102 the peak store is anchored to the repo, not the CWD",
       "PEAKS_PATH = _os.path.join(" in open(os.path.join(
           os.path.dirname(__file__), "..", "deltax", "manage.py")).read())
 
+print("\n── E104: a spread is closed through the paired path, never leg by leg ──")
+# close-smh.sh cancelled SMH's resting exits, then ran
+# `alpaca position close --symbol <option>` four times. Each returned code 0 -
+# the CLI's own success envelope - and created NO broker order. SMH went from
+# covered to naked while the log read as success, and the 540 put bled to
+# -$1,450 before it was caught. The only correct close in this system is
+# execute.submit(close=True), which builds a real multi-leg order with
+# *_to_close intents. This scan makes the leg-by-leg pattern a test failure.
+import glob as _glob, re as _re
+_bin = os.path.join(os.path.dirname(__file__), "..", "bin")
+_offenders = []
+for _f in sorted(_glob.glob(os.path.join(_bin, "*.sh"))):
+    _src = open(_f).read()
+    # a retired script is allowed to carry the pattern in its preserved body,
+    # but only if it is disabled at the top and says so
+    _retired = _re.search(r"^exit \d+\s+#\s*RETIRED", _src, _re.M) is not None
+    if _re.search(r"alpaca\s+position\s+close\s+--symbol", _src) and not _retired:
+        _offenders.append(os.path.basename(_f))
+check("E104 no live script closes an option position leg by leg",
+      _offenders == [], str(_offenders))
+check("E104 close-smh.sh is retired and refuses to run",
+      _re.search(r"^exit 3\s+#\s*RETIRED", open(os.path.join(_bin, "close-smh.sh")).read(), _re.M)
+      is not None)
+# and the correct path must still exist and still flip intents
+from deltax.execute import build_close_args as _bca, Leg as _Leg
+_args = _bca([_Leg("SMH260918P00540000", "sell", 1), _Leg("SMH260918P00530000", "buy", 1)], 5, 5.10)
+_legs = __import__("json").loads(_args[_args.index("--legs") + 1])
+check("E104 the paired close stamps buy_to_close on the short leg",
+      any(l["position_intent"] == "buy_to_close" for l in _legs), str(_legs))
+check("E104 and sell_to_close on the long leg",
+      any(l["position_intent"] == "sell_to_close" for l in _legs))
+check("E104 and it is a single multi-leg order, not four singles",
+      "mleg" in _args and _args[_args.index("--qty") + 1] == "5")
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
