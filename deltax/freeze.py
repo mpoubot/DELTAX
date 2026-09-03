@@ -39,7 +39,11 @@ STATE_PATH = os.path.join(
 MAX_STATE_AGE_MIN = 45
 
 # ── signal thresholds ────────────────────────────────────────────────────────
-MAX_COMMITTED_FRACTION = 0.50   # of the $30k portfolio cap, to leave headroom
+# E103: 0.50 -> 0.80 on the operator's instruction. Expected profit scales with
+# deployed premium times edge; at 0.50 the agent re-froze with half the cap
+# unused. The $30,000 HARD cap in gates.py is unchanged - this only governs how
+# much of it the signal check will let the agent reach before pausing entries.
+MAX_COMMITTED_FRACTION = 0.80   # of the $30k portfolio cap
 MIN_HOURS_TO_FLATTEN   = 6.0    # a new position needs time to decay before 10:00
 MIN_EQUITY             = 97_000.0   # do not add risk while bleeding
 MAX_CVAR_FRACTION      = 0.05   # joint 5% expected shortfall, as a share of equity

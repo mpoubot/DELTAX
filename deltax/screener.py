@@ -78,7 +78,8 @@ DEFAULT_WIDTH = {
                  # E101: ~1.5-3% of spot, so max loss per contract stays in
                  # the same band as the index names rather than scaling with
                  # share price - a 5-wide spread on a $35 ETF is not a spread.
-                 "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,}
+                 "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,
+                 "AAPL": 5.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
@@ -136,7 +137,11 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 #
 # The premium is re-measured per candidate by gate_variance_premium, so this
 # list says where to LOOK. It is never a standing claim that these stay cheap.
-INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM"]
+# E103 (2 Sep, late): AAPL added - 86% tradeability on the screener, IV/RV
+# above the floor, no earnings until late October. AVGO scored 90% and is
+# deliberately NOT added: it reported after today's close, so tomorrow it is a
+# repricing event with the same 10-17% excursion band that ruled out SNOW.
+INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL"]
 
 
 @dataclass
