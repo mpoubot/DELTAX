@@ -1,4 +1,39 @@
 #!/bin/bash
+# ╔════════════════════════════════════════════════════════════════════════╗
+# ║  RETIRED 2026-09-03 09:50 ET — DO NOT RUN. THIS SCRIPT MADE THINGS WORSE ║
+# ╚════════════════════════════════════════════════════════════════════════╝
+#
+# What it was supposed to do: close the SMH book at 09:31 Thu.
+# What it actually did at 09:31:
+#   1. Cancelled the two resting GTC exits on SMH.           <- REAL
+#   2. Ran `alpaca position close --symbol <option>` x4.     <- NO-OP
+#      Each returned `{"code": 0}` - the CLI's own success envelope, which
+#      `| head -2` truncated before any error body - and created NO broker
+#      order. Confirmed: zero SMH orders existed at the broker afterwards.
+#   3. Reported "SMH legs remaining: 4" and exited 0.
+#
+# Net effect: SMH went from "covered by resting exits" to "no exit at all",
+# while the log read as a success. The 540 put bled to -$1,450 before it was
+# caught. It was closed manually at 09:44 through execute.submit(close=True),
+# which builds a real multi-leg order with buy_to_close/sell_to_close intents -
+# the SAME path the exit sweep and the Friday flatten use. That is the only
+# correct way to close a spread in this system, and it is the way this script
+# should have been written.
+#
+# Two lessons, both already in the E-series:
+#   - `code 0` from a CLI is not a fill. Success is a filled order at the
+#     broker, checked from the broker (E78: "a sweep that reports an action it
+#     did not take is worse than no sweep").
+#   - Never cancel a protective order before its replacement is CONFIRMED
+#     working. The cancel should have come after the close filled, not before
+#     it was attempted.
+#
+# The cron entry was one-shot (31 9 3 9 *) and has fired; it cannot run again
+# this year. The body below is preserved unchanged as the record of what ran,
+# and disabled by the exit on the next line.
+exit 3   # RETIRED - see header
+#
+# ── original body, preserved for the record ──────────────────────────────
 # E101 — close the SMH book at Thursday's open, on the operator's instruction.
 #
 # WHY: SMH measured IV/RV 0.91 on 2 Sep. Selling a credit spread is selling
