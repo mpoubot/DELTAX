@@ -44,7 +44,7 @@ asserted the bug), a fully-tested gate that was never fed any data, and a deadli
 control with no test at all. The last two were caught by mutation testing —
 corrupting each rule on purpose to see whether the suite noticed.
 
-789 tests. 28 modules. Paper trading only.
+974 tests. 32 modules. Paper trading only.
 
 ---
 
