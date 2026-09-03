@@ -43,10 +43,10 @@ MAX_STATE_AGE_MIN = 45
 # deployed premium times edge; at 0.50 the agent re-froze with half the cap
 # unused. The $30,000 HARD cap in gates.py is unchanged - this only governs how
 # much of it the signal check will let the agent reach before pausing entries.
-MAX_COMMITTED_FRACTION = 0.80   # of the $30k portfolio cap
+MAX_COMMITTED_FRACTION = 1.00   # E111: 0.80 -> 1.00. Use the whole cap before pausing
 MIN_HOURS_TO_FLATTEN   = 6.0    # a new position needs time to decay before 10:00
 MIN_EQUITY             = 97_000.0   # do not add risk while bleeding
-MAX_CVAR_FRACTION      = 0.05   # joint 5% expected shortfall, as a share of equity
+MAX_CVAR_FRACTION      = 0.12   # E111: 0.05 -> 0.12. Joint 5% tail may reach 12% of equity
 CONTEST_FLATTEN = datetime(2026, 9, 4, 10, 0, tzinfo=ET)
 
 DEFAULT_FROZEN_REASON = (

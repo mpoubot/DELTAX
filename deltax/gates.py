@@ -18,14 +18,26 @@ import json
 
 # Competition posture (see COMPETITION-PLAYBOOK.md; research posture was 1%/5%).
 # Pending team ratification before the Monday pre-registration commit.
-PER_POSITION_RISK_PCT = 0.02   # 2% of equity max loss per position
+# ══════════════════════════════════════════════════════════════════════════
+# E111 — MAXIMUM RISK, ON THE OPERATOR'S INSTRUCTION, OVER OBJECTION.
+# 3 Sep 2026, ~10:55 ET. Instructed four times: "take all the risk", "a lot
+# more risk", "I'd rather be at zero". Objected each time on the record: this
+# is the submission account, it cannot be reset, and a blow-up is a visible
+# failure on four of five judging criteria. The operator's call; carried out.
+#
+# What this changes: how MUCH the agent may hold. What it does NOT change: the
+# fifteen deterministic gates that decide whether a given spread is priced
+# correctly, the resting exits, the trailing exit, the Friday flatten, and
+# rule 3. A badly priced trade at large size is still a badly priced trade.
+# ══════════════════════════════════════════════════════════════════════════
+PER_POSITION_RISK_PCT = 0.05   # E111: 0.02 -> 0.05. $2k -> $5k max loss per structure
 # Raised 0.10 -> 0.30 for the competition, on the team's $30k options allocation
 # (E22). Per-trade expectancy is a per-contract R-multiple and does not change
 # with size - what scales is the ACCOUNT outcome distribution, in both
 # directions. Worst case moves from -10% to -30%. Per-position stays at 2%, so
 # deploying the full budget forces at least 15 positions rather than a few
 # large ones, which is what E19 asks for.
-PORTFOLIO_RISK_PCT    = 0.30   # 30% of equity max loss across all open positions
+PORTFOLIO_RISK_PCT    = 0.60   # E111: 0.30 -> 0.60. Hard cap $30k -> $60k of max loss
 # Lowered 7 -> 4 because the contest window forces it: judging is Fri 4 Sep and
 # gate_contest_window caps expiry there, so a 7-day floor leaves NO valid expiry
 # and the agent can never trade again (E37).
@@ -216,7 +228,7 @@ CONTEST_CLOSE = date(2026, 9, 4)
 # ── E57: demonstration mode ────────────────────────────────────────────────
 # Purpose is EVIDENCE, not alpha. Every gate still runs; what changes is size
 # and two explicit overrides, each with a stated reason and a hard cap.
-DEMONSTRATION_MODE   = True
+DEMONSTRATION_MODE   = False  # E111: OFF. Every structure was x1 regardless of sizing
 DEMO_MAX_CONTRACTS   = 1      # hard ceiling regardless of what sizing returns
 DEMO_ALLOW_DEFENSIVE = True   # trade through a regime CAUTION at capped size...
 DEMO_NEVER_OVERRIDE  = ("HALT", "NO_NEW_POSITIONS")   # ...but never through

@@ -36,7 +36,7 @@ from deltax import gates as _G
 # measured that a capped-payoff short-premium book gets WORSE with more names -
 # each one adds breach risk without adding upside - so the cap holds the tail
 # while the ranking improves what fills it.
-MAX_CONCURRENT = 4
+MAX_CONCURRENT = 8          # E111: 4 -> 8 entries per cycle
 
 
 def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
