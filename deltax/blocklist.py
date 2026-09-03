@@ -112,6 +112,72 @@ def check(symbol: str, expiry: date, data: Optional[dict] = None) -> tuple:
     return False, f"{symbol} absent from blocklist - never checked, blocked"
 
 
+def merge_manual(data: Optional[dict], entries: list, expiry: date) -> dict:
+    """Overlay hand-verified earnings dates onto a blocklist. E117.
+
+    WHY. build() needs SEC EDGAR, which refuses requests that do not name a
+    contact (DELTAX_SEC_UA). With it unset every single name was written as
+    'lookup failed' and refused - correct fail-closed behaviour, and it turned
+    the single-name book off for the whole contest. A second defect sat under
+    it: main() built the file to CONTEST_CLOSE while the runner checks against
+    today + MAX_DTE, so even a clean SEC pass could not cover a real trade.
+
+    This is the override. A date verified by a person, with its source
+    recorded, clears ONE name for ONE horizon. Everything here fails closed:
+      * an entry with no parseable date, no source, or a date on or before
+        the horizon is written as BLOCKED - never silently dropped
+      * widening the horizon demotes every single name the SEC pass cleared
+        only to the OLD horizon; those were not checked that far
+      * ETFs are left alone; they need no entry
+    Nothing here touches the network.
+    """
+    base = dict(data or {})
+    try:
+        old_exp = date.fromisoformat(str(base.get("expiry")))
+    except (TypeError, ValueError):
+        old_exp = None
+    blocked = dict(base.get("blocked") or {})
+    clear = set(base.get("clear") or [])
+    manual = dict(base.get("manual") or {})
+    errors = dict(base.get("errors") or {})
+
+    if old_exp is None or expiry > old_exp:
+        for sym in sorted(clear):
+            if sym in NO_EARNINGS or sym in manual:
+                continue
+            clear.discard(sym)
+            blocked[sym] = (f"cleared only to {old_exp} - not checked to {expiry}"
+                            if old_exp else
+                            f"cleared to an unknown horizon - not checked to {expiry}")
+
+    for ent in entries or []:
+        sym = str((ent or {}).get("symbol") or "").upper()
+        if not sym or sym in NO_EARNINGS:
+            continue
+        src = str(ent.get("source") or "").strip()
+        try:
+            nxt = date.fromisoformat(str(ent.get("next_earnings")))
+        except (TypeError, ValueError):
+            nxt = None
+        clear.discard(sym)
+        manual.pop(sym, None)
+        if nxt is None:
+            blocked[sym] = "manual entry rejected - no parseable next_earnings date"
+        elif not src:
+            blocked[sym] = "manual entry rejected - no source recorded"
+        elif nxt <= expiry:
+            blocked[sym] = f"manual: earnings {nxt} on or before {expiry}"
+        else:
+            blocked.pop(sym, None)
+            errors.pop(sym, None)
+            clear.add(sym)
+            manual[sym] = {"next_earnings": str(nxt), "source": src}
+    return {"built_at": datetime.now(timezone.utc).isoformat(),
+            "expiry": str(expiry), "blocked": blocked, "clear": sorted(clear),
+            "errors": errors, "manual": manual,
+            "n_checked": int(base.get("n_checked") or 0) + len(entries or [])}
+
+
 def main(argv=None) -> int:
     """Rebuild the blocklist for the trading universe. E49.
 
@@ -127,9 +193,26 @@ def main(argv=None) -> int:
 
     argv = sys.argv[1:] if argv is None else argv
     expiry = CONTEST_CLOSE
+    manual_path = None
     for a in argv:
         if a.startswith("--expiry="):
             expiry = date.fromisoformat(a.split("=", 1)[1])
+        elif a.startswith("--manual="):
+            manual_path = a.split("=", 1)[1]
+    if manual_path:                                   # E117 overlay, no network
+        with open(manual_path) as fh:
+            entries = (json.load(fh) or {}).get("entries") or []
+        data = merge_manual(load(), entries, expiry)
+        path = write(data)
+        print(f"blocklist: manual overlay {manual_path} ({len(entries)} entries), "
+              f"expiry {expiry}")
+        for s, m in sorted((data.get("manual") or {}).items()):
+            print(f"    CLEAR {s:<6} next earnings {m['next_earnings']}")
+        for s, why in sorted(data["blocked"].items()):
+            if why.startswith("manual") or "not checked to" in why:
+                print(f"    BLOCK {s:<6} {why[:70]}")
+        print(f"  wrote {path}  clear {len(data['clear'])}  blocked {len(data['blocked'])}")
+        return 0
     # Cover the traded names plus every name the screener could reach, so the
     # file stays valid if the universe is widened mid-week.
     symbols = sorted(set(INCOME_UNIVERSE) | set(DEFAULT_WIDTH))

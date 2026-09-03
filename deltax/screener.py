@@ -165,7 +165,14 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # concentration against the existing index-put book. That is the control; the
 # list only says where to look.
 INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL", "ORCL", "JPM",
-                   "RSP", "XLI", "XLU", "TQQQ", "VXX"]
+                   "RSP", "XLI", "XLU", "TQQQ", "VXX",
+                   # E117 (3 Sep 12:03 ET): top of a 35-name single-name scan with
+                   # the E115 screener - UNH 87% IV/RV 1.50, QCOM 79% 1.25, C 76%
+                   # 1.25; all three cleared every pricing gate at production
+                   # prices. Their earnings dates are hand-verified in
+                   # state/earnings-manual.json (blocklist --manual), the only
+                   # way a single name can pass without DELTAX_SEC_UA.
+                   "UNH", "QCOM", "C"]
 
 
 @dataclass
