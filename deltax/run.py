@@ -927,12 +927,47 @@ if __name__ == "__main__":
                         "error": f"{type(_ae).__name__}: {str(_ae)[:120]}",
                         "consequence": "board shows account unavailable"})
     r = out["regime"]
+    # E105: real scoreboard inputs. Unrealised is the broker's own mark on the
+    # open legs; realised is what the account has actually banked relative to
+    # the start, net of that. Rows pair each short leg with its long by
+    # (underlying, right, expiry) - the same grouping the exit sweep uses.
+    _t_unreal, _t_real, _t_rows = 0.0, 0.0, []
+    try:
+        from deltax.reconcile import parse_occ as _p_occ
+        _plist = list(feed.positions())
+        _t_unreal = sum(float(p.get("unrealized_pl") or 0) for p in _plist)
+        _t_real = (eq - 100_000.0) - _t_unreal if eq is not None else 0.0
+        _grp = {}
+        for p in _plist:
+            o = _p_occ(p.get("symbol", ""))
+            if not o:
+                continue
+            q = float(p.get("qty") or 0)
+            _grp.setdefault((o["underlying"], o["right"], o["expiry"]), {})[
+                "short" if q < 0 else "long"] = (abs(q), abs(float(p.get("avg_entry_price") or 0)),
+                                                abs(float(p.get("current_price") or 0)), o["strike"])
+        for (u, rt, ex_), v in sorted(_grp.items()):
+            sh, lg = v.get("short"), v.get("long")
+            if not sh or not lg:
+                continue
+            credit = sh[1] - lg[1]
+            cur = sh[2] - lg[2]
+            _t_rows.append({"symbol": u, "side": rt, "short": sh[3], "long": lg[3],
+                            "credit": credit, "current": cur,
+                            "captured": ((credit - cur) / credit) if credit > 0 else None})
+    except Exception:
+        pass                                # terminal only; never take the run down
     events = [("open", sym, f"OPENED {side} · {ct} ct · credit ${cr*100*ct:,.0f} → {res}")
               for sym, side, ct, cr, ml, res in out["traded"]]
     events += [("exit", sym, f"EXIT RESTING at {lim:.2f} (50% of credit) · fills unattended")
                for sym, side, lim in out.get("exits", []) if lim]
     print(report.render(
         equity=eq, cash=csh, market_open=True,
-        unrealized=0.0, realized=0.0,
-        positions=[], events=events, refused=out["refused"],
+        # E105: these were hard-coded 0.0 and [], so the terminal printed
+        # "realized +0.00 / unrealized +0.00 / no open positions" over a
+        # 12-leg book with -$1,212 realised on the SMH close. Same shape as
+        # E78 and E89: a report that does not describe what happened. Both
+        # figures now come from the broker; the rows are the paired book.
+        unrealized=_t_unreal, realized=_t_real,
+        positions=_t_rows, events=events, refused=out["refused"],
         regime=f"{r.weak_count}/3 weak", permission=out.get("permission", "—")))
