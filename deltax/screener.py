@@ -42,6 +42,10 @@ DELTA_BAND = (0.15, 0.35)      # rule R3: short strike stays inside 15-35 delta
 #   mid    - mid-to-mid. Assumes a perfect fill at the midpoint.
 #   haircut- mid, giving back HAIRCUT of the combined spread. Realistic.
 MIN_LIQUID_STRIKES = 5     # chain is tradeable at all; not a ranking key
+# E69: the shortest DTE at which CREDIT_SURFACE is a valid benchmark. The
+# surface was measured on 11- and 18-DTE chains and has no DTE term, so it
+# systematically over-demands credit from anything much shorter.
+MIN_BENCHMARK_DTE = 5
 PRICING_MODE = "haircut"
 SPREAD_HAIRCUT = 0.25
 # The chain endpoint pages from the lowest strike, so an unbounded request
@@ -70,7 +74,12 @@ DEFAULT_WIDTH = {
 # quoted $0.17 against a $1.27 requirement and could never pass. Width must
 # scale with price, not be a constant - these sit at ~2.5-3% of spot, matching
 # what SPY/QQQ/IWM already use.
-                 "XLF": 2.0, "XLE": 2.0, "KRE": 2.0,}
+                 "XLF": 2.0, "XLE": 2.0, "KRE": 2.0,
+                 # E101: ~1.5-3% of spot, so max loss per contract stays in
+                 # the same band as the index names rather than scaling with
+                 # share price - a 5-wide spread on a $35 ETF is not a spread.
+                 "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,
+                 "AAPL": 5.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
@@ -113,7 +122,26 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # -11.7%, 6 names -1.4%, this basket +3.1%. Chosen from six candidates and
 # positive under BOTH the pessimistic (IV/RV 1.15) and observed (1.45) vol
 # assumptions, which is the property that matters - the margin itself is noise.
-INCOME_UNIVERSE = ["SPY", "QQQ", "IWM", "SMH", "XLF", "XLE", "XOP", "KRE"]
+# E101 (2 Sep, evening). Re-pointed at names with a MEASURED variance premium.
+#
+# Dropped XLF, XLE, XOP, KRE: across 972 logged candidates they produced zero
+# trades. Measured live they quote 16-24% median spreads against a 15% cap, so
+# they consumed 58% of every scan while being structurally untradeable.
+#
+# Dropped SMH: IV/RV 0.91 - the one name where we were selling movement for
+# LESS than the stock delivers, and it had grown to 42% of committed risk.
+#
+# Added DIA (IV/RV 1.64), FXI (1.24), HYG (1.16), EEM (1.12) - all measured on
+# 2 Sep with >=14 strikes above the 500 open-interest floor and median spreads
+# inside the 15% cap. Kept SPY (1.40), IWM (1.18), QQQ (1.17).
+#
+# The premium is re-measured per candidate by gate_variance_premium, so this
+# list says where to LOOK. It is never a standing claim that these stay cheap.
+# E103 (2 Sep, late): AAPL added - 86% tradeability on the screener, IV/RV
+# above the floor, no earnings until late October. AVGO scored 90% and is
+# deliberately NOT added: it reported after today's close, so tomorrow it is a
+# repricing event with the same 10-17% excursion band that ruled out SNOW.
+INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL"]
 
 
 @dataclass
@@ -231,6 +259,110 @@ def _price_credit(short: dict, long_leg: dict, mode: str) -> float:
     return mid - SPREAD_HAIRCUT * combined
 
 
+def search_vertical(chain: dict, *, side: str, target_delta: float, width: float,
+                    oi_by_symbol: dict, pricing: str = None,
+                    max_spread_pct: float = 0.15,
+                    min_credit: float = 0.75) -> Optional[dict]:
+    """Search the chain for the best TRADEABLE vertical, instead of guessing one.
+
+    E95. select_vertical() makes a single point pick: the one strike nearest
+    target delta, then the one strike a width away. It never looks at anything
+    else, so if that particular pair happens to quote badly the whole symbol is
+    refused for the cycle - even when the same expiry holds dozens of structures
+    that would pass every gate. Across 972 logged candidates that produced 3
+    trades: they were not 972 candidates, they were 972 single guesses.
+
+    This enumerates every (short, long) pair that is actually eligible -
+    R3 delta band, real two-sided quotes, both legs above the open-interest
+    floor - and keeps the ones whose quotes can survive the hard microstructure
+    gates. Among those it maximises credit per dollar of risk, NET of the
+    round-trip cost of crossing both books, which is the quantity the strategy
+    actually earns:
+
+        score = (credit - roundtrip) / width
+
+    Nothing here relaxes a gate. It changes only WHICH candidate is nominated;
+    evaluate() still runs the full stack on whatever this returns. A symbol that
+    genuinely has no tradeable structure still returns None.
+    """
+    pricing = pricing or PRICING_MODE
+    rows = []
+    for sym, c in chain.items():
+        d, (bid, ask) = feeds.delta(c), feeds.quote(c)
+        if d is None or bid is None or ask is None or bid <= 0:
+            continue
+        strike = _strike_from(sym)
+        if strike is None:
+            continue
+        rows.append({"symbol": sym, "strike": strike, "delta": abs(d),
+                     "bid": bid, "ask": ask,
+                     # E101: the chain already carries implied vol. Capturing it
+                     # here costs nothing; solving it later would mean a second
+                     # pass over data we have already fetched.
+                     "iv": c.get("impliedVolatility")})
+    if not rows:
+        return None
+
+    lo, hi = DELTA_BAND
+    liquid = lambda r: oi_by_symbol.get(r["symbol"], 0) >= MIN_OPEN_INTEREST
+    shorts = [r for r in rows if lo <= r["delta"] <= hi and liquid(r)]
+    if not shorts:
+        return None
+
+    # A long leg must be further OTM than the short, and close enough to the
+    # requested width that the structure is still the one we intended to trade.
+    tol = max(1.0, width * 0.5)
+    best = None
+    for sh in shorts:
+        want = sh["strike"] - width if side == "put" else sh["strike"] + width
+        for lg in rows:
+            if lg is sh or not liquid(lg):
+                continue
+            if side == "put" and lg["strike"] >= sh["strike"]:
+                continue
+            if side == "call" and lg["strike"] <= sh["strike"]:
+                continue
+            if abs(lg["strike"] - want) > tol:
+                continue
+            w = abs(sh["strike"] - lg["strike"])
+            if w <= 0:
+                continue
+            credit = _price_credit(sh, lg, pricing)
+            if credit <= 0 or credit >= w:        # not a credit spread
+                continue
+            if credit < min_credit:
+                continue
+            worst = max(filter(None, [spread_pct(sh["bid"], sh["ask"]),
+                                      spread_pct(lg["bid"], lg["ask"])]),
+                        default=None)
+            if worst is None or worst > max_spread_pct:
+                continue
+            roundtrip = ((sh["ask"] - sh["bid"]) + (lg["ask"] - lg["bid"]))
+            # net edge per dollar of risk - what the structure actually pays
+            score = (credit - roundtrip) / w
+            if score <= 0:
+                continue
+            cand = {
+                "structure": "credit", "side": side,
+                "short": sh, "long": lg, "width": w, "credit": credit,
+                "max_loss_per_contract": (w - credit) * 100,
+                "max_profit_per_contract": credit * 100,
+                "worst_leg_spread_pct": worst,
+                "roundtrip_cost": roundtrip,
+                "open_interest": min(oi_by_symbol.get(sh["symbol"], 0),
+                                     oi_by_symbol.get(lg["symbol"], 0)),
+                "expiry": parse_expiry(sh["symbol"]),
+                "score": score,
+                "implied_vol": sh.get("iv"),
+                "delta_distance": abs(sh["delta"] - target_delta),
+            }
+            # Best net edge; ties broken toward the requested delta.
+            key = (-score, cand["delta_distance"])
+            if best is None or key < (-best["score"], best["delta_distance"]):
+                best = cand
+    return best
+
+
 def select_vertical(chain: dict, *, side: str, target_delta: float, width: float,
                     oi_by_symbol: dict, pricing: str = None) -> Optional[dict]:
     """Pick the short strike nearest target delta, then the long leg one width away.
@@ -254,7 +386,21 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
     if not eligible:
         return None
 
-    short = min(eligible, key=lambda r: abs(r["delta"] - target_delta))
+    # E94: THE THROUGHPUT BOTTLENECK. oi_by_symbol was used only to REPORT open
+    # interest at the bottom of this function - never to choose a strike. So the
+    # short leg was picked purely on delta distance, which repeatedly landed on
+    # an odd strike carrying almost no open interest, and gate_liquidity then
+    # refused it. Across 972 logged candidates that produced 640 liquidity
+    # refusals and 3 trades, while the SAME expiry held 95 SPY strikes above the
+    # 500 floor (760 alone has 38,335) sitting a fraction of a delta away.
+    #
+    # The floor is not the problem and is not touched: this picks the nearest
+    # target-delta strike FROM the liquid ones, and falls back to the old
+    # behaviour when none qualify, so it can only ever nominate a better
+    # candidate. Every gate still runs on whatever comes out.
+    _liquid = [r for r in eligible
+               if oi_by_symbol.get(r["symbol"], 0) >= MIN_OPEN_INTEREST]
+    short = min(_liquid or eligible, key=lambda r: abs(r["delta"] - target_delta))
     # Long leg: prefer the exact width, but accept the nearest liquid strike
     # within a tolerance rather than abandoning an otherwise good candidate.
     want = short["strike"] - width if side == "put" else short["strike"] + width
@@ -267,7 +413,13 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
                      else (r["strike"] > short["strike"]))]
         if not near:
             return None
-        longs = [min(near, key=lambda r: abs(r["strike"] - want))]
+        # E94: the comment above has always said "nearest LIQUID strike", but
+        # nothing here consulted open interest. gate_liquidity scores the
+        # structure on min(short OI, long OI), so an illiquid long leg refuses
+        # the trade just as surely as an illiquid short one.
+        _near_liquid = [r for r in near
+                        if oi_by_symbol.get(r["symbol"], 0) >= MIN_OPEN_INTEREST]
+        longs = [min(_near_liquid or near, key=lambda r: abs(r["strike"] - want))]
     long_leg = longs[0]
     width = abs(short["strike"] - long_leg["strike"])   # actual, not requested
 
@@ -275,6 +427,22 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
     worst_spread = max(filter(None, [spread_pct(short["bid"], short["ask"]),
                                      spread_pct(long_leg["bid"], long_leg["ask"])]),
                        default=None)
+    # E74: the DOLLAR cost of crossing both books, opening and closing. A
+    # percentage of each option's own price says nothing about what the spread
+    # costs relative to what it PAYS - SMH quoted 9% legs and still handed 57%
+    # of the credit to the market maker. gate_spread_quality needs this number,
+    # and until now nothing computed it, so the friction check never ran.
+    def _width_of(leg):
+        b, a = leg.get("bid"), leg.get("ask")
+        try:
+            if b is None or a is None or a <= 0:
+                return None
+            return max(float(a) - float(b), 0.0)
+        except (TypeError, ValueError):
+            return None
+    _w = [_width_of(short), _width_of(long_leg)]
+    roundtrip = sum(x for x in _w if x is not None) if all(
+        x is not None for x in _w) else None
     return {
         "structure": "credit",
         "side": side,
@@ -284,6 +452,7 @@ def select_vertical(chain: dict, *, side: str, target_delta: float, width: float
         "max_loss_per_contract": (width - credit) * 100,
         "max_profit_per_contract": credit * 100,
         "worst_leg_spread_pct": worst_spread,
+        "roundtrip_cost": roundtrip,
         "open_interest": min(oi_by_symbol.get(short["symbol"], 0),
                              oi_by_symbol.get(long_leg["symbol"], 0)),
         "expiry": parse_expiry(short["symbol"]),
@@ -340,23 +509,58 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
                                       expiry_lte=lte, strike_gte=strike_lo,
                                       strike_lte=strike_hi, limit=1000)
     by_exp: dict = {}
+    LAST_UNREADABLE_OI.clear()          # E88: per-call, read by run.py below
     for c in contracts:
         by_exp.setdefault(c["expiration_date"], {})[c["symbol"]] = _as_int(
-            c.get("open_interest"))
+            c.get("open_interest"), LAST_UNREADABLE_OI)
     for exp in sorted(by_exp):                      # ascending date = nearest first
         oi = by_exp[exp]
         liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
-        if liquid >= MIN_LIQUID_STRIKES:
-            best = (exp, oi, liquid)
-            break                                   # nearest qualifying wins
+        if liquid < MIN_LIQUID_STRIKES:
+            continue
+        # E69: skip expiries the CREDIT BENCHMARK cannot judge. CREDIT_SURFACE
+        # was measured on 11- and 18-DTE chains (E34) and is keyed on
+        # (delta, width) with no DTE term. A 2-DTE option correctly pays less
+        # than an 11-DTE one, so gate_credit_fraction was rejecting properly
+        # priced near-dated spreads for missing a benchmark that never applied
+        # to them - SPY 4 Sep quoted $1.73 against a $1.80 floor built from
+        # 11-18 DTE quotes, and refused, while 18 Sep quoted $2.77 and passed.
+        # Until the surface carries a DTE dimension, only judge expiries inside
+        # the range it was measured on.
+        try:
+            dte = (datetime.strptime(exp, "%Y-%m-%d").date() - date.today()).days
+        except (ValueError, TypeError):
+            continue
+        if dte < MIN_BENCHMARK_DTE:
+            continue
+        best = (exp, oi, liquid)
+        break                                       # nearest QUALIFYING wins
     return (best[0], best[1]) if best else None
 
 
-def _as_int(v) -> int:
-    """Alpaca returns open_interest as a string; normalise to int."""
+# E88: raw open-interest values that could not be read on the most recent
+# choose_expiry() call. `_as_int` returns 0 for these, which is the SAFE
+# direction - gate_liquidity refuses on 0 exactly as it refuses on None - but 0
+# is indistinguishable from a genuinely illiquid strike. That mattered at the
+# `liquid` count below: a chain whose OI field was garbled looked exactly like a
+# chain that is legitimately thin, so the expiry was skipped and the symbol
+# dropped with nobody told. Same dark-silent shape as E83/E84; recorded here so
+# run.py can say WHICH it was.
+LAST_UNREADABLE_OI: list = []
+
+
+def _as_int(v, bad: "list | None" = None) -> int:
+    """Alpaca returns open_interest as a string; normalise to int.
+
+    Returns 0 when the value cannot be read. That fails closed downstream, but
+    `bad` (when supplied) records the raw value so an unreadable chain can be
+    told apart from an illiquid one.
+    """
     try:
         return int(float(v))
     except (TypeError, ValueError):
+        if bad is not None:
+            bad.append(repr(v)[:40])
         return 0
 
 
@@ -409,6 +613,7 @@ def screen_income_book(feed, ledger, *, equity: float, today: date,
             structure="credit", width=cand["width"],
             short_delta=cand["short"]["delta"],
             worst_leg_spread_pct=cand["worst_leg_spread_pct"],
+                roundtrip_cost=cand.get("roundtrip_cost"),
         )
         ledger.record(decision, context={
             "book": "income", "side": side, "regime": regime.note,

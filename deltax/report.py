@@ -39,16 +39,31 @@ def header(equity, cash, market_open, now=None):
     """Opens each 5-minute block. The rule above it is the visual break the
     team reads cycles by — without it the log is one undifferentiated wall."""
     now = now or datetime.now(ET)
-    day = (equity / START_EQUITY - 1) * 100
     state = f"{C['g']}MARKET OPEN{C['x']}" if market_open else f"{C['d']}MARKET CLOSED{C['x']}"
     rule = f"{C['d']}{'─' * 96}{C['x']}"
+    # E89: equity is None when the account could not be read. It used to arrive
+    # here as 0.0, which rendered as "$0.00 (-100.0% today)" - a transient API
+    # timeout displayed to the team, and to the judges on the public board, as
+    # the fund having lost everything. An unreadable number must look unread,
+    # never like a catastrophic one.
+    if equity is None:
+        return (f"{rule}\n"
+                f"{C['c']}┌── {now:%a %H:%M} ET{C['x']} │ {state} │ "
+                f"account {C['d']}unavailable{C['x']} (account read failed) │ "
+                f"cash {C['d']}—{C['x']}")
+    day = (equity / START_EQUITY - 1) * 100
+    _cash = f"${cash:,.0f}" if cash is not None else "—"
     return (f"{rule}\n"
             f"{C['c']}┌── {now:%a %H:%M} ET{C['x']} │ {state} │ "
             f"account {C['w']}${equity:,.2f}{C['x']} ({_pct(day)} today) │ "
-            f"cash {C['w']}${cash:,.0f}{C['x']}")
+            f"cash {C['w']}{_cash}{C['x']}")
 
 
 def scoreboard(equity, realized, unrealized):
+    # E89: see header(). A None equity means "not read", not "down 100%".
+    if equity is None:
+        return (f"{C['gd']}│{C['x']} {C['b']}{C['g']}SCOREBOARD{C['x']}  "
+                f"{C['d']}account unreadable this cycle - P&L not computed{C['x']}")
     net = equity - START_EQUITY
     return (f"{C['gd']}│{C['x']} {C['b']}{C['g']}SCOREBOARD{C['x']}  "
             f"realized {_money(realized)} (banked)  │  "

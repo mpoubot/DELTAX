@@ -25,3 +25,14 @@ __pycache__/
 logs/
 data/
 .deltax-git-credentials
+
+# Runtime freeze state - rewritten by bin/unfreeze-check.sh every 15
+# minutes. Tracking it would churn history and, worse, let a stale
+# committed 'unfrozen' be restored by a checkout. A fresh clone has no
+# state file, and read_state() fails closed to FROZEN - the right default.
+state/freeze.json
+
+# E102: running high-water marks, rewritten every cycle. Tracking it would
+# churn history, and a committed peak restored by a checkout could trigger
+# the trail against a position that never reached it.
+state/peaks.json

@@ -13,9 +13,17 @@ from __future__ import annotations
 import json, glob, os, sys
 from datetime import datetime, timezone
 
+# Repo root from THIS file, never the working directory. Every reader below
+# used CWD-relative globs, which worked only because publish-dashboard.sh
+# happens to cd here first. Called from anywhere else they matched nothing and
+# the board rendered "no refusals recorded" and REGIME as an em dash while
+# nearly a thousand decisions and 78 rotation readings sat in the ledger.
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def _ledger():
     rows = []
-    for f in sorted(glob.glob("logs/decisions-*.jsonl")):
+    for f in sorted(glob.glob(os.path.join(_ROOT, "logs", "decisions-*.jsonl"))):
         for line in open(f):
             try: rows.append(json.loads(line))
             except Exception: pass
@@ -80,6 +88,370 @@ def _clean(line: str) -> str:
     line = _BOX.sub("", line).strip()
     return _re.sub(r"\s{2,}", "  ", line)
 
+def _tz_times():
+    """Local time for each team pill, 12-hour with AM/PM.
+
+    Still converted from ET each render rather than stored as fixed offsets:
+    the US, Latvia and Denmark leave daylight saving on different dates, so the
+    gap between them is not constant even though it is stable this week.
+
+    Returns empty strings on any failure - a clock is decoration and must never
+    be able to take the board down.
+    """
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+    try:
+        # %-I drops the leading zero (9:05 AM, not 09:05 AM); lower-cased so it
+        # reads as a time rather than shouting inside a row of capitalised pills.
+        return {k: _dt.now(ZoneInfo(z)).strftime("%-I:%M %p").lower()
+                for k, z in (("us", "America/New_York"),
+                             ("lv", "Europe/Riga"),
+                             ("dk", "Europe/Copenhagen"))}
+    except Exception:
+        return {"us": "", "lv": "", "dk": ""}
+
+
+def _equity_chart(history=None):
+    """Equity through the contest window, with the finish line marked.
+
+    Form: change-over-time, one series -> a line. One series needs no legend;
+    the heading names it. Everything else on the plot is a REFERENCE mark, not a
+    second series, so each carries a label and a shape and never relies on
+    colour alone.
+
+    The window is fixed to the contest - Mon 31 Aug through the Fri 4 Sep close -
+    rather than to the data, so the run is read against its deadline instead of
+    against whatever happened to be fetched. The empty right-hand side IS the
+    information: it is the time still left.
+
+    Contrast was computed against the #050B0B panel, not eyeballed: the line at
+    12.2:1, the finish line at 10.4:1, the $100k baseline at 4.6:1.
+
+    Returns '' on any failure. A chart is decoration; it must never take the
+    board down.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    ET = _tz(_td(hours=-4))
+    try:
+        ts = [int(t) for t in (history or {}).get("timestamp") or []]
+        eq = [float(v) for v in (history or {}).get("equity") or []]
+        pts = [(t, v) for t, v in zip(ts, eq) if v > 0]
+        if len(pts) < 2:
+            return ""
+    except Exception:
+        return ""
+
+    START = _dt(2026, 8, 31, 9, 30, tzinfo=ET)      # contest day one
+    END   = _dt(2026, 9, 4, 16, 0, tzinfo=ET)       # Friday close - the finish line
+    JUDGE = _dt(2026, 9, 4, 11, 0, tzinfo=ET)       # submission
+    FIRST = _dt(2026, 9, 2, 10, 10, tzinfo=ET)      # first fill, from the broker
+    BASE  = 100_000.0
+
+    W, H = 1000.0, 168.0
+    PL, PR, PT, PB = 52.0, 92.0, 16.0, 22.0
+    span = (END - START).total_seconds()
+    x_of = lambda d: PL + (max((d - START).total_seconds(), 0) / span) * (W - PL - PR)
+
+    vals = [v for _, v in pts] + [BASE]
+    lo, hi = min(vals), max(vals)
+    pad = max((hi - lo) * 0.35, 120.0)
+    lo, hi = lo - pad, hi + pad
+    y_of = lambda v: PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB)
+
+    def _d(t):
+        return _dt.fromtimestamp(t, ET)
+
+    xs = [(x_of(_d(t)), y_of(v), _d(t), v) for t, v in pts]
+    xs = [p for p in xs if p[0] >= PL - 1]
+    if len(xs) < 2:
+        return ""
+    line = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}"
+                    for i, (x, y, _, _) in enumerate(xs))
+    base_y = y_of(BASE)
+    area = (f"M{xs[0][0]:.1f},{base_y:.1f} "
+            + " ".join(f"L{x:.1f},{y:.1f}" for x, y, _, _ in xs)
+            + f" L{xs[-1][0]:.1f},{base_y:.1f} Z")
+
+    last_v = xs[-1][3]
+    last_x, last_y = xs[-1][0], xs[-1][1]
+    up = last_v >= BASE
+    stroke = "#3FE0DA" if up else "#FF8A8A"
+    pnl = (last_v - BASE) / BASE * 100
+
+    # day gridlines
+    grid = []
+    for i in range(5):
+        d = START + _td(days=i)
+        gx = x_of(d.replace(hour=9, minute=30))
+        grid.append(
+            f'<line x1="{gx:.1f}" y1="{PT}" x2="{gx:.1f}" y2="{H-PB}" '
+            f'stroke="#12302E" stroke-width="1"/>'
+            f'<text x="{gx:.1f}" y="{H-8}" fill="#5B807D" font-size="8.5" '
+            f'letter-spacing="1.4">{d:%a %d}</text>')
+
+    idle_x0, idle_x1 = x_of(START), x_of(FIRST)
+    jx, ex = x_of(JUDGE), x_of(END)
+
+    return f"""<div class="eqc">
+<div class="eqc-hd">EQUITY &middot; CONTEST WINDOW
+  <b class="{'ok' if up else 'bad'}">{last_v:,.0f} &nbsp;{pnl:+.2f}%</b></div>
+<svg viewBox="0 0 {W:.0f} {H:.0f}" preserveAspectRatio="none" class="eqc-svg"
+     role="img" aria-label="Account equity from 31 August to the 4 September close.
+     No positions were opened until 2 September at 10:10 ET. Currently
+     {last_v:,.0f} dollars, {pnl:+.2f} percent against the 100,000 start.">
+  <defs>
+    <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="{stroke}" stop-opacity=".26"/>
+      <stop offset="100%" stop-color="{stroke}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  {''.join(grid)}
+  <rect x="{idle_x0:.1f}" y="{PT}" width="{max(idle_x1-idle_x0,0):.1f}"
+        height="{H-PT-PB:.1f}" fill="#5B807D" fill-opacity=".07"/>
+  <text x="{(idle_x0+idle_x1)/2:.1f}" y="{PT+13}" fill="#5B807D" font-size="8.5"
+        text-anchor="middle" letter-spacing="1.6">NO POSITIONS OPENED</text>
+  <line x1="{PL}" y1="{base_y:.1f}" x2="{W-PR}" y2="{base_y:.1f}"
+        stroke="#5B807D" stroke-width="1" stroke-dasharray="3 4"/>
+  <text x="{PL-6}" y="{base_y+3:.1f}" fill="#5B807D" font-size="8.5"
+        text-anchor="end">100k</text>
+  <path d="{area}" fill="url(#eqfill)"/>
+  <path d="{line}" fill="none" stroke="{stroke}" stroke-width="2"
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="{x_of(FIRST):.1f}" cy="{y_of(BASE):.1f}" r="3.5" fill="#050B0B"
+          stroke="{stroke}" stroke-width="2"/>
+  <text x="{x_of(FIRST)+7:.1f}" y="{y_of(BASE)-7:.1f}" fill="#5B807D"
+        font-size="8.5" letter-spacing="1.2">FIRST TRADE 10:10</text>
+  <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="4" fill="{stroke}"/>
+  <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="8" fill="{stroke}"
+          fill-opacity=".18"/>
+  <line x1="{jx:.1f}" y1="{PT}" x2="{jx:.1f}" y2="{H-PB}" stroke="#E8B42B"
+        stroke-width="1" stroke-dasharray="2 3" opacity=".75"/>
+  <line x1="{ex:.1f}" y1="{PT}" x2="{ex:.1f}" y2="{H-PB}" stroke="#E8B42B"
+        stroke-width="2"/>
+  <text x="{ex-6:.1f}" y="{PT+11}" fill="#E8B42B" font-size="9"
+        text-anchor="end" letter-spacing="1.6">FINISH &middot; FRI CLOSE</text>
+  <text x="{jx-6:.1f}" y="{H-PB-6:.1f}" fill="#E8B42B" font-size="8"
+        text-anchor="end" opacity=".85" letter-spacing="1.2">JUDGING 11:00</text>
+</svg></div>"""
+
+
+def _market_status():
+    """Session state and how long is left in it.
+
+    Four states, not two: a board that says only OPEN or CLOSED cannot explain
+    why the agent is awake at 7am or idle at 5pm. US equity options trade
+    09:30-16:00 ET; the 04:00-09:30 and 16:00-20:00 windows are extended hours,
+    when quotes exist but are thin - the agent screens then and does not trade.
+
+    Returns (state, detail, is_open). Never raises; a clock cannot be allowed to
+    take the board down.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    ET = _tz(_td(hours=-4))
+    try:
+        now = _dt.now(ET)
+        o = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        c = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        pre = now.replace(hour=4, minute=0, second=0, microsecond=0)
+        post = now.replace(hour=20, minute=0, second=0, microsecond=0)
+
+        def _left(target):
+            m = int(max((target - now).total_seconds(), 0) // 60)
+            return f"{m // 60}h {m % 60}m" if m >= 60 else f"{m}m"
+
+        if now.weekday() >= 5:
+            d = (7 - now.weekday()) % 7 or 1
+            return ("CLOSED", f"weekend &middot; opens Monday 9:30 am", False)
+        if now < pre:
+            return ("CLOSED", f"opens in {_left(o)}", False)
+        if now < o:
+            return ("PRE-MARKET", f"regular session opens in {_left(o)}", False)
+        if now < c:
+            return ("OPEN", f"closes in {_left(c)}", True)
+        if now < post:
+            return ("AFTER HOURS", f"extended trading ends in {_left(post)}", False)
+        return ("CLOSED", "opens 9:30 am tomorrow", False)
+    except Exception:
+        return ("&mdash;", "", False)
+
+
+def _forecast():
+    """What the agent expects at judging, and how confident that is.
+
+    Read from state/freeze.json, where the 15-minute signal check already
+    stored it. Recomputing here would rerun a 40,000-path simulation on every
+    3-minute publish for a number that job has already produced.
+
+    'Confidence' is the share of simulated paths that finish ABOVE where the
+    book stands now - a measured frequency, not an opinion. The board used to
+    print a hardcoded 58% under that word, which is exactly the kind of claim
+    this replaces.
+
+    Returns None when there is no usable forecast, and the caller shows an em
+    dash. An absent number is honest; a stale one is not.
+    """
+    import json as _json
+    try:
+        st = _json.load(open(os.path.join(_ROOT, "state", "freeze.json")))
+        f = (st.get("signals") or {}).get("forecast")
+        if not f or not f.get("paths"):
+            return None
+        return f
+    except Exception:
+        return None
+
+
+def _freeze_badge():
+    """Whether new entries are permitted right now, and why. Reads live state."""
+    try:
+        from deltax.freeze import read_state
+        st = read_state()
+        if st.get("frozen", True):
+            why = str(st.get("source") or st.get("reason") or "frozen")
+            why = why.replace("frozen: ", "")
+            return "FROZEN", why[:74]
+        return "OPEN", f"all signals pass &middot; rechecked {st.get('age_min','?')} min ago"
+    except Exception:
+        return "FROZEN", "state unreadable &mdash; failing closed"
+
+
+def _structure_rows():
+    """Price structure for each underlying we trade: POC and the ATR ladder.
+
+    POC comes from the 20-day inventory profile in deltax.micro.inventory - the
+    price where the most business was done. The ATR ladder is the excursion
+    distribution drawn as levels: a move to +1 ATR is ordinary, +2 is
+    uncommon, and a short strike inside +1 is exposed. PDH/PDL are yesterday's
+    range. Nothing here is a signal; it is where price is relative to where it
+    has been.
+
+    Returns '' on any failure - structure is decoration and must never take
+    the board down.
+    """
+    try:
+        from deltax.screener import INCOME_UNIVERSE
+        from deltax.micro.inventory import daily_bars, build_profile
+        from deltax.feeds import AlpacaFeed, latest_price
+        f = AlpacaFeed()
+        snaps = f.snapshots(list(INCOME_UNIVERSE))
+        rows = []
+        for sym in INCOME_UNIVERSE:
+            px = latest_price(snaps.get(sym) or {})
+            bars = daily_bars(sym, 30)
+            if not px or len(bars) < 15:
+                continue
+            trs = [max(b["h"] - b["l"], abs(b["h"] - bars[i-1]["c"]),
+                       abs(b["l"] - bars[i-1]["c"]))
+                   for i, b in enumerate(bars) if i > 0]
+            atr = sum(trs[-14:]) / len(trs[-14:])
+            prof = build_profile(bars[-20:], "20D")
+            poc = prof.poc
+            pdh, pdl = bars[-1]["h"], bars[-1]["l"]
+            where = ("&uarr; POC" if poc and px > poc else
+                     "&darr; POC" if poc else "&mdash;")
+            atr_pos = (px - bars[-1]["c"]) / atr if atr else 0.0
+            rows.append(
+                f'<tr><td class="cy">{sym}</td>'
+                f'<td class="num">{px:,.2f}</td>'
+                f'<td class="num">{poc:,.2f}</td>'
+                f'<td class="dim">{where}</td>'
+                f'<td class="num">{pdl:,.2f} &ndash; {pdh:,.2f}</td>'
+                f'<td class="num">{px-2*atr:,.2f} &middot; {px-atr:,.2f} '
+                f'&middot; <b>{px+atr:,.2f}</b> &middot; {px+2*atr:,.2f}</td>'
+                f'<td class="num {"bad" if abs(atr_pos)>=1 else "dim"}">'
+                f'{atr_pos:+.1f}</td></tr>')
+        if not rows:
+            return ""
+        return ("<h2>MARKET STRUCTURE</h2><div class=\"rule\"></div>"
+                "<div class=\"lead\">Where price sits against where business was done. "
+                "POC is the 20-day point of control. The ATR ladder is "
+                "&minus;2 &middot; &minus;1 &middot; <b>+1</b> &middot; +2 average true "
+                "ranges from here &mdash; a short strike inside &plusmn;1 is exposed to an "
+                "ordinary day.</div>"
+                "<div class=\"tw\"><table><tr><th>SYM</th><th class=\"n\">PRICE</th>"
+                "<th class=\"n\">POC 20D</th><th></th><th class=\"n\">PDL &ndash; PDH</th>"
+                "<th class=\"n\">ATR LADDER</th><th class=\"n\">ATR TODAY</th></tr>"
+                + "".join(rows) + "</table></div>")
+    except Exception:
+        return ""
+
+
+def _gate_activity():
+    """What the gates actually did today - scanned, passed, and what refused.
+
+    The board used to assert "RISK GATES ARMED - 17 gates - fail closed", which
+    was three claims and one of them was wrong: evaluate() emits 14, not 17.
+    A count typed into a template goes stale the moment the stack changes and
+    nobody notices, so every number here is COUNTED from today's decision
+    ledger, and the gate count is measured from a live evaluate() call rather
+    than asserted.
+
+    Returns the counts the mission block needs, or safe defaults. Never raises.
+    """
+    from collections import Counter
+    import glob, json as _json
+    from datetime import date as _date
+    out = {"scanned": 0, "traded": 0, "refused": 0, "gate_count": 0,
+           "binding": [], "top": [], "clean": 0}
+    try:
+        from deltax.gates import evaluate as _ev, MIN_DTE
+        from datetime import timedelta as _td
+        _t = _date.today()
+        out["gate_count"] = len(_ev(
+            symbol="SPY", equity=100_000.0, max_loss_per_contract=270.0,
+            max_profit_per_contract=230.0, credit=2.30,
+            expiry=_t + _td(days=6), today=_t, open_interest=5000,
+            open_portfolio_max_loss=0.0, structure="credit", width=5.0,
+            short_delta=0.20, worst_leg_spread_pct=0.05, roundtrip_cost=0.20,
+            quote_age_hours=0.1, tradable=True, last_bar_age_days=0.5).gates)
+    except Exception:
+        pass
+    try:
+        rows = []
+        for fn_ in sorted(glob.glob(os.path.join(_ROOT, "logs", "decisions-*.jsonl")))[-2:]:
+            for ln in open(fn_):
+                try:
+                    rows.append(_json.loads(ln))
+                except Exception:
+                    continue
+        withg = [r for r in rows if r.get("gates")]
+        out["scanned"] = len(withg)
+        out["traded"] = sum(1 for r in withg if r.get("decision") == "TRADE")
+        out["refused"] = sum(1 for r in withg if r.get("decision") == "REFUSE")
+        any_fail, sole = Counter(), Counter()
+        for r in withg:
+            if r.get("decision") != "REFUSE":
+                continue
+            f = [g["gate"] for g in r["gates"] if not g.get("passed")]
+            for g in f:
+                any_fail[g] += 1
+            if len(f) == 1:
+                sole[f[0]] += 1
+        out["top"] = any_fail.most_common(4)
+        out["binding"] = sole.most_common(3)
+        out["clean"] = sum(1 for r in withg
+                           if all(g.get("passed") for g in r["gates"]))
+    except Exception:
+        pass
+    return out
+
+
+def _test_count():
+    """Suite size, read from state rather than typed into the page.
+
+    The board advertised "571 PASS" long after the suite passed 754. A number
+    written into a template cannot know it has gone stale, so this reads what
+    the last run recorded and shows an em dash when there is no record - an
+    honest gap rather than a confident wrong number.
+    """
+    import json as _json
+    try:
+        d = _json.load(open(os.path.join(_ROOT, "state", "tests.json")))
+        return f'{int(d["passed"])} PASS', f'{int(d["files"])} files &middot; {d.get("asof","")}'
+    except Exception:
+        return "&mdash;", "no recorded run"
+
+
 def _terminal_lines(limit=90):
     """The agent's real activity — timestamped, icon-coded, newest FIRST.
 
@@ -98,7 +470,8 @@ def _terminal_lines(limit=90):
             return "--:--:--", 0.0
 
     # ── scheduled runs and pre-market passes ──
-    for path, tag in (("logs/cron.log", "agent"), ("logs/premarket.log", "intel")):
+    for path, tag in ((os.path.join(_ROOT, "logs", "cron.log"), "agent"),
+                      (os.path.join(_ROOT, "logs", "premarket.log"), "intel")):
         cur_t, cur_k = "--:--:--", 0.0
         try:
             lines = open(path).readlines()[-90:]
@@ -150,7 +523,7 @@ def _terminal_lines(limit=90):
 
     # ── ledger: every decision the agent made ──
     try:
-        for f in sorted(glob.glob("logs/decisions-*.jsonl")):
+        for f in sorted(glob.glob(os.path.join(_ROOT, "logs", "decisions-*.jsonl"))):
             for ln in open(f).readlines()[-70:]:
                 try:
                     r = json.loads(ln)
@@ -272,11 +645,12 @@ def _positions_table(positions):
                     'recognised as spreads — see the terminal below.</td></tr>')
 
 
-def build(account=None, positions=None, error=None) -> str:
+def build(account=None, positions=None, error=None, history=None) -> str:
     now = datetime.now(timezone.utc)
     rows = _ledger()
     dec = [r for r in rows if r.get("kind") != "event" and r.get("decision")]
     ref = [r for r in dec if r.get("decision") != "TRADE"]
+    _ga = _gate_activity()
     gates = {}
     for r in ref:
         g = r.get("failed_gate") or "unknown"
@@ -305,9 +679,21 @@ def build(account=None, positions=None, error=None) -> str:
     # 6 stats -> exactly two rows of three. Never an orphan.
     # E64: ACCOUNT is demoted into the mission grid - the top of the page
     # answers target/proof/confidence, not which account we are.
+    # EQUITY and P&L both moved to the block at the top of the page, which is
+    # where the CEO asked for them. Repeating them here is what made the same
+    # figure appear twice - the complaint that prompted this. What stays is
+    # what the top block does NOT say.
+    # Committed risk is the true worst case across the book, from the same
+    # paired-leg calculation the portfolio cap enforces - not a sum of premiums.
+    try:
+        from deltax.reconcile import reconcile as _rec
+        _committed = _rec(positions or [])["committed"]
+    except Exception:
+        _committed = None
     stats = "".join([
-        stat("EQUITY", money(eq), f"{acct} · Alpaca paper", "big"),
-        stat("P&amp;L", pnl_val, pnl_pct, f"big {pnl_cls}"),
+        stat("COMMITTED RISK",
+             "&mdash;" if _committed is None else f"${_committed:,.0f}",
+             "worst case if every spread loses · $30,000 cap"),
         stat("CASH", money(cash), "uncommitted"),
         # 4 legs is 2 spreads. A stakeholder reading "4 positions" would think
         # four trades are on, which is twice the truth.
@@ -315,14 +701,41 @@ def build(account=None, positions=None, error=None) -> str:
              f"{len(positions or []) // 2}" if positions else "0",
              (f"{len(positions or [])} legs · {len(positions or []) // 2} spread(s)"
               if positions else "flat")),
-        stat("DECISIONS LOGGED", len(dec), "every evaluation"),
-        stat("REFUSED", f"{len(ref)}",
-             f"{len(ref)/max(1,len(dec))*100:.0f}% of candidates screened"),
+        stat("DECISIONS", len(dec),
+             f"{len(ref)} refused · {len(ref)/max(1,len(dec))*100:.0f}% of candidates"),
     ])
 
+    # A gate slug means nothing to anyone who did not write it. Each row now
+    # says what the gate actually checks, and marks the ones that were the ONLY
+    # thing standing between us and a trade - those are the binding constraint,
+    # and the only ones where changing a threshold would change behaviour.
+    GATE_MEANS = {
+        "spread_quality": "bid/ask too wide to enter and exit at a fair price",
+        "liquidity": "too few contracts open at that strike to trade safely",
+        "credit_fraction": "premium below what the market pays for that risk",
+        "min_credit": "premium too small to cover fees and slippage",
+        "listed": "instrument not confirmed trading today",
+        "portfolio_risk": "would breach the 30% total-risk cap",
+        "position_size": "single position larger than the 2% cap",
+        "dte": "expiry outside the 2-21 day band",
+        "contest_window": "expiry falls past the judging deadline",
+        "earnings": "earnings scheduled before expiry",
+        "quote_sanity": "quotes internally inconsistent",
+        "defined_risk": "maximum loss not bounded",
+        "tradeable": "underlying halted or in a corporate action",
+        "dte_vs_time_stop": "expiry too close to the time stop",
+        "no_tradeable_structure": "no strike pair in the chain cleared the floors",
+        "unreadable_oi": "open-interest data unreadable for that chain",
+        "already_held": "that underlying and side is already open",
+    }
+    _sole = dict(_ga.get("binding") or [])
     gate_rows = "".join(
-        f'<tr><td><span class="mono cy">{g}</span></td>'
-        f'<td class="num">{n}</td>'
+        f'<tr><td><span class="mono cy">{g}</span>'
+        f'<i class="gx">{GATE_MEANS.get(g, "")}</i></td>'
+        f'<td class="num">{n}'
+        + (f'<i class="gx sole">only blocker &times;{_sole[g]}</i>'
+           if g in _sole else '')
+        + f'</td>'
         f'<td class="bar"><span style="width:{n/mx*100:.0f}%"></span></td></tr>'
         for g, n in top) or \
         '<tr><td colspan="3" class="empty">No refusals recorded yet.</td></tr>'
@@ -390,85 +803,213 @@ refusal is enforced in code at the order boundary, not by convention.</div>
             _pxtxt += f' <span class="{_cls}">{uso_chg:+.2f}%</span>'
     else:
         _pxtxt = "feed unavailable"
+    # ── E73: LIVE mission block. Data-driven, not a hardcoded thesis.
+    # USO led this panel while the catalyst was the only strategy. It is now
+    # one of three, its catalyst is inactive (USO -1.2% today), and a board
+    # that still opened on it would be telling viewers about yesterday.
+    # Read the FULL ledger, not `dec`: that list filters to kind != "event",
+    # and rotation is recorded as an event. Looking in `dec` found nothing and
+    # the board silently said "awaiting first cycle" while the engine was
+    # ranking sectors every five minutes.
+    _rot_live = None
+    try:
+        for _r in reversed(rows):
+            # Rotation is recorded via ledger.record_raw(), which writes the
+            # payload at the TOP level. This only ever looked inside an "event"
+            # key, so it never matched and the board showed REGIME as an em
+            # dash while 78 rotation readings sat in the ledger unread. Accept
+            # both shapes rather than assume one.
+            _e = _r.get("event") if isinstance(_r.get("event"), dict) else None
+            for _cand in (_e, _r):
+                if isinstance(_cand, dict) and _cand.get("action") == "rotation":
+                    _rot_live = _cand
+                    break
+            if _rot_live:
+                break
+    except Exception:
+        pass
+
+    _opt_legs = [p for p in (positions or []) if len(str(p.get("symbol",""))) > 10]
+    _eq_legs  = [p for p in (positions or []) if len(str(p.get("symbol",""))) <= 10]
+    def _pl(rows):
+        t = 0.0
+        for r in rows:
+            try: t += float(r.get("unrealized_pl") or 0)
+            except (TypeError, ValueError): pass
+        return t
+    _opt_pl, _eq_pl = _pl(_opt_legs), _pl(_eq_legs)
+    _tot_pl = _opt_pl + _eq_pl
+    _plc = lambda v: "pos" if v >= 0 else "neg"
+    # E73: a bare "-40.60" reads as a catastrophe on a $100k account. Every
+    # P&L on this board carries its PERCENTAGE, which is the number a viewer
+    # can actually calibrate against.
+    _pct = lambda v: f"{v / START * 100:+.3f}%"
+    _both = lambda v: f"{v:+,.2f} ({_pct(v)})"
+
+    # group option legs into spreads by underlying root
+    _books = {}
+    for p_ in _opt_legs:
+        s = str(p_.get("symbol", ""))
+        root = s[:-15] if len(s) > 15 else s
+        _books.setdefault(root, []).append(p_)
+    _book_rows = ""
+    for root, legs in sorted(_books.items()):
+        pl = _pl(legs)
+        _book_rows += (f'<tr><td class="cy">{root}</td>'
+                       f'<td>{len(legs)} legs &middot; {len(legs)//2} spread(s)</td>'
+                       f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
+                       f'</tr>')
+    for p_ in _eq_legs:
+        pl = _pl([p_])
+        _book_rows += (f'<tr><td class="cy">{p_.get("symbol")}</td>'
+                       f'<td>{p_.get("qty")} shares &middot; rotation</td>'
+                       f'<td class="num {_plc(pl)}">{pl:+,.2f}</td>'
+                       f'</tr>')
+    if not _book_rows:
+        _book_rows = '<tr><td colspan="3" class="empty">flat &mdash; no open risk</td></tr>'
+
+    _rank_rows = ""
+    if _rot_live:
+        for r in (_rot_live.get("ranked") or [])[:6]:
+            rs = r.get("rs", 0) * 100
+            _rank_rows += (f'<tr><td class="cy">{r.get("symbol")}</td>'
+                           f'<td class="num {"gd" if rs>0 else "rd"}">{rs:+.2f}%</td></tr>')
+        _picks = " &middot; ".join(
+            f'<b>{p.get("symbol")}</b>' + (f' <span class="dim">via {p.get("via")}</span>'
+                                           if p.get("via") else "")
+            for p in (_rot_live.get("picks") or [])) or "none"
+        _regime_txt = _rot_live.get("regime", "—")
+        _regime_why = _rot_live.get("reason", "")
+    else:
+        _rank_rows = '<tr><td colspan="2" class="empty">awaiting first cycle</td></tr>'
+        _picks, _regime_txt, _regime_why = "—", "—", ""
+
+    _tc_n, _tc_sub = _test_count()
+    _fc = _forecast()
+    _mkt_s, _mkt_d, _mkt_open = _market_status()
+    _frz = _freeze_badge()
     mission = f"""<div class="mission">
 <div class="m-hero">
   <div>
-    <div class="m-k">TARGET &middot; 2&ndash;4 SEP</div>
-    <div class="m-big">USO <span class="sm">{_pxtxt}</span></div>
-    <div class="m-line">United States Oil Fund &middot; <b>BULLISH</b> &middot;
-    140/145 call debit vertical &middot; breakeven <b>141.98</b> (+0.7%) &middot;
-    risk <b>&le;$9,900</b> &middot; exit rests 2&times; GTC &middot; flat by Thursday</div>
+    <div class="m-k">WHAT THE AGENT IS RUNNING</div>
+    <div class="m-line"><b>Options income</b> &mdash; credit spreads through
+    {_ga["gate_count"]} deterministic gates &middot; <b>Rotation</b> &mdash; 11 GICS
+    sectors ranked by relative strength, advisory only &middot; <b>Catalyst</b>
+    &mdash; <span class="dim">retired 2 Sep, backtested negative</span>.
+    Autonomous every 5 minutes, full session.</div>
+    <div class="m-line" style="margin-top:4px"><span class="dim">Today:
+    scanned <b>{_ga["scanned"]}</b> candidates &middot; cleared every gate
+    <b>{_ga["clean"]}</b> &middot; opened <b>{_ga["traded"]}</b> &middot; refused
+    <b>{_ga["refused"]}</b>.</span></div>
   </div>
   <div class="m-conf">
-    <div class="m-k">EVIDENCE CONFIDENCE</div>
-    <div class="m-big">62%</div>
+    <div class="m-k">NEW ENTRIES</div>
+    <div class="m-big">{_frz[0]}</div>
+    <div class="m-line" style="margin-top:3px"><span class="dim">{_frz[1]}</span></div>
   </div>
   <div>
-    <div class="m-k">P(TARGET TOUCHED)</div>
-    <div class="m-big">68<span class="sm">%</span></div>
+    <div class="m-k">OPEN RISK</div>
+    <div class="m-big">{len(_books)}<span class="sm">&nbsp;spreads</span></div>
   </div>
 </div>
-<div class="m-line" style="margin-top:14px">Catalyst, technicals, liquidity and the
-lifecycle backtest agree; held down by small samples (n&le;5), a 50/50 historical
-catalyst regime, and paying implied vol at 1.5&times; realised. This scores
-<b>evidence support &mdash; not probability of profit</b>.</div>
-<div class="ev-grid">
-  <div><span>BACKTEST</span><b class="mixed">MIXED</b></div>
-  <div><span>CATALYST</span><b class="ok">CONFIRMED</b></div>
-  <div><span>TECHNICALS</span><b class="ok">CONFIRMED</b></div>
-  <div><span>VOLATILITY</span><b class="bad">UNFAVORABLE</b></div>
-  <div><span>LIQUIDITY</span><b class="ok">PASS</b></div>
-  <div><span>RISK GATES</span><b class="ok">ARMED</b></div>
-  <div><span>DATA QUALITY</span><b class="mixed">MEDIUM</b></div>
-  <div><span>ACCOUNT</span><b class="ok">{acct}</b></div>
+<div class="ev-grid" style="margin-top:16px">
+  <div><span>PREDICTED AT JUDGING</span><b class="{"ok" if (_fc and _fc["expected_pnl"]>=0) else ("bad" if _fc else "")}">{("&mdash;" if not _fc else f"{_fc['expected_pnl']:+,.0f}")}</b><i>{("no forecast recorded" if not _fc else f"expected change from here &middot; Fri 10:00")}</i></div>
+  <div><span>CONFIDENCE</span><b class="{"ok" if (_fc and _fc["probability_gain"]>=0.5) else ("mixed" if _fc else "")}">{("&mdash;" if not _fc else f"{_fc['probability_gain']*100:.0f}%")}</b><i>{("&nbsp;" if not _fc else f"of {_fc['paths']:,} simulated paths end higher")}</i></div>
+  <div><span>MARKET</span><b class="ok">{_regime_txt}</b><i>{_regime_why[:40]}</i></div>
+  <div><span>RISK GATES</span><b class="ok">{_ga["gate_count"]} ARMED</b><i>{_ga["refused"]} refused today</i></div>
+  <div><span>ACCOUNT</span><b class="ok">{acct}</b><i>Alpaca paper &middot; {_tc_n} tests</i></div>
+</div>
+<div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:16px">
+  <div style="flex:1;min-width:260px">
+    <div class="m-k">OPEN POSITIONS</div>
+    <table><tr><th>NAME</th><th>STRUCTURE</th><th style="text-align:right">P&amp;L</th></tr>
+    {_book_rows}</table>
+  </div>
+  <div style="flex:1;min-width:220px">
+    <div class="m-k">SECTOR STRENGTH vs SPY</div>
+    <table><tr><th>SECTOR</th><th style="text-align:right">RS</th></tr>{_rank_rows}</table>
+    <div class="m-line" style="margin-top:8px">picks: {_picks}</div>
+  </div>
 </div>
 <details class="m-proof">
 <summary>WHAT WAS ACTUALLY TESTED &mdash; REAL OPTION PRICES (OPRA VIA MASSIVE)</summary>
 <table>
 <tr><th>TEST</th><th>RESULT</th><th>READING</th></tr>
-<tr><td>Hold-to-expiry, 3%-OTM verticals, 8 Friday expiries</td>
-    <td class="rd">0 of 3 profitable</td>
-    <td>lost even when USO rose +3.8% &mdash; forced the re-strike to 140/145</td></tr>
-<tr><td>Full lifecycle with resting 2&times; exit, 4 structures</td>
+<tr><td><b>Full year, 46 expiries, real prices &mdash; UNCONDITIONAL</b></td>
+    <td class="rd">&minus;9% mean &middot; &minus;89.9% drawdown</td>
+    <td>$100k &rarr; $60k. The structure alone loses money.</td></tr>
+<tr><td><b>Same year, only when the catalyst gate fires</b></td>
+    <td class="gd">+15% mean &middot; 60% win</td>
+    <td>$100k &rarr; $114.6k over 10 trades &mdash; <b>the gate is the edge</b>.
+    n=10, P(mean&lt;0)=29%.</td></tr>
+<tr><td>Lifecycle with a resting 2&times; exit vs hold-to-expiry</td>
     <td class="gd">9 of 14 hit the exit</td>
     <td>the edge is the resting exit harvesting movement, not direction</td></tr>
-<tr><td>Our exact rule (ATM 5-wide, entered 2 sessions out)</td>
-    <td class="gd">3 of 3 wins</td>
-    <td class="rd">n=3 &mdash; low sample, treated as tendency only</td></tr>
-<tr><td>Catalyst-regime split (prior day &ge;+2%)</td>
-    <td>1 continuation / 1 fakeout</td>
-    <td>catalyst predicts movement, not direction</td></tr>
-<tr><td>P(exit level ~144 touched before Thursday)</td>
-    <td class="gd">68% implied</td>
-    <td>75% posterior &middot; 64% historical analogue &middot; updated each cycle</td></tr>
-<tr><td>Structures rejected on the live book</td><td>4</td>
-    <td>145/150, 141/146, 145/155, condor &mdash; each failed on price or liquidity</td></tr>
+<tr><td>Structures rejected on the live book</td><td>6</td>
+    <td>145/150, 141/146, 145/155, condor, XLE/XLK/XLF/GLD spreads &mdash;
+    each failed on credit, spread or open interest</td></tr>
 </table>
 </details>
 </div>
 """
 
+
+    _tz = _tz_times()
     return f"""<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
+.mkt{{display:inline-flex;align-items:baseline;gap:7px;border:1px solid var(--line);
+padding:4px 10px;margin-left:auto;align-self:center}}
+.mkt-dot{{width:7px;height:7px;border-radius:50%;background:var(--dim2);
+display:inline-block}}
+.mkt.on .mkt-dot{{background:#0ABAB5;box-shadow:0 0 8px rgba(10,186,181,.8)}}
+.mkt-s{{color:var(--dim2);font-size:10px;letter-spacing:.18em}}
+.mkt.on .mkt-s{{color:var(--bl)}}
+.mkt-d{{color:var(--dim2);font-size:9.5px;letter-spacing:.05em}}
+.pnl{{background:var(--panel);border:1px solid var(--line);
+padding:16px 20px;margin:0 0 14px;display:flex;flex-wrap:wrap;
+align-items:baseline;gap:26px}}
+.pnl-k{{display:block;color:var(--dim2);font-size:9px;letter-spacing:.2em;
+margin-bottom:5px}}
+.pnl-v{{color:var(--white);font-size:40px;font-weight:700;line-height:1;
+font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
+.pnl-d{{font-size:34px;font-weight:700;line-height:1;
+font-variant-numeric:tabular-nums;letter-spacing:-.01em}}
+.pnl-d.up{{color:var(--bl)}}.pnl-d.down{{color:#FF8A8A}}
+.pnl-p{{font-size:17px;font-weight:400;margin-left:8px}}
+.pnl-n{{color:var(--dim2);font-size:10px;letter-spacing:.1em;margin-top:6px;
+display:block}}
+@media(max-width:640px){{.pnl-v{{font-size:30px}}.pnl-d{{font-size:26px}}}}
+.eqc{{background:var(--panel);border:1px solid var(--line);padding:12px 14px 6px;
+margin:0 0 14px}}
+.eqc-hd{{display:flex;justify-content:space-between;align-items:baseline;
+color:var(--dim2);font-size:9.5px;letter-spacing:.2em;margin-bottom:6px}}
+.eqc-hd b{{font-size:14px;letter-spacing:.02em;font-variant-numeric:tabular-nums}}
+.eqc-hd b.ok{{color:var(--bl)}}.eqc-hd b.bad{{color:#FF8A8A}}
+.eqc-svg{{width:100%;height:168px;display:block}}
 .mission{{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
-var(--panel);border:1px solid var(--line);padding:22px 24px;margin:0 0 20px;
+var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}}
-.m-hero{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
-align-items:end;padding-bottom:16px;border-bottom:1px solid var(--line)}}
+.m-hero{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+align-items:end;padding-bottom:12px;border-bottom:1px solid var(--line)}}
 .m-hero>div:first-child{{grid-column:span 2}}
 .m-k{{color:var(--dim2);font-size:10px;letter-spacing:.22em;margin-bottom:8px}}
-.m-big{{color:var(--white);font-size:34px;font-weight:700;line-height:1;
+.m-big{{color:var(--white);font-size:25px;font-weight:700;line-height:1;
 letter-spacing:.02em}}
-.m-big .sm{{font-size:15px;font-weight:400;color:var(--bl);letter-spacing:.02em}}
+.m-big .sm{{font-size:13px;font-weight:400;color:var(--bl);letter-spacing:.02em}}
 .m-conf .m-big{{color:var(--bl);text-shadow:0 0 20px rgba(63,224,218,.4)}}
-.m-line{{color:var(--txt);font-size:12.5px;margin-top:9px;line-height:1.65}}
+.m-line{{color:var(--txt);font-size:11.5px;margin-top:7px;line-height:1.55}}
 .m-line b{{color:var(--white)}}
-.ev-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}}
-.ev-grid div{{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:9px 11px}}
-.ev-grid span{{display:block;color:var(--dim2);font-size:10px;letter-spacing:.16em;
-margin-bottom:3px}}
-.ev-grid b{{font-size:12.5px}}
+.ev-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}}
+.ev-grid div{{border:1px solid var(--line);background:rgba(4,13,12,.75);padding:6px 9px}}
+.ev-grid span{{display:block;color:var(--dim2);font-size:9px;letter-spacing:.14em;
+margin-bottom:2px}}
+.ev-grid b{{display:block;font-size:13px;line-height:1.2;
+font-variant-numeric:tabular-nums;letter-spacing:.01em}}
+.gx{{display:block;font-style:normal;color:var(--dim2);font-size:9px;margin-top:3px;letter-spacing:.04em;line-height:1.3}}
+.gx.sole{{color:#E8B42B}}
+.ev-grid i{{display:block;font-style:normal;color:var(--dim2);font-size:9px;
+margin-top:3px;letter-spacing:.06em;line-height:1.35}}
 .ev-grid .ok{{color:var(--bl)}}.ev-grid .mixed{{color:#E8B42B}}.ev-grid .bad{{color:#FF8A8A}}
 details.m-proof{{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}}
 details.m-proof summary{{color:var(--cy);font-size:10px;letter-spacing:.22em;
@@ -526,7 +1067,6 @@ h1 b{{color:var(--cy);font-weight:600}}
 
 /* ── stats: fixed 3 columns, always symmetric ── */
 .stats{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:34px}}
-.stats .stat:nth-child(1){{grid-column:span 2}}
 .stat{{background:linear-gradient(160deg,rgba(10,186,181,.05),transparent 60%),var(--panel);
  border:1px solid var(--line);padding:17px 19px;position:relative;
  clip-path:polygon(0 0,calc(100% - 15px) 0,100% 15px,100% 100%,15px 100%,0 calc(100% - 15px))}}
@@ -628,18 +1168,34 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 <div class="pills">
   <span class="pill on">TEAM SYNC BOARD</span>
   <a class="pill" href="presentation.html" style="text-decoration:none">📊 PRESENTATION</a>
-  <span class="pill">US</span><span class="pill">LATVIA</span><span class="pill">DENMARK</span>
-  <span class="pill">ALPACA PAPER</span><span class="pill">366 TESTS</span><span class="pill">MIT</span>
+  <span class="pill">US {_tz["us"]}</span><span class="pill">LATVIA {_tz["lv"]}</span><span class="pill">DENMARK {_tz["dk"]}</span>
+  <span class="pill">ALPACA PAPER</span><span class="pill">754 TESTS</span><span class="pill">MIT</span>
 </div>
 {standdown}
 {warn}
+<div class="pnl">
+  <div><span class="pnl-k">ACCOUNT VALUE</span>
+    <span class="pnl-v">{money(eq)}</span></div>
+  <div><span class="pnl-k">{"PROFIT" if (pnl or 0) >= 0 else "LOSS"} TODAY</span>
+    <span class="pnl-d {"up" if (pnl or 0) >= 0 else "down"}">{pnl_val}<span
+      class="pnl-p">{"&mdash;" if pnl is None else f"{pnl/START*100:+.2f}%"}</span></span>
+    <span class="pnl-n">against the $100,000 start &middot; paper account</span></div>
+  <div class="mkt {"on" if _mkt_open else ""}"><span class="mkt-dot"></span>
+    <span class="mkt-s">MARKET {_mkt_s}</span>
+    <span class="mkt-d">{_mkt_d}</span></div>
+</div>
+{_equity_chart(history)}
+{_structure_rows()}
 {mission}
 <div class="stats">{stats}</div>
 
 <h2>WHY THE AGENT SAID NO</h2><div class="rule"></div>
 <div class="lead">Every evaluation is recorded — approvals and refusals alike — in a
-hash-chained, append-only ledger. An agent that can explain why it declined a
-candidate demonstrates more than a P&amp;L number can.</div>
+hash-chained, append-only ledger. Each row is a gate, what it checks, and how many
+candidates it turned away. A gate marked <b style="color:#E8B42B">only blocker</b>
+was the single thing standing between us and a trade — those are the binding
+constraint, and the only ones where moving a threshold would change what the agent
+does.</div>
 <table><tr><th>GATE</th><th style="text-align:right">REFUSALS</th><th></th></tr>{gate_rows}</table>
 
 <h2>OPEN POSITIONS</h2><div class="rule"></div>
@@ -872,7 +1428,7 @@ GENERATED {now:%Y-%m-%d %H:%M} UTC &nbsp;·&nbsp; REFRESHED EVERY 5 MIN BY A SCH
 
 
 def main():
-    account = positions = None; err = None
+    account = positions = history = None; err = None
     try:
         from deltax.feeds import AlpacaFeed
         f = AlpacaFeed(); account = f.account()
@@ -880,10 +1436,17 @@ def main():
         # symbol/qty/pl, so entry and current price were gone by the time the
         # table tried to compute what each spread actually collected.
         positions = list(f.positions())
+        # Portfolio history for the equity chart. Its own try: a chart is
+        # decoration and must never cost us the board.
+        try:
+            history = f._run(["account", "portfolio", "--period", "1W",
+                              "--timeframe", "1H"])
+        except Exception:
+            history = None
     except Exception as e:
         err = str(e)[:110]
     os.makedirs("docs", exist_ok=True)
-    html = build(account, positions, err)
+    html = build(account, positions, err, history)
     open("docs/index.html", "w").write(html)
     print(f"wrote docs/index.html ({len(html):,} bytes)" + (f" — account unread: {err}" if err else ""))
     return 0

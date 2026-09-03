@@ -58,6 +58,22 @@ def build_mleg_args(legs: list, qty: int, limit_price: float,
         raise ValueError(f"mleg takes 2-4 legs, got {len(legs)}")
     if qty < 1:
         raise ValueError(f"qty must be >= 1, got {qty}")
+    # E82: rule 3 belongs HERE, not only in submit(). The E80 guard sat in
+    # submit(), but submit() is not the only path to the broker -
+    # manage.place_exit() builds its order with build_close_args() and fires it
+    # through execute._run() directly, never touching submit() or its check.
+    # build_mleg_args is the one function EVERY order-building path runs
+    # through (build_close_args delegates to it), so the check is enforced at
+    # the chokepoint rather than at one of the two doors. submit() keeps its
+    # copy: a caller that never builds args should still be refused.
+    from deltax.reconcile import parse_occ as _occ
+    for _l in legs:
+        _sym = getattr(_l, "symbol", None) or (
+            _l.get("symbol") if isinstance(_l, dict) else None)
+        if _occ(_sym or "") is None:
+            raise ValueError(
+                f"RULE 3 - '{_sym}' is not an options contract. Every leg of "
+                f"every order must be an option.")
     return [
         "order", "submit",
         "--order-class", "mleg",
@@ -126,10 +142,35 @@ def submit(legs: list, qty: int, limit_price: float, *, ledger=None,
     # E42: hard stand-down. Every 2-3 DTE structure the contest window permits
     # tested negative over 26 weeks (-$50,904). This is the one boundary every
     # order crosses, so the rule is enforced here rather than only in markdown.
-    from deltax.gates import gate_trading_enabled
-    _g = gate_trading_enabled()
-    if not _g.passed:
-        raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
+    # E96: a CLOSING order must never be blocked by a stand-down. Both the E42
+    # suspension and the E96 entry freeze exist to stop the agent taking on
+    # risk; refusing an exit does the opposite - it traps the book with no way
+    # out, and would disable the Friday 10:00 flatten the whole contest result
+    # depends on. Opens are gated; closes always pass.
+    from deltax.gates import gate_trading_enabled, gate_new_entries
+    if not close:
+        _g = gate_trading_enabled()
+        if not _g.passed:
+            raise ExecutionRefused(f"TRADING SUSPENDED - {_g.detail}")
+        _f = gate_new_entries()
+        if not _f.passed:
+            raise ExecutionRefused(f"ENTRIES FROZEN - {_f.detail}")
+
+    # E80: hackathon rule 3 - "All strategies must incorporate options trading."
+    # HACKATHON-RULES.md cites the compliance basis as "no equity or crypto leg
+    # trades", and on 2 Sep the rotation engine put $19,830 of plain XOP and IGV
+    # shares in the submission account. Odd lots, so no covered call could be
+    # written against them; they were simply non-compliant. Discipline is not a
+    # control - every leg must now BE an option, checked at the one boundary
+    # every order crosses.
+    from deltax.reconcile import parse_occ as _occ
+    for _l in legs:
+        _sym = getattr(_l, "symbol", None) or (
+            _l.get("symbol") if isinstance(_l, dict) else None)
+        if _occ(_sym or "") is None:
+            raise ExecutionRefused(
+                f"RULE 3 - '{_sym}' is not an options contract. Every strategy "
+                f"must incorporate options; equity legs are refused here.")
     args = (build_close_args(legs, qty, limit_price) if close
             else build_mleg_args(legs, qty, limit_price))
     record = {

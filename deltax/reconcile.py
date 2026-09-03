@@ -39,13 +39,22 @@ def pending(orders: list) -> dict:
     position does not exist yet and the risk absolutely does. Reconciling on
     positions alone treats that window as empty and re-submits into it (E36).
     """
-    held, unparsed = set(), []
+    held, unparsed, equities = set(), [], []
     for o in orders or []:
         legs = o.get("legs") or []
         if not legs:
             sym = o.get("symbol") or ""
             occ = parse_occ(sym)
             if occ is None:
+                # E72: an equity ORDER is not an illegible option. A working
+                # IGV buy was landing in `unparsed`, which made safe_to_open
+                # refuse every new options trade - the same cross-strategy
+                # deadlock the positions path had, one layer up.
+                cls = str(o.get("asset_class") or "").lower()
+                if cls in ("us_equity", "equity") or (
+                        sym.isalpha() and 1 <= len(sym) <= 5):
+                    equities.append(sym)
+                    continue
                 unparsed.append(sym or "?")
                 continue
             held.add((occ["underlying"], occ["right"]))
@@ -59,7 +68,8 @@ def pending(orders: list) -> dict:
             if str(leg.get("position_intent", "")).endswith("_to_close"):
                 continue
             held.add((occ["underlying"], occ["right"]))
-    return {"held": held, "unparsed": unparsed, "count": len(orders or [])}
+    return {"held": held, "unparsed": unparsed, "equities": equities,
+            "count": len(orders or [])}
 
 
 def reconcile(positions: list, orders: Optional[list] = None) -> dict:
@@ -70,28 +80,88 @@ def reconcile(positions: list, orders: Optional[list] = None) -> dict:
     legs' notional-at-risk overstates it, which is the safe direction to be
     wrong in when the number gates further risk.
     """
-    held, committed, unparsed = set(), 0.0, []
+    held, committed, unparsed, equities = set(), 0.0, [], []
+    structs: dict = {}          # E79: (underlying, right, expiry) -> legs
     for p in positions or []:
         sym = p.get("symbol", "")
         occ = parse_occ(sym)
         if occ is None:
+            # E72: an EQUITY ticker is not an unparseable option. The rotation
+            # and Alyrise engines hold plain shares (XOP, IGV), and treating
+            # those as "illegible" made safe_to_open refuse ALL new options
+            # risk - one strategy silently disabling another. A short OCC
+            # symbol that is not a valid contract is still a real anomaly and
+            # must stay in `unparsed`; a clean ticker is simply equity.
+            cls = str(p.get("asset_class") or "").lower()
+            if cls in ("us_equity", "equity") or (
+                    sym.isalpha() and 1 <= len(sym) <= 5):
+                equities.append(sym)
+                try:
+                    committed += abs(float(p.get("cost_basis") or 0))
+                except (TypeError, ValueError):
+                    # E85: `pass` here counted the holding as ZERO committed
+                    # risk. The portfolio cap then silently understated the
+                    # book - the same shape as E79, where the risk number did
+                    # not measure risk. The options path below already treats
+                    # an unreadable position as `unparsed`, which fails closed
+                    # via safe_to_open; this module's own contract says an
+                    # unparseable holding must WIDEN the refusal, never be
+                    # silently ignored. Made consistent.
+                    #
+                    # This path is reachable in normal operation: an assigned
+                    # short option becomes an equity position without any order
+                    # being placed, so it bypasses the E82 rule-3 guard.
+                    unparsed.append(sym)
+                continue
             unparsed.append(sym)
             continue
         held.add((occ["underlying"], occ["right"]))
         try:
-            qty = abs(float(p.get("qty") or 0))
-            basis = abs(float(p.get("cost_basis") or 0))
+            qty = float(p.get("qty") or 0)
+            entry = abs(float(p.get("avg_entry_price") or 0))
         except (TypeError, ValueError):
             unparsed.append(sym)
             continue
-        # Short legs carry the risk; long legs are the protection already paid for.
-        if float(p.get("qty") or 0) < 0:
-            committed += max(basis, occ["strike"] * qty * 100 * 0.0)
+        # E79: collect the legs; committed risk is computed from the PAIRED
+        # structure below. The previous line was
+        #     committed += max(basis, occ["strike"] * qty * 100 * 0.0)
+        # whose second term is multiplied by ZERO, so it reduced to `basis` -
+        # the premium RECEIVED on the short leg. That is not max loss. Max loss
+        # on a vertical is (width - credit) x 100 x qty, and the two numbers are
+        # unrelated: measured live on 2 Sep the book's true risk was $32,988
+        # against a believed $27,722, and the 30% portfolio cap was already
+        # breached by $3,175 with no gate aware of it.
+        structs.setdefault((occ["underlying"], occ["right"], occ["expiry"]), {})[
+            "short" if qty < 0 else "long"] = (abs(qty), entry, occ["strike"])
+    # E79: TRUE max loss, per paired structure. A short leg alone tells you
+    # what was received, never what can be lost. Anything unpaired is treated
+    # as a naked short and charged its full notional - the conservative
+    # direction, and the only safe assumption when the protective leg is
+    # missing from the book.
+    for (_u, _r, _e), v in structs.items():
+        sh = v.get("short")
+        if not sh:
+            continue                       # long-only: paid for, carries no risk
+        sq, se, sk = sh
+        lg = v.get("long")
+        if lg:
+            lq, le, lk = lg
+            width = abs(sk - lk)
+            credit = se - le
+            n = min(sq, lq)
+            committed += max(width - credit, 0.0) * 100 * n
+            if sq > lq:                    # partially covered: the rest is naked
+                committed += sk * 100 * (sq - lq)
+        else:
+            committed += sk * 100 * sq     # naked short: full notional
+
     # Fold in anything already working at the broker.
     pend = pending(orders or [])
     held |= pend["held"]
     unparsed += pend["unparsed"]
+    equities += pend.get("equities") or []
     return {"held": held, "committed": committed, "unparsed": unparsed,
+            "equities": equities,
             "count": len(positions or []), "pending": len(pend["held"]),
             "pending_orders": pend["count"]}
 

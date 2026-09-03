@@ -9,7 +9,7 @@ See STRATEGY.md and research/options/golden-rules.md for provenance.
 """
 
 from dataclasses import dataclass, field, asdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 import json
 
@@ -224,6 +224,52 @@ DEMO_NEVER_OVERRIDE  = ("HALT", "NO_NEW_POSITIONS")   # ...but never through
                               # drawdown kill switch. Those are not opinions
                               # about direction - they mean something is broken.
 
+# E96: freeze OPENS only, on the operator's instruction (2 Sep, after the
+# team's risk review). The book is 4.7:1 risk/reward - $14,918 at risk against
+# $3,182 of credit - which needs an 82.4% win rate to break even while the
+# strikes imply about 68%. Held to expiry that is negative; the strategy relies
+# on the resting 50% exits and the Friday 10:00 flatten instead. Freezing new
+# entries fixes the exposure at today's book and lets time decay work on it.
+#
+# This is deliberately NOT TRADING_SUSPENDED. That flag is checked in
+# execute.submit() before anything else and would block CLOSING orders too,
+# which would trap the book. A freeze must never be able to prevent an exit.
+# E97: the live value now lives in state/freeze.json, not here, so the
+# scheduled signal check can lift or reapply it without editing and
+# redeploying source. This constant remains ONLY as the override tests use and
+# as the fallback when the state file cannot be read - in both cases frozen.
+# False = no MANUAL override; state/freeze.json governs. Set to True to force a
+# freeze that no scheduled job can lift - the override is one-directional and
+# only ever toward more caution.
+NEW_ENTRIES_FROZEN = False
+FREEZE_REASON = ("E96: new entries frozen on operator instruction - 4.7:1 "
+                 "risk/reward needs 82.4% win rate vs ~68% implied. Exits, the "
+                 "50% targets and the Friday 10:00 flatten all remain active.")
+
+
+def gate_new_entries() -> GateResult:
+    """May the agent OPEN a position? Exits are never gated by this.
+
+    Reads the state file first. A hard-coded True here still wins, so a manual
+    freeze cannot be undone by a scheduled job - the override is one-directional
+    and only ever toward MORE caution.
+    """
+    if NEW_ENTRIES_FROZEN:
+        return GateResult("new_entries", False, FREEZE_REASON)
+    try:
+        from deltax.freeze import read_state
+        st = read_state()
+    except Exception as e:                      # import or IO trouble: freeze
+        return GateResult("new_entries", False,
+                          f"freeze state unreadable ({type(e).__name__}) - "
+                          f"failing closed")
+    if st.get("frozen", True):
+        return GateResult("new_entries", False,
+                          str(st.get("source") or st.get("reason") or "frozen"))
+    return GateResult("new_entries", True,
+                      f"unfrozen by signal check {st.get('age_min', '?')} min ago")
+
+
 TRADING_SUSPENDED = False
 SUSPENSION_REASON = ("E42 lifted 1 Sep after E44 rebuilt the backtest. "
                      "Re-arm by setting TRADING_SUSPENDED = True.")
@@ -270,19 +316,34 @@ def gate_trading_enabled() -> GateResult:
 
 
 def gate_contest_window(expiry: date) -> GateResult:
-    """Refuse any expiry that finishes after judging.
+    """Bound how far past judging an expiry may run. E68.
 
-    A credit spread pays when it decays, and decay lands in its final days. An
-    18-DTE spread opened in a 4-day contest hands the judges a mid-decay mark,
-    not the result. This was written into the corpus as E17 on 31 Aug and then
-    violated the same afternoon, because nothing enforced it (E37).
+    E17/E37 refused ANY expiry after CONTEST_CLOSE, reasoning that a spread
+    still open at judging "hands the judges a mid-decay mark, not the result".
+    Half of that is right: you do not capture full decay. The other half is
+    wrong, and it is the half that mattered - Alpaca marks options to market
+    and account equity INCLUDES unrealized P&L, so partial decay is a real,
+    counted gain. The rule conflated *realized* profit with *account value*.
+
+    It was also the right rule while a tradeable 4 Sep book existed. Measured
+    on 2 Sep it does not: energy weeklies quote 45-111% spreads, and the index
+    names fail on credit. The live choice is a partial-decay mark on a deep
+    book (SPY 18 Sep: 0% spread, OI 2,710, credit/width 0.139 - above the
+    measured market benchmark) or no trade at all.
+
+    The horizon still has to be bounded: an expiry far past judging decays too
+    little to show anything by Friday, so MAX_DTE remains the outer limit and
+    is what actually constrains this now.
     """
-    ok = expiry <= CONTEST_CLOSE
-    return GateResult(
-        "contest_window", ok,
-        f"expiry {expiry} vs contest close {CONTEST_CLOSE}"
-        + ("" if ok else " - profit would arrive after judging"),
-    )
+    horizon = CONTEST_CLOSE + timedelta(days=MAX_DTE)
+    ok = expiry <= horizon
+    past = expiry > CONTEST_CLOSE
+    note = (f"expiry {expiry} vs contest close {CONTEST_CLOSE}")
+    if ok and past:
+        note += " - past judging, marked to market (partial decay counts)"
+    elif not ok:
+        note += f" - beyond the {MAX_DTE}-day horizon, too little decay to show"
+    return GateResult("contest_window", ok, note)
 
 
 def gate_dte(expiry: date, today: date) -> GateResult:
@@ -328,18 +389,67 @@ def gate_quote_sanity(credit: Optional[float], structure: str,
     return GateResult("quote_sanity", True, "quotes internally consistent")
 
 
-def gate_spread_quality(worst_leg_spread_pct: Optional[float]) -> GateResult:
-    """Bid/ask width on the worst leg, as a fraction of that leg's mid.
+# E74: the round-trip bid/ask cost may not eat more than this share of the
+# credit. Measured live on SMH 540/530: legs quoted 9% and 8% of their own mid,
+# both inside MAX_SPREAD_PCT, but $1.32 of round-trip cost against $2.30 of
+# credit is 57% of the entire trade's profit handed to the market maker. A
+# percentage of the OPTION price says nothing about what the spread costs
+# relative to what the spread PAYS.
+MAX_FRICTION_OF_CREDIT = 0.35
+
+
+def gate_spread_quality(worst_leg_spread_pct: Optional[float],
+                        roundtrip_cost: Optional[float] = None,
+                        credit: Optional[float] = None) -> GateResult:
+    """Two tests: each leg quotes tightly, AND the round trip is affordable.
 
     Wide quotes are a direct tax on entry and, worse, on exit - a spread you
-    cannot close at a fair price is not really defined-risk in practice. Closes
-    the bid/ask criterion AURA specified but our first gate set omitted.
+    cannot close at a fair price is not really defined-risk in practice.
+
+    The second test is E74. `roundtrip_cost` is the sum of both legs' bid/ask
+    widths - what it costs to open and close at the wrong side of each quote -
+    and it is judged against the credit collected, not against the option
+    price. Passing the first test and failing this one is exactly the SMH case:
+    tight-looking legs on a dollar-priced option, more than half the profit
+    consumed before the trade has done anything.
     """
     if worst_leg_spread_pct is None:
         return GateResult("spread_quality", False, "quote missing on at least one leg")
-    ok = worst_leg_spread_pct <= MAX_SPREAD_PCT
+    if worst_leg_spread_pct > MAX_SPREAD_PCT:
+        return GateResult(
+            "spread_quality", False,
+            f"worst leg spread {worst_leg_spread_pct:.1%} vs max {MAX_SPREAD_PCT:.0%}",
+            round(worst_leg_spread_pct, 4), MAX_SPREAD_PCT,
+        )
+    # E87: `roundtrip_cost is None` used to SKIP the friction test silently, so
+    # the gate passed on a candidate whose friction was simply unknown. That
+    # state is reachable: worst_leg_spread_pct is built with
+    # `max(filter(None, [...]), default=None)`, which survives when only ONE leg
+    # quotes, while roundtrip requires BOTH. One unreadable leg therefore gave a
+    # passing spread check with the E74 friction test not running at all - the
+    # same gate-goes-dark-on-partial-data shape as E83. A friction number we
+    # cannot compute is not a friction number we can accept.
+    if credit and roundtrip_cost is None:
+        return GateResult(
+            "spread_quality", False,
+            "round-trip cost unreadable (a leg is missing a two-sided quote) - "
+            "friction cannot be verified, refusing")
+    if roundtrip_cost is not None and credit:
+        share = roundtrip_cost / credit
+        if share > MAX_FRICTION_OF_CREDIT:
+            return GateResult(
+                "spread_quality", False,
+                f"round-trip bid/ask ${roundtrip_cost:.2f} is {share:.0%} of the "
+                f"${credit:.2f} credit (max {MAX_FRICTION_OF_CREDIT:.0%})",
+                round(share, 4), MAX_FRICTION_OF_CREDIT,
+            )
+        return GateResult(
+            "spread_quality", True,
+            f"legs <= {MAX_SPREAD_PCT:.0%}, round trip {share:.0%} of credit",
+            round(share, 4), MAX_FRICTION_OF_CREDIT,
+        )
     return GateResult(
-        "spread_quality", ok,
+        "spread_quality", True,
         f"worst leg spread {worst_leg_spread_pct:.1%} vs max {MAX_SPREAD_PCT:.0%}",
         round(worst_leg_spread_pct, 4), MAX_SPREAD_PCT,
     )
@@ -487,6 +597,45 @@ def gate_no_earnings_before_expiry(
 MAX_BAR_AGE_DAYS = {"equity": 4.0, "crypto": 1.5}
 
 
+MIN_VARIANCE_PREMIUM = 1.10    # implied vol must exceed realised by 10%
+
+
+def gate_variance_premium(iv: Optional[float], rv: Optional[float]) -> GateResult:
+    """Are we being paid MORE than the stock is actually moving?
+
+    E101. Selling a credit spread is selling volatility, so the only edge a
+    seller has is implied vol sitting above what the underlying delivers. If
+    IV/RV < 1 you are selling movement for less than it costs - a mathematically
+    negative trade no strike selection can rescue, because the market has priced
+    the whole curve fairly and moving the short strike trades win rate against
+    payoff at roughly constant expectancy.
+
+    Nothing checked this for the first three days. On 2 Sep the book's largest
+    concentration by far - six SMH spreads, $5,507 and 42% of committed risk -
+    sat at IV/RV 0.91 while DIA offered 1.64 and SPY 1.40. That is not variance,
+    it is a measurable error, and it is most of why the day lost money.
+
+    Fails CLOSED: unreadable vol means no trade. A premium we cannot measure is
+    not a premium we can sell.
+    """
+    if iv is None or rv is None or rv <= 0:
+        return GateResult("variance_premium", False,
+                          "implied or realised vol unreadable - fails closed",
+                          None, MIN_VARIANCE_PREMIUM)
+    ratio = iv / rv
+    # Binary floats: 0.110 / 0.100 is 1.0999999999999999, so a candidate sitting
+    # exactly ON the floor would be refused by representation error rather than
+    # by policy. These are measured volatilities; a 1e-9 difference is not a
+    # risk decision. Compare with a tolerance.
+    ok = ratio >= MIN_VARIANCE_PREMIUM - 1e-9
+    return GateResult(
+        "variance_premium", ok,
+        f"IV {iv:.1%} vs realised {rv:.1%} = {ratio:.2f}x "
+        f"(floor {MIN_VARIANCE_PREMIUM:.2f}x)"
+        + ("" if ok else " - selling movement below what the stock delivers"),
+        round(ratio, 3), MIN_VARIANCE_PREMIUM)
+
+
 def gate_listed(tradable: Optional[bool], last_bar_age_days: Optional[float],
                 asset_class: str = "equity") -> GateResult:
     """Is this instrument actually live RIGHT NOW - not merely in our history?"""
@@ -551,7 +700,10 @@ def evaluate(
     width: Optional[float] = None,
     short_delta: Optional[float] = None,
     worst_leg_spread_pct: Optional[float] = None,
+    roundtrip_cost: Optional[float] = None,   # E74: sum of both legs' bid/ask
     quote_age_hours: Optional[float] = None,
+    implied_vol: Optional[float] = None,
+    realized_vol: Optional[float] = None,
     tradable: Optional[bool] = None,
     last_bar_age_days: Optional[float] = None,
     asset_class: str = "equity",
@@ -599,10 +751,17 @@ def evaluate(
     ]
     # Only enforced when listing evidence was supplied, so existing callers keep
     # working; run.py passes it, and E25 requires it before any live order.
+    # E101: only enforced when vol evidence was supplied, so existing callers
+    # keep working. run.py and screener.py both pass it; a caller that omits it
+    # is not silently exempted - test_wiring asserts both production paths send
+    # it, the same way the E74 friction gate is held to its callers.
+    if structure == "credit" and (implied_vol is not None or realized_vol is not None):
+        gates.append(gate_variance_premium(implied_vol, realized_vol))
     if tradable is not None or last_bar_age_days is not None:
         gates.insert(2, gate_listed(tradable, last_bar_age_days, asset_class))
     if worst_leg_spread_pct is not None:
-        gates.append(gate_spread_quality(worst_leg_spread_pct))
+        gates.append(gate_spread_quality(worst_leg_spread_pct,
+                                         roundtrip_cost, credit))
     # Structure-aware payoff gate: a 2:1 floor would refuse every OTM credit
     # spread (its payoff is its probability), so credit structures are judged
     # on credit/width instead.

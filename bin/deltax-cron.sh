@@ -1,10 +1,12 @@
 #!/bin/bash
-# DELTAX scheduled run — DRY RUN ONLY.
+# DELTAX scheduled run — LIVE. This places real paper orders.
 #
-# Three independent reasons this cannot place an order:
-#   1. no --live flag, so run() is called with dry_run=True
-#   2. DELTAX_ORDERS_ALLOWED is actively unset below
-#   3. execute.preflight() refuses without both of the above
+# E93: the header used to read "DRY RUN ONLY" and list three reasons an order
+# was impossible, while the body below passes --live AND sets
+# DELTAX_ORDERS_ALLOWED=1. Both statements could not be true. Anyone reading
+# the top of this file to decide whether it was safe to edit was being told the
+# opposite of what it does; the comment is now what the script actually is.
+#
 # Do NOT add --force here: that is an analysis switch and would override the
 # trade-permission state (E22). Scheduled runs must obey it.
 
@@ -19,6 +21,31 @@ ALPACA="/opt/homebrew/bin/alpaca"
 
 set -uo pipefail
 cd /Users/pautax/Documents/DELTAX || exit 1
+
+# E93: SINGLE INSTANCE. cron fires every 5 minutes; a healthy cycle takes ~20s,
+# but every broker call retries 3x (E76) against a 30s timeout, so one degraded
+# endpoint can stretch a cycle past 40 minutes. cron keeps firing regardless,
+# so eight or more cycles can run at once - and two cycles that both reconcile
+# the book BEFORE either submits will each size against the same free budget
+# and breach the portfolio cap. That is precisely the failure reconcile.py
+# exists to prevent, reintroduced through concurrency.
+#
+# mkdir is atomic on every filesystem here, unlike a test-then-create pidfile.
+# A lock older than 15 minutes is treated as abandoned (the process died
+# without its trap running) and reclaimed.
+LOCK="/tmp/deltax-cycle.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  LOCK_AGE=$(( $(date +%s) - $(stat -f %m "$LOCK" 2>/dev/null || echo 0) ))
+  if [ "$LOCK_AGE" -gt 900 ]; then
+    echo "$(date -u +%FT%TZ) reclaiming stale lock (${LOCK_AGE}s old)" >> logs/cron.log
+    rm -rf "$LOCK"
+    mkdir "$LOCK" 2>/dev/null || exit 0
+  else
+    echo "$(date -u +%FT%TZ) SKIPPED: a cycle is already running (lock ${LOCK_AGE}s old)" >> logs/cron.log
+    exit 0
+  fi
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
 
 for req in "$PYBIN" "$ALPACA"; do
   if [ ! -x "$req" ]; then

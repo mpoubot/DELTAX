@@ -1,0 +1,23 @@
+30-59/5 8 * * 1-5 /usr/bin/python3 "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/portfolio_bot.py" >> "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/cron.log" 2>&1
+*/5 9-15 * * 1-5 /usr/bin/python3 "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/portfolio_bot.py" >> "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/cron.log" 2>&1
+0,5 16 * * 1-5 /usr/bin/python3 "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/portfolio_bot.py" >> "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/cron.log" 2>&1
+*/10 9-16 * * 1-5 /usr/bin/python3 "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/trade_journal.py" > "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/journal_last.txt" 2>&1
+0,10,20 9 * * 1-5 /usr/bin/python3 "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/scanner.py" >> "/Users/pautax/Documents/PAUTAX Alpaca Sim PT 2/scanner.log" 2>&1
+# DELTAX — pre-market intelligence: news, universe, earnings (04:00-09:59 ET, no trading)
+*/15 4-9 * * 1-5 /Users/pautax/Documents/DELTAX/bin/premarket.sh
+# DELTAX — connection go/no-go, 10 min before the open
+20 9 * * 1-5 /Users/pautax/Documents/DELTAX/bin/preflight.sh >> /Users/pautax/Documents/DELTAX/logs/preflight.log 2>&1
+# DELTAX — trading agent, market hours. LIVE: places real paper orders.
+*/5 9-16 * * 1-5 /Users/pautax/Documents/DELTAX/bin/deltax-cron.sh
+# DELTAX — overnight heartbeat, hourly
+7 0-3,17-23 * * * /Users/pautax/Documents/DELTAX/bin/deltax-cron.sh
+# DELTAX — publish the live board every 3 minutes
+*/3 * * * * /Users/pautax/Documents/DELTAX/bin/publish-dashboard.sh >> /Users/pautax/Documents/DELTAX/logs/publish.log 2>&1
+# DELTAX — freeze signal check: decides whether new entries are permitted.
+# Places no orders. Writes state/freeze.json, which gate_new_entries() reads.
+*/15 9-16 * * 1-5 /Users/pautax/Documents/DELTAX/bin/unfreeze-check.sh
+# DELTAX — close the SMH book at Thu's open (E101: IV/RV 0.91, negative
+# variance premium, 42% of committed risk). One-shot.
+31 9 3 9 * /Users/pautax/Documents/DELTAX/bin/close-smh.sh
+# DELTAX — flatten the book for judging, Fri 4 Sep 10:00 ET
+0 10 4 9 * /Users/pautax/Documents/DELTAX/bin/close-for-judging.sh

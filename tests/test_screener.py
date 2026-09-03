@@ -201,6 +201,7 @@ check("missing data still fails closed at 3/3",
 
 print("\n── E50: vol-premium ranking ──")
 from deltax.screener import rank_by_vol_premium, vol_premium, realized_vol_20
+from deltax.screener import _as_int, LAST_UNREADABLE_OI, search_vertical
 
 class _FakeFeed:
     """IV/RV is controllable per symbol; one symbol is deliberately broken."""
@@ -235,6 +236,123 @@ check("realized vol survives a broken feed",
       realized_vol_20(ff, "BOOM") is None)
 check("ranking with no spots keeps every name",
       len(rank_by_vol_premium(ff, ["RICH", "MID"], "2026-09-04", {})) == 2)
+
+print("\n-- E88: an unreadable OI must be distinguishable from a thin one --")
+# _as_int returns 0 for garbage, which fails closed correctly at gate_liquidity.
+# But 0 and "unknown" are different facts: a chain whose OI field is garbled
+# looks exactly like a legitimately illiquid chain, so choose_expiry skipped the
+# symbol for a DATA fault while reporting nothing.
+_bad = []
+check("E88 a readable value still parses", _as_int("1500", _bad) == 1500)
+check("E88 a readable value records nothing", _bad == [], str(_bad))
+check("E88 unreadable still returns 0 (fails closed downstream)",
+      _as_int("n/a", _bad) == 0)
+check("E88 and the raw value is recorded", len(_bad) == 1, str(_bad))
+check("E88 None is recorded too", _as_int(None, _bad) == 0 and len(_bad) == 2, str(_bad))
+check("E88 the accumulator exists for choose_expiry to fill",
+      isinstance(LAST_UNREADABLE_OI, list))
+_rs = open(os.path.join(os.path.dirname(__file__), "..", "deltax", "run.py")).read()
+check("E88 run.py distinguishes the two refusal reasons",
+      "unreadable_oi" in _rs and "no_liquid_expiry" in _rs)
+
+print("\n-- E92: width is MEASURED, and payoff follows from it --")
+# Found by MUTATION TESTING: hard-coding `width = 5.0` in select_vertical, and
+# inflating max_profit_per_contract 10x, both survived the whole suite. width
+# is not cosmetic - it feeds max_loss_per_contract, which drives position
+# sizing and the portfolio cap, and it feeds gate_credit_fraction. A requested
+# width that is silently substituted for the ACTUAL strike distance understates
+# risk exactly the way E79 did.
+#
+# The requested long strike often does not exist, so select_vertical falls back
+# to the nearest qualifying strike. width must then describe the spread that
+# was actually built. Asking for 2.0 here yields 177.5/175.0 - a MEASURED 2.5,
+# which differs from the request AND from any hard-coded default.
+_narrow = select_vertical(chain, side="put", target_delta=0.30, width=2.0,
+                          oi_by_symbol=oi, pricing="worst")
+check("E92 fallback picks the nearest available long leg",
+      _narrow["long"]["strike"] == 175.0, str(_narrow["long"]["strike"]))
+check("E92 width reports the ACTUAL distance, not the requested 2.0",
+      _narrow["width"] == 2.5, str(_narrow["width"]))
+check("E92 width is not a hard-coded default either",
+      _narrow["width"] != 5.0, str(_narrow["width"]))
+check("E92 max loss follows the measured width",
+      abs(_narrow["max_loss_per_contract"]
+          - (2.5 - _narrow["credit"]) * 100) < 1e-9,
+      str(_narrow["max_loss_per_contract"]))
+_wide4 = select_vertical(chain, side="put", target_delta=0.30, width=4.0,
+                         oi_by_symbol=oi, pricing="worst")
+check("E92 asking 4.0 that does not exist still reports the built 5.0",
+      _wide4["width"] == 5.0, str(_wide4["width"]))
+check("E92 and its max loss follows that 5.0",
+      abs(_wide4["max_loss_per_contract"] - (5.0 - _wide4["credit"]) * 100) < 1e-9,
+      str(_wide4["max_loss_per_contract"]))
+
+# max_profit on a credit spread is the credit, full stop. A 10x error here
+# misreports the payoff on the board and, for debit structures, feeds
+# gate_reward_risk directly.
+for _c, _lbl in ((_narrow, "2.5-wide"), (_wide4, "5-wide")):
+    check(f"E92 max profit == credit x 100 ({_lbl})",
+          abs(_c["max_profit_per_contract"] - _c["credit"] * 100) < 1e-9,
+          f'{_c["max_profit_per_contract"]} vs {_c["credit"] * 100}')
+check("E92 max profit and max loss sum to the width",
+      abs((_narrow["max_profit_per_contract"] + _narrow["max_loss_per_contract"])
+          - 2.5 * 100) < 1e-9,
+      str(_narrow["max_profit_per_contract"] + _narrow["max_loss_per_contract"]))
+
+print("\n-- E95: search the chain, do not guess one structure --")
+# select_vertical takes the single strike nearest target delta and the single
+# strike a width away. If that pair quotes badly the whole symbol is lost for
+# the cycle even when the same expiry holds structures that pass every gate.
+# Measured live, the point pick nominated QQQ puts at OI 226 (below the 500
+# floor) and QQQ calls at a 17% spread (above the 15% cap), while the search
+# found OI 507 and a 10% spread at a better credit on the SAME chain.
+#
+# Build a chain where the nearest-delta strike is deliberately the bad one:
+# 177.5 sits closest to 0.30 delta but quotes 1.00/2.00 (67% spread), while
+# 175.0 is inside the band, quotes tightly, and is liquid.
+_trap = {
+ "PLTR260918P00165000": {"greeks": {"delta": -0.1600}, "latestQuote": {"bp": 1.00, "ap": 1.04}},
+ "PLTR260918P00170000": {"greeks": {"delta": -0.2000}, "latestQuote": {"bp": 1.50, "ap": 1.54}},
+ "PLTR260918P00175000": {"greeks": {"delta": -0.2600}, "latestQuote": {"bp": 3.18, "ap": 3.28}},
+ "PLTR260918P00177500": {"greeks": {"delta": -0.3050}, "latestQuote": {"bp": 1.00, "ap": 2.00}},
+}
+_oi_all = {s: 5000 for s in _trap}
+_point = select_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                         oi_by_symbol=_oi_all, pricing="worst")
+check("E95 the point pick lands on the 0.305-delta strike",
+      _point["short"]["strike"] == 177.5, str(_point["short"]["strike"]))
+check("E95 and that strike quotes badly (67% spread)",
+      _point["worst_leg_spread_pct"] > 0.15, str(_point["worst_leg_spread_pct"]))
+_found = search_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                         oi_by_symbol=_oi_all, pricing="worst")
+check("E95 the search finds a tradeable structure instead", _found is not None)
+check("E95 it avoids the wide-quoting strike",
+      _found["short"]["strike"] != 177.5, str(_found["short"]["strike"]))
+check("E95 and respects the spread cap",
+      _found["worst_leg_spread_pct"] <= 0.15, str(_found["worst_leg_spread_pct"]))
+check("E95 the short leg stays inside the R3 delta band",
+      0.15 <= _found["short"]["delta"] <= 0.35, str(_found["short"]["delta"]))
+check("E95 it is a genuine credit spread", 0 < _found["credit"] < _found["width"],
+      f'{_found["credit"]} / {_found["width"]}')
+check("E95 payoff arithmetic still holds",
+      abs(_found["max_loss_per_contract"]
+          - (_found["width"] - _found["credit"]) * 100) < 1e-9)
+
+# an illiquid chain must yield NOTHING - the search never relaxes the floor
+_illiquid_oi = {s: 10 for s in _trap}
+check("E95 below the OI floor the search returns None",
+      search_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=_illiquid_oi, pricing="worst") is None)
+# a chain where every quote is wide must yield NOTHING
+_wide_only = {k: {"greeks": v["greeks"],
+                  "latestQuote": {"bp": 1.00, "ap": 2.00}} for k, v in _trap.items()}
+check("E95 when every quote is wide the search returns None",
+      search_vertical(_wide_only, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=_oi_all, pricing="worst") is None)
+check("E95 a sub-floor credit is rejected",
+      search_vertical(_trap, side="put", target_delta=0.30, width=5.0,
+                      oi_by_symbol=_oi_all, pricing="worst",
+                      min_credit=99.0) is None)
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

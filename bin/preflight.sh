@@ -72,7 +72,11 @@ sys.exit(0 if 'COMPETITION_ACCOUNT' in inspect.getsource(execute) and 'account m
 python3 -c "
 import sys; sys.path.insert(0,'.')
 from deltax.manage import TAKE_PROFIT_FRACTION, TIME_STOP_DTE
-sys.exit(0 if TAKE_PROFIT_FRACTION==0.50 and TIME_STOP_DTE==2 else 1)" 2>/dev/null && ok "exit rule armed" "GTC at 50% credit, 2-DTE time stop" || no "exit rule" "not configured"
+from deltax.gates import MIN_DTE
+# E66: this pinned TIME_STOP_DTE==2 and reported BLOCKING when E63 correctly
+# moved it to 1. Assert the INVARIANT (a position must never be eligible for
+# the time stop the moment it opens), not a magic number - E22's lesson again.
+sys.exit(0 if 0 < TAKE_PROFIT_FRACTION < 1 and 0 < TIME_STOP_DTE < MIN_DTE else 1)" 2>/dev/null && ok "exit rule armed" "GTC take-profit, time stop strictly inside MIN_DTE" || no "exit rule" "not configured"
 grep -q "place_exit" deltax/run.py && ok "exits placed at fill" "E5 wired into run.py" || no "exits NOT wired" "agent would never close"
 
 echo; echo "── 4. agent ──"

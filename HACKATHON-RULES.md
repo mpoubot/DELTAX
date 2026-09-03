@@ -52,14 +52,14 @@ the eligibility evidence.
 
 ## 📦 Deliverables checklist
 
-- [ ] Project title, short description, long description, tech/category tags
+- [x] Project title, short description, long description, tech/category tags — ✅ `SUBMISSION.md`
 - [x] **Cover image** — ✅ done (llama/chrome logo, "CODE · RISK · EXECUTE")
 - [~] **Video presentation** — in progress (Pautax, separate session)
 - [x] **Slide presentation** — ✅ live at /slides.html + PDF in repo (v3 rewrite pending)
 - [x] **Public GitHub repository** — ✅ public, MIT licensed
 - [x] Demo application platform + **application URL** — ✅ https://pautax007.github.io/DELTAX/ (live board, refreshes every 3 min)
 - [x] **Alpaca paper trading account ID** → `PA397N6FXXIE`
-- [ ] **One-page write-up: AI logic, risk gates, Alpaca infrastructure**
+- [x] **One-page write-up: AI logic, risk gates, Alpaca infrastructure** — ✅ `WRITEUP.md`
 
 **Brand palette** (from the cover image, for slides and the demo page):
 deep navy `#0A1428` · chrome `#C8D4E0` · electric blue `#1E90FF` · white text.

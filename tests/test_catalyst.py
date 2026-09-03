@@ -6,6 +6,7 @@ path is tested explicitly. A setup that cannot refuse is not a setup.
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from datetime import date
+from deltax import catalyst
 from deltax.catalyst import (occ, catalyst_active, price_vertical, legs_for,
                              Vertical, MAX_DEBIT, MIN_LEG_OI, RISK_BUDGET,
                              MAX_OI_FRACTION, CATALYST_MIN_MOVE_PCT)
@@ -31,8 +32,19 @@ check("fractional strikes round correctly",
 
 print("\n── catalyst: BOTH confirmations required, fails closed ──")
 NEWS = [{"headline": f"Hormuz tension {i}", "summary": "crude supply"} for i in range(5)]
-ok, why = catalyst_active(133.70, 141.00, NEWS)
-check("live shock + corroboration -> active", ok, why)
+# E81: the structure is retired, so catalyst_active now refuses before it
+# looks at anything. The DETECTION logic underneath is still worth covering -
+# if the research ever justifies re-enabling, it must still be correct - so
+# exercise it with the flag temporarily on, then restore. The retirement
+# itself is asserted in the E81 block below.
+_saved = catalyst.CATALYST_ENABLED
+try:
+    catalyst.CATALYST_ENABLED = True
+    ok, why = catalyst_active(133.70, 141.00, NEWS)
+    check("live shock + corroboration -> active (detection logic)", ok, why)
+finally:
+    catalyst.CATALYST_ENABLED = _saved
+check("flag restored after the detection probe", catalyst.CATALYST_ENABLED is False)
 ok, why = catalyst_active(133.70, 134.50, NEWS)
 check("move below trigger -> inactive", not ok, why)
 ok, why = catalyst_active(133.70, 141.00, [])
@@ -137,5 +149,21 @@ check("only OPENING orders block an add-on", "_to_close" in _run and "def _opens
 check("flatten stop is clean control flow, not an error",
       "except StopIteration" in _run)
 
+print("\n── E81: structure retired after the year backtest ──")
+# 46 expiries of real OPRA prices: -9% of debit per trade, P(mean<0)=74.5%,
+# max drawdown -89.9%. The one positive bucket (CATALYST, n=10, +15%) fails
+# permutation testing at p=0.185, and 0.738 Bonferroni-corrected across the
+# four regimes examined. Inputs below WOULD have fired the old rule - a +5%
+# move with three corroborating headlines - so this fails loudly if the flag
+# is flipped back without the research changing.
+_on, _why = catalyst.catalyst_active(100.0, 105.0, headlines=[
+    {"headline": "opec supply shock", "summary": "sanctions on exports"},
+    {"headline": "refinery outage", "summary": "supply disruption"},
+    {"headline": "pipeline attack", "summary": "crude supply hit"}])
+check("E81 refuses even +5% with 3 corroborating headlines", _on is False, str(_why))
+check("E81 refusal cites the backtest", "retired" in _why, str(_why))
+check("E81 flag is off", catalyst.CATALYST_ENABLED is False)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
+

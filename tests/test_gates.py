@@ -290,6 +290,192 @@ check("E57 sized-vs-capped divergence is logged", "demo_size_cap" in _run)
 check("E57 committed risk follows the capped size",
       "dec.max_loss * (qty / dec.contracts" in _run)
 
+
+print("\n── E74: round-trip friction must not eat the credit ──")
+from deltax.gates import gate_spread_quality, MAX_FRICTION_OF_CREDIT
+# the SMH trade: legs looked fine (9%), round trip ate 57% of the credit
+r = gate_spread_quality(0.09, 0.83 + 0.49, 2.30)
+check("E74 refuses the SMH case tight legs would have passed", not r.passed, r.detail)
+check("E74 refusal names the share of credit", "% of the" in r.detail, r.detail)
+r = gate_spread_quality(0.02, 0.07, 0.96)
+check("E74 passes IWM-style tight legs", r.passed, r.detail)
+r = gate_spread_quality(0.20, 0.01, 5.00)
+check("E74 still refuses a wide LEG even when friction is cheap",
+      not r.passed and "worst leg" in r.detail, r.detail)
+r = gate_spread_quality(0.02, None, None)
+check("E74 without friction data behaves as before", r.passed, r.detail)
+r = gate_spread_quality(None, 0.10, 2.00)
+check("missing quote still refuses", not r.passed)
+r = gate_spread_quality(0.02, 0.70, 2.00)   # exactly 35%
+check("exactly at the ceiling passes", r.passed, r.detail)
+r = gate_spread_quality(0.02, 0.71, 2.00)   # just over
+check("one cent over the ceiling refuses", not r.passed, r.detail)
+check("friction ceiling is a fraction", 0 < MAX_FRICTION_OF_CREDIT < 1)
+_g = open("deltax/gates.py").read()
+check("E74 is WIRED into evaluate()", "gate_spread_quality(worst_leg_spread_pct,\n" in _g
+      or "roundtrip_cost, credit)" in _g)
+
+
+print("\n── E74 WIRING: the gate must receive real data, not just exist ──")
+# The first version of E74 passed 10 unit tests and did NOTHING live: the
+# screener never computed roundtrip_cost, so it was always None and the branch
+# never ran. Testing a function directly proves the function; it does not prove
+# the caller feeds it. These assertions check the DATA PATH.
+_scr = open("deltax/screener.py").read()
+_run_src = open("deltax/run.py").read()
+check("screener COMPUTES roundtrip_cost", '"roundtrip_cost": roundtrip' in _scr)
+check("screener PASSES it to evaluate", "roundtrip_cost=cand.get" in _scr)
+check("run.py PASSES it to evaluate", "roundtrip_cost=cand.get" in _run_src)
+check("evaluate ACCEPTS it", "roundtrip_cost: Optional[float]" in open("deltax/gates.py").read())
+
+# End-to-end: the exact SMH quotes that cost us $625 must now REFUSE.
+d = evaluate(symbol="SMH", equity=EQUITY, structure="credit", width=10.0,
+             max_loss_per_contract=740.0, max_profit_per_contract=260.0,
+             credit=2.30, expiry=date(2026, 9, 18), today=date(2026, 9, 2),
+             open_interest=4179, short_delta=0.36,
+             worst_leg_spread_pct=0.09, roundtrip_cost=0.83 + 0.49)
+check("the real SMH trade is now REFUSED end-to-end",
+      d.decision == Decision.REFUSE and d.failed_gate == "spread_quality",
+      f"{d.decision}/{d.failed_gate}")
+check("and the reason names the friction",
+      any("round-trip" in g.detail for g in d.gates if g.gate == "spread_quality"))
+# ...while a tight book still trades
+d2 = evaluate(symbol="IWM", equity=EQUITY, structure="credit", width=5.0,
+              max_loss_per_contract=404.0, max_profit_per_contract=96.0,
+              credit=0.96, expiry=date(2026, 9, 18), today=date(2026, 9, 2),
+              open_interest=65798, short_delta=0.30,
+              worst_leg_spread_pct=0.02, roundtrip_cost=0.07)
+check("a tight book still TRADES", d2.decision == Decision.TRADE, d2.failed_gate or "")
+
+print("\n-- E96: the live entry-freeze policy --")
+# This asserts an OPERATIONAL decision, not a code invariant: new entries are
+# frozen on the operator's instruction (2 Sep) because the book runs 4.7:1
+# risk/reward - $14,918 at risk against $3,182 of credit - which needs an 82.4%
+# win rate while the strikes imply about 68%. If the policy is deliberately
+# changed, change this line in the same commit. It is here so an ACCIDENTAL
+# un-freeze cannot go unnoticed.
+import deltax.gates as _g96, deltax.freeze as _fz, tempfile, os as _os, json as _json
+# E97: the live value moved into state/freeze.json so the scheduled signal
+# check can lift or reapply it without editing source. The constant here is now
+# only a MANUAL override, and it is one-directional: True forces a freeze that
+# no scheduled job can undo. False means "the state file governs".
+check("E97 the manual override is released", _g96.NEW_ENTRIES_FROZEN is False)
+check("E96 exits are NOT suspended by the freeze", _g96.TRADING_SUSPENDED is False)
+
+# the manual override must still win
+_saved96 = _g96.NEW_ENTRIES_FROZEN
+try:
+    _g96.NEW_ENTRIES_FROZEN = True
+    check("E97 a manual freeze overrides any state file",
+          _g96.gate_new_entries().passed is False)
+finally:
+    _g96.NEW_ENTRIES_FROZEN = _saved96
+
+# E97/E98 FAIL CLOSED. Every one of these must refuse.
+_d = tempfile.mkdtemp()
+def _st(payload):
+    p = _os.path.join(_d, f"f{abs(hash(str(payload)))}.json")
+    if payload is not None:
+        open(p, "w").write(payload if isinstance(payload, str) else _json.dumps(payload))
+    return p
+check("E97 a missing state file is FROZEN",
+      _fz.read_state(_os.path.join(_d, "nope.json"))["frozen"] is True)
+check("E97 malformed JSON is FROZEN",
+      _fz.read_state(_st("{not json"))["frozen"] is True)
+check("E97 a state file without 'frozen' is FROZEN",
+      _fz.read_state(_st({"reason": "x"}))["frozen"] is True)
+check("E97 unfrozen with no timestamp is FROZEN",
+      _fz.read_state(_st({"frozen": False}))["frozen"] is True)
+from datetime import datetime as _dt, timedelta as _td
+_stale = (_dt.now(_fz.ET) - _td(minutes=_fz.MAX_STATE_AGE_MIN + 5)).isoformat()
+check("E97 a STALE unfrozen state re-freezes on read",
+      _fz.read_state(_st({"frozen": False, "evaluated_at": _stale}))["frozen"] is True)
+_fresh = _dt.now(_fz.ET).isoformat()
+check("E97 a fresh unfrozen state is honoured",
+      _fz.read_state(_st({"frozen": False, "evaluated_at": _fresh}))["frozen"] is False)
+
+# E98 POLARITY. `frozen` is the inverse of `unfreeze`; transposing them wrote
+# frozen=False on a FAILING signal set and authorised new entries - a fail-open
+# in the one place that must fail closed.
+_bad = _fz.evaluate_signals(equity=99_000.0, committed=29_000.0,
+                            portfolio_cap=30_000.0, unparsed=[], equities=[],
+                            sweep_failed=[], engine_expected_pnl=100.0,
+                            engine_score=-100.0)
+check("E98 a failing signal set does NOT unfreeze", _bad["unfreeze"] is False,
+      str(_bad["failed"]))
+check("E98 and it names which signal failed", "risk_headroom" in _bad["failed"],
+      str(_bad["failed"]))
+_good = _fz.evaluate_signals(equity=99_000.0, committed=10_000.0,
+                             portfolio_cap=30_000.0, unparsed=[], equities=[],
+                             sweep_failed=[], engine_expected_pnl=100.0,
+                             engine_score=-500.0)
+check("E98 a clean signal set does unfreeze", _good["unfreeze"] is True,
+      str(_good["failed"]))
+# each guard must be able to veto on its own
+for _kw, _name in (({"unparsed": ["SPY?"]}, "book_legible"),
+                   ({"equities": ["IGV"]}, "rule_3_clean"),
+                   ({"sweep_failed": [("SPY", "x")]}, "exits_healthy"),
+                   ({"equity": 90_000.0}, "equity_floor"),
+                   ({"engine_expected_pnl": -50.0}, "deadline_edge"),
+                   ({"engine_score": -50_000.0}, "tail_survivable")):
+    _base = dict(equity=99_000.0, committed=10_000.0, portfolio_cap=30_000.0,
+                 unparsed=[], equities=[], sweep_failed=[],
+                 engine_expected_pnl=100.0, engine_score=-500.0)
+    _base.update(_kw)
+    _r = _fz.evaluate_signals(**_base)
+    check(f"E99 {_name} can veto on its own",
+          _r["unfreeze"] is False and _name in _r["failed"], str(_r["failed"]))
+# The three below were found by MUTATION TESTING: the tests above exercised
+# evaluate_signals() but nothing exercised the WIRING - writing the state, and
+# the gate reading it. All three mutations failed OPEN and survived the suite.
+check("E97 a state file saying frozen=true is honoured",
+      _fz.read_state(_st({"frozen": True, "reason": "r",
+                          "evaluated_at": _fresh}))["frozen"] is True)
+# gate_new_entries() must actually reflect the state file
+_saved_path = _fz.STATE_PATH
+try:
+    _fz.STATE_PATH = _st({"frozen": True, "reason": "test freeze",
+                          "evaluated_at": _fresh})
+    check("E97 the GATE refuses when the state file says frozen",
+          _g96.gate_new_entries().passed is False)
+    _fz.STATE_PATH = _st({"frozen": False, "evaluated_at": _fresh})
+    check("E97 the GATE permits when the state file says unfrozen",
+          _g96.gate_new_entries().passed is True)
+    _fz.STATE_PATH = _os.path.join(_d, "absent.json")
+    check("E97 the GATE refuses when the state file is absent",
+          _g96.gate_new_entries().passed is False)
+finally:
+    _fz.STATE_PATH = _saved_path
+
+# E98: run() must write frozen = NOT unfreeze. Drive write_state through the
+# same inversion run() performs, and assert both directions.
+def _write_like_run(unfreeze, path):
+    _frozen = not bool(unfreeze)
+    return _fz.write_state(_frozen, "t", {}, path=path)
+_p1 = _os.path.join(_d, "pol_a.json")
+check("E98 unfreeze=False writes frozen=True",
+      _write_like_run(False, _p1)["frozen"] is True)
+check("E98 and reads back as frozen", _fz.read_state(_p1)["frozen"] is True)
+_p2 = _os.path.join(_d, "pol_b.json")
+check("E98 unfreeze=True writes frozen=False",
+      _write_like_run(True, _p2)["frozen"] is False)
+check("E98 and reads back as unfrozen", _fz.read_state(_p2)["frozen"] is False)
+import deltax.unfreeze_check as _uc
+_src = open(_os.path.join(_os.path.dirname(__file__), "..", "deltax",
+                          "unfreeze_check.py")).read()
+check("E98 run() inverts explicitly rather than passing unfreeze through",
+      "frozen = not should_unfreeze" in _src)
+check("E98 run() never passes res['unfreeze'] straight to write_state",
+      'write_state(res["unfreeze"]' not in _src)
+check("E98 an engine error can only ever freeze",
+      "frozen = True                    # an engine error can only ever freeze" in _src)
+
+check("E99 a missing engine reading fails closed",
+      _fz.evaluate_signals(equity=99_000.0, committed=10_000.0,
+                           portfolio_cap=30_000.0, unparsed=[], equities=[],
+                           sweep_failed=[], engine_expected_pnl=None,
+                           engine_score=None)["unfreeze"] is False)
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
 

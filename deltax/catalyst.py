@@ -56,6 +56,7 @@ TARGET_WIDTH_CAP = 0.90     # exit never above this fraction of the width
 
 # A move this size in the underlying, on the session before entry, is what marks
 # the shock as live rather than remembered.
+CATALYST_ENABLED = False   # E81 - see catalyst_active()
 CATALYST_MIN_MOVE_PCT = 2.0
 CATALYST_KEYWORDS = (
     "hormuz", "iran", "opec", "supply", "sanction", "tanker", "refinery",
@@ -110,6 +111,26 @@ def catalyst_active(prev_close: Optional[float], last: Optional[float],
     anything; headlines alone could be stale commentary about a move that has
     already reversed. Fails CLOSED - unreadable data means no catalyst.
     """
+    # E81: STRUCTURE RETIRED. The full-year lifecycle backtest on real OPRA
+    # prices (46 expiries, Massive) scores this debit structure at -9% of debit
+    # per trade, P(mean<0) = 74.5%, max drawdown -89.9%. Its ONE positive bucket
+    # is the CATALYST regime itself (n=10, +15%) - which does not survive
+    # testing: permutation p = 0.185, and 0.738 after Bonferroni across the four
+    # regimes examined. A random 10 of the 46 trades beats it 18.5% of the time.
+    #
+    # This is the same verdict the TSLA playbook got (news direction p = 0.44,
+    # no better than a coin flip). The corroborating-headline requirement below
+    # is the part already measured as non-predictive, so it cannot rescue the
+    # structure either.
+    #
+    # Refused at catalyst_active() because BOTH live paths in run.py - the entry
+    # at L419 and the add-on at L331 - call it, so one gate closes both. Left in
+    # place rather than deleted: the research stands, and the reason it is off
+    # must stay readable next to the code it disables.
+    if not CATALYST_ENABLED:
+        return False, ("catalyst structure retired - backtested negative "
+                       "(-9%/trade, P(mean<0)=74.5%); regime edge not "
+                       "significant (Bonferroni p=0.74)")
     if not prev_close or not last or prev_close <= 0:
         return False, "no price - catalyst unreadable, fails closed"
     move = (last / prev_close - 1) * 100

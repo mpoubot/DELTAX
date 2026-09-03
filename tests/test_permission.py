@@ -138,10 +138,34 @@ check("override flag recorded in ledger", perm_rows[0].get("overridden") is True
 check("blocking reason recorded", bool(perm_rows[0].get("reasons")))
 
 import subprocess, sys as _s
+# E90: this shelled out with no cwd and no PYTHONPATH, so wherever `deltax` is
+# not importable the subprocess died on module resolution. `returncode != 0`
+# was then TRUE for a reason that has nothing to do with the guard, and
+# "REFUSED" never appeared - the test failed while telling us nothing about
+# whether --force --live is actually refused. A test that fails for the wrong
+# reason is the mirror of E43's test that PASSED for the wrong reason: in both
+# cases the result carries no information.
+#
+# Fixed two ways: run the subprocess from the repo root with PYTHONPATH set so
+# it can actually import, and assert the guard in source as well, so there is
+# real coverage even where the subprocess cannot start.
+_repo = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_src = open(os.path.join(_repo, "deltax", "run.py")).read()
+check("E90 the --force/--live guard exists in source",
+      'if live and "--force" in sys.argv' in _src)
+check("E90 and it exits with REFUSED",
+      'sys.exit("REFUSED: --force is an analysis switch' in _src)
+
+_env = dict(os.environ, PYTHONPATH=_repo)
 r = subprocess.run([_s.executable, "-m", "deltax.run", "--force", "--live"],
-                   capture_output=True, text=True)
-check("CLI refuses --force --live", r.returncode != 0 and "REFUSED" in r.stderr,
-      r.stderr[:60])
+                   capture_output=True, text=True, cwd=_repo, env=_env)
+if "No module named" in r.stderr or "Error while finding module" in r.stderr:
+    # Distinguish loudly rather than reporting a guard failure that did not happen.
+    check("E90 subprocess could not import deltax (environment, NOT the guard)",
+          False, r.stderr.strip()[:80])
+else:
+    check("CLI refuses --force --live", r.returncode != 0 and "REFUSED" in r.stderr,
+          r.stderr[:60])
 
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
