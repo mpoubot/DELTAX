@@ -54,9 +54,25 @@ def _massive(path: str, timeout: int = 25) -> dict:
 
 
 def daily_bars(symbol: str, days: int, today: Optional[date] = None) -> list:
-    """Daily OHLCV+VWAP. Returns [] on any failure - never a fabricated series."""
+    """Daily OHLCV+VWAP. Returns [] on any failure - never a fabricated series.
+
+    Alpaca first. Measured 2 Sep: Massive rate-limits after roughly five calls -
+    a seven-name sweep returned bars for five, and the next sweep returned
+    nothing at all. The dashboard publishes every three minutes, so it would
+    have hit that ceiling on every render and the fail-soft caller would have
+    hidden it. Alpaca serves the same daily bars, is already the repo's feed,
+    and did not throttle under the same load. Massive remains the fallback.
+    """
     today = today or date.today()
     start = today - timedelta(days=int(days * 1.5) + 10)   # calendar vs trading
+    try:
+        from deltax.feeds import AlpacaFeed
+        bars = AlpacaFeed().daily_bars(symbol, str(start), str(today), 5000)
+        bars = [b for b in (bars or []) if b.get("v")]
+        if bars:
+            return bars
+    except Exception:
+        pass
     try:
         d = _massive(f"/v2/aggs/ticker/{symbol}/range/1/day/{start}/{today}?limit=5000")
     except Exception:

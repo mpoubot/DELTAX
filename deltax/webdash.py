@@ -315,6 +315,67 @@ def _freeze_badge():
         return "FROZEN", "state unreadable &mdash; failing closed"
 
 
+def _structure_rows():
+    """Price structure for each underlying we trade: POC and the ATR ladder.
+
+    POC comes from the 20-day inventory profile in deltax.micro.inventory - the
+    price where the most business was done. The ATR ladder is the excursion
+    distribution drawn as levels: a move to +1 ATR is ordinary, +2 is
+    uncommon, and a short strike inside +1 is exposed. PDH/PDL are yesterday's
+    range. Nothing here is a signal; it is where price is relative to where it
+    has been.
+
+    Returns '' on any failure - structure is decoration and must never take
+    the board down.
+    """
+    try:
+        from deltax.screener import INCOME_UNIVERSE
+        from deltax.micro.inventory import daily_bars, build_profile
+        from deltax.feeds import AlpacaFeed, latest_price
+        f = AlpacaFeed()
+        snaps = f.snapshots(list(INCOME_UNIVERSE))
+        rows = []
+        for sym in INCOME_UNIVERSE:
+            px = latest_price(snaps.get(sym) or {})
+            bars = daily_bars(sym, 30)
+            if not px or len(bars) < 15:
+                continue
+            trs = [max(b["h"] - b["l"], abs(b["h"] - bars[i-1]["c"]),
+                       abs(b["l"] - bars[i-1]["c"]))
+                   for i, b in enumerate(bars) if i > 0]
+            atr = sum(trs[-14:]) / len(trs[-14:])
+            prof = build_profile(bars[-20:], "20D")
+            poc = prof.poc
+            pdh, pdl = bars[-1]["h"], bars[-1]["l"]
+            where = ("&uarr; POC" if poc and px > poc else
+                     "&darr; POC" if poc else "&mdash;")
+            atr_pos = (px - bars[-1]["c"]) / atr if atr else 0.0
+            rows.append(
+                f'<tr><td class="cy">{sym}</td>'
+                f'<td class="num">{px:,.2f}</td>'
+                f'<td class="num">{poc:,.2f}</td>'
+                f'<td class="dim">{where}</td>'
+                f'<td class="num">{pdl:,.2f} &ndash; {pdh:,.2f}</td>'
+                f'<td class="num">{px-2*atr:,.2f} &middot; {px-atr:,.2f} '
+                f'&middot; <b>{px+atr:,.2f}</b> &middot; {px+2*atr:,.2f}</td>'
+                f'<td class="num {"bad" if abs(atr_pos)>=1 else "dim"}">'
+                f'{atr_pos:+.1f}</td></tr>')
+        if not rows:
+            return ""
+        return ("<h2>MARKET STRUCTURE</h2><div class=\"rule\"></div>"
+                "<div class=\"lead\">Where price sits against where business was done. "
+                "POC is the 20-day point of control. The ATR ladder is "
+                "&minus;2 &middot; &minus;1 &middot; <b>+1</b> &middot; +2 average true "
+                "ranges from here &mdash; a short strike inside &plusmn;1 is exposed to an "
+                "ordinary day.</div>"
+                "<div class=\"tw\"><table><tr><th>SYM</th><th class=\"n\">PRICE</th>"
+                "<th class=\"n\">POC 20D</th><th></th><th class=\"n\">PDL &ndash; PDH</th>"
+                "<th class=\"n\">ATR LADDER</th><th class=\"n\">ATR TODAY</th></tr>"
+                + "".join(rows) + "</table></div>")
+    except Exception:
+        return ""
+
+
 def _gate_activity():
     """What the gates actually did today - scanned, passed, and what refused.
 
@@ -1124,6 +1185,7 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
     <span class="mkt-d">{_mkt_d}</span></div>
 </div>
 {_equity_chart(history)}
+{_structure_rows()}
 {mission}
 <div class="stats">{stats}</div>
 
