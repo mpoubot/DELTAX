@@ -79,7 +79,7 @@ DEFAULT_WIDTH = {
                  # the same band as the index names rather than scaling with
                  # share price - a 5-wide spread on a $35 ETF is not a spread.
                  "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,
-                 "AAPL": 5.0,}
+                 "AAPL": 5.0, "ORCL": 2.5, "JPM": 5.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
@@ -141,7 +141,19 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # above the floor, no earnings until late October. AVGO scored 90% and is
 # deliberately NOT added: it reported after today's close, so tomorrow it is a
 # repricing event with the same 10-17% excursion band that ruled out SNOW.
-INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL"]
+# E110 (3 Sep 10:50). Broad scan of 30 names, live: ORCL carried the richest
+# variance premium on the board (IV/RV 1.83, 89% tradeability, 46 highs / 14
+# lows) and JPM the highest tradeability (92%, IV/RV 1.67). Both added.
+#
+# ORCL reports fiscal Q1 around 9-12 Sep. The earnings gate refuses any expiry
+# that crosses it - 09-11 and 09-18 - and permits 09-08. That is the gate's
+# job, not this list's: adding ORCL here lets the pipeline evaluate it; the
+# gate decides. After SNOW, an expiry across an earnings print is not a trade.
+#
+# Every single name here (AAPL, ORCL, JPM) is REFUSED until DELTAX_SEC_UA is
+# set: the earnings lookup fails without it, and the gate fails closed on an
+# unknown date. That is correct behaviour and it is the operator's line to set.
+INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL", "ORCL", "JPM"]
 
 
 @dataclass
