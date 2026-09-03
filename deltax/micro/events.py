@@ -117,6 +117,28 @@ def _cli(args: list, timeout: int = 45) -> dict:
 # that looks present and is wrong, so paging is mandatory rather than an option.
 MAX_PAGES = 40
 
+# E108: the Alpaca free tier refuses SIP trades/quotes newer than about 15
+# minutes - "subscription does not permit querying recent SIP data". Measured
+# 3 Sep 10:30 ET: a window ending 20 min ago returned 27,539 prints; one
+# ending 10 min ago was refused outright. Last night's replay worked only
+# because its window was hours old. "Live" on this account therefore means
+# "15 minutes ago", and the engine says so instead of letting the CLI 403 and
+# a caller mistake that for an empty tape.
+MIN_SIP_LAG_MIN = 15
+
+
+def _check_window(end: str) -> None:
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    e = parse_ts(end)
+    if e is None:
+        return
+    cutoff = _dt.now(_tz.utc) - _td(minutes=MIN_SIP_LAG_MIN)
+    if e > cutoff:
+        raise RuntimeError(
+            f"SIP window ends {end}; this subscription only serves data older "
+            f"than {MIN_SIP_LAG_MIN} min (cutoff {cutoff:%H:%M:%S}Z). "
+            f"Live tape on this tier is {MIN_SIP_LAG_MIN}-minute delayed.")
+
 
 def _paged(args: list, key: str, limit: int) -> list:
     rows, token, pages = [], None, 0
@@ -135,6 +157,7 @@ def _paged(args: list, key: str, limit: int) -> list:
 
 
 def fetch_trades(symbol: str, start: str, end: str, limit: int = 10000) -> list:
+    _check_window(end)                    # E108: refuse a forbidden window loudly
     raw = _paged(["data", "trades", "--symbol", symbol,
                   "--start", start, "--end", end], "trades", limit)
     out = []
@@ -154,6 +177,7 @@ def fetch_trades(symbol: str, start: str, end: str, limit: int = 10000) -> list:
 
 
 def fetch_quotes(symbol: str, start: str, end: str, limit: int = 10000) -> list:
+    _check_window(end)                    # E108: refuse a forbidden window loudly
     raw = _paged(["data", "quotes", "--symbol", symbol,
                   "--start", start, "--end", end], "quotes", limit)
     out = []

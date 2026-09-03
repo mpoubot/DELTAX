@@ -96,3 +96,19 @@ cannot behave differently in research than in production.
 Point-in-time correctness is enforced structurally rather than by convention:
 the feature engine only ever sees events it has been fed, in timestamp order,
 and cannot address future ones.
+
+---
+
+## Addendum, 3 Sep 10:30 ET — the tape is 15 minutes delayed
+
+Alpaca's free tier refuses SIP trades and quotes newer than ~15 minutes
+(`subscription does not permit querying recent SIP data`). Measured: a window
+ending 20 min ago returned 27,539 NVDA prints; one ending 10 min ago was
+refused. The overnight replay ran on hours-old data and never hit this.
+
+Consequence: **"live" tape, NBBO pressure and volume profile on this account
+describe the market as of 15 minutes ago.** They remain valid for regime and
+inventory reads, and for replay. They are not valid as a same-minute execution
+signal, and nothing in the system uses them as one. The adapters now refuse a
+forbidden window with an explicit error rather than surfacing a 403 that a
+caller could mistake for an empty tape.
