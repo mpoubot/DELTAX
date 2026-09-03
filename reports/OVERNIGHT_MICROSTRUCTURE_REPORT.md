@@ -138,3 +138,79 @@ endpoint, no signal presented as validated.
    readings; persistence is what separates a real imbalance from a flicker.
 3. **Storage.** Sealed decisions and outcomes are in memory only. Persisting
    them is what lets tomorrow learn from tonight.
+
+---
+
+## Second build — behaviour, inventory and regime nesting
+
+Added after the microstructure foundation. **875 tests passing.**
+
+| File | What it is |
+|---|---|
+| `deltax/micro/inventory.py` | Multi-timeframe volume profile (5D→2Y), cross-horizon clustering, participant hypotheses |
+| `deltax/micro/regime.py` | Regime nesting — waves inside waves |
+| `tests/test_behavior.py` | 37 tests, most of them asserting the system stays honest |
+
+### Regime nesting, live on SPY
+
+```
+2Y   TREND_UP         +38.6%   1.7 sigma of its own volatility
+1Y   TREND_UP         +18.9%   1.5 sigma
+3M   VOL_COMPRESSION           recent vol 0.58x the horizon's own
+20D  RANGE            -0.44%   inside 0.5 sigma
+5D   DRIFT_DOWN       -0.77%
+
+"5d drift down inside 20D range inside 3M vol compression
+ inside 1Y trend up inside 2Y trend up."
+
+alignment 0.333 -> confidence 0.333
+```
+
+Nothing is collapsed to one label. **Confidence falls when horizons disagree** —
+that is asserted by test, because a system that grows more certain as its
+evidence conflicts is worse than useless.
+
+Each horizon is measured against **its own** realised volatility, so a 2% move
+means something different over five days than over a year.
+
+### Inventory, live on SPY at 765.20
+
+```
+762.25-766.75   strength 19.2   confirmed by 5D, 10D, 20D   <- price is INSIDE
+683.00          strength 13.4   confirmed by 1Y, 2Y
+657.25          strength  4.0   confirmed by 6M
+```
+
+All seven horizons available. A level confirmed by the 1Y and 2Y profiles is
+weighted far above one made this week, because it represents business done by
+participants who may still be there.
+
+### The honesty constraint, enforced by test
+
+Nothing in public market data reveals whether historical volume opened longs or
+shorts. So every participant read returns **possibility levels — HIGH,
+MEDIUM-HIGH, MEDIUM — never probabilities**, and every one carries the caveat
+that the underlying fact is not observable. A test asserts the values are
+strings rather than numbers: a number there would fabricate precision that does
+not exist.
+
+With price inside the strongest zone the model refuses to pick a side and says
+so: `positioning_mixed: HIGH`, plus what a move in either direction would force.
+
+### Known approximation, stated rather than hidden
+
+Long-horizon profiles place each daily bar's volume at its VWAP. A wide-range
+day genuinely spread its volume across the range; this concentrates it. The
+effect is to make inventory zones look **narrower** than they are. Documented in
+the module.
+
+### Still not built
+
+Crowd expectation, expectation/reality gap, regime-shift detection, alpha decay,
+GEX, options flow, breadth, most-active, historical analogs, scenario graphs,
+dashboard integration. The spec is weeks of work; this is items 1, 2, 3 and 9 of
+its own priority list, which is what the market opening in hours allows.
+
+**No signal here is validated as predictive.** The engine measures and nests
+correctly. Whether inventory position or regime nesting forecasts anything is
+untested, and four horizons agreeing is not evidence.
