@@ -79,7 +79,8 @@ DEFAULT_WIDTH = {
                  # the same band as the index names rather than scaling with
                  # share price - a 5-wide spread on a $35 ETF is not a spread.
                  "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,
-                 "AAPL": 5.0, "ORCL": 2.5, "JPM": 5.0,}
+                 "AAPL": 5.0, "ORCL": 2.5, "JPM": 5.0,
+                 "RSP": 5.0, "XLI": 5.0, "XLU": 1.0, "TQQQ": 2.0, "VXX": 1.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
@@ -153,7 +154,18 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # Every single name here (AAPL, ORCL, JPM) is REFUSED until DELTAX_SEC_UA is
 # set: the earnings lookup fails without it, and the gate fails closed on an
 # unknown date. That is correct behaviour and it is the operator's line to set.
-INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL", "ORCL", "JPM"]
+# E112 (3 Sep 11:40). Forty-ETF scan, live. ETFs carry no earnings lookup, so
+# anything clearing here is tradeable THIS cycle without DELTAX_SEC_UA. Five
+# cleared every gate at tradeability >= 70 and IV/RV >= 1.10:
+#   RSP  1.58   XLI 1.52 (31 liquid strikes)   VXX 1.53   TQQQ 1.31   XLU 1.22
+# VXX and TQQQ pass the pricing gates and are added on that basis; both carry
+# realised-vol behaviour the IV/RV ratio understates (VXX can gap 30% in an
+# hour, TQQQ is 3x). The variance-premium and defined-risk gates price each
+# candidate on its own merits every cycle, and the joint-CVaR brake bounds the
+# concentration against the existing index-put book. That is the control; the
+# list only says where to look.
+INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL", "ORCL", "JPM",
+                   "RSP", "XLI", "XLU", "TQQQ", "VXX"]
 
 
 @dataclass

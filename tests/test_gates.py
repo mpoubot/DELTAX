@@ -137,7 +137,7 @@ d = evaluate(
 check("OTM credit spread now TRADES", d.decision == Decision.TRADE, d.failed_gate or "")
 check("credit_fraction gate ran", any(g.gate == "credit_fraction" for g in d.gates))
 check("reward_risk gate NOT applied to credit", not any(g.gate == "reward_risk" for g in d.gates))
-# Thin credit rejected. It must clear MIN_CREDIT ($0.75) so that
+# Thin credit rejected. It must clear MIN_CREDIT ($0.25 since E113) so that
 # credit_fraction is the gate that actually fires: $10 wide at δ0.30 has a
 # measured floor of 0.85 x 0.150 x 10 = $1.275, so $1.00 passes the flat floor
 # and fails the market-relative one.

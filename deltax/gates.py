@@ -72,7 +72,16 @@ MAX_DTE               = 21     # short enough to resolve inside the contest wind
 MIN_REWARD_RISK       = 2.0    # payoff floor; 2:1 => 33% breakeven win rate
 MIN_OPEN_INTEREST     = 500    # liquidity floor per leg
 MAX_SIZE_TO_OI_RATIO  = 0.05   # never take more than 5% of a strike's open interest
-MIN_CREDIT            = 0.75   # ClearValue/SkyView: below this, fees eat the trade
+# E113 (3 Sep 11:45). 0.75 -> 0.25. Traced live: an ABSOLUTE dollar floor
+# calibrated for SPY at $700+ killed 100% of liquid pairs on every sub-$300
+# name - XLU 8/8, XLI 5/5, RSP 1/1 - with the spread gate killing zero. A
+# 1-wide spread on a $43 ETF cannot produce $0.75 of credit at any delta; the
+# floor was excluding whole price tiers, not bad trades. Its stated job,
+# "fees eat the trade", is already done PROPORTIONALLY by the E74 friction
+# gate (round trip <= 35% of credit), and credit/width is already held to 85%
+# of the measured market by gate_credit_fraction. 0.25 keeps a floor under a
+# genuinely worthless print while letting the proportional gates decide.
+MIN_CREDIT            = 0.25   # absolute floor; friction and credit_fraction do the real work
 # Raised 0.90 -> 1.15 on 2026-08-29 after backtesting ten years of real
 # outcomes: at 0.90 the structure is NEGATIVE expectancy on every underlying
 # and every delta tested (E = -0.098 to -0.184). Breakeven sits at roughly
