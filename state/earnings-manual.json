@@ -1,0 +1,11 @@
+{
+ "_note": "E117 hand-verified next earnings dates. Each entry clears ONE name for the horizon passed as --expiry, only if next_earnings is strictly after it. Where sources disagree the EARLIER date is recorded. Verified 2026-09-03 by cross-checking the company or press release date against the last 10-Q filing date from Massive reference/financials.",
+ "entries": [
+  {"symbol": "UNH", "next_earnings": "2026-10-09",
+   "source": "earningscountdown.com/stock/unh (Oct 9 pre-open; tipranks says Oct 27 - earlier taken); last 10-Q for Q2 filed 2026-08-10"},
+  {"symbol": "QCOM", "next_earnings": "2026-11-11",
+   "source": "investing.com/equities/qualcomm-inc-earnings (Nov 11 after close, confirmed); last 10-Q for fiscal Q3 filed 2026-07-29"},
+  {"symbol": "C", "next_earnings": "2026-10-13",
+   "source": "citigroup.com press release 'Citi Third Quarter ... 2026 Earnings Calls' (Oct 13, 8am ET); last 10-Q for Q2 filed 2026-08-06"}
+ ]
+}

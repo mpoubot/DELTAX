@@ -36,7 +36,7 @@ from deltax import gates as _G
 # measured that a capped-payoff short-premium book gets WORSE with more names -
 # each one adds breach risk without adding upside - so the cap holds the tail
 # while the ranking improves what fills it.
-MAX_CONCURRENT = 4
+MAX_CONCURRENT = 8          # E111: 4 -> 8 entries per cycle
 
 
 def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
@@ -251,6 +251,58 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             # E78: give the sweep a real closer. Without one it reported closes
             # it never made. Marketable-limit at the current mark plus a small
             # allowance, so a triggered stop actually leaves the book.
+            # E116: a structure ALREADY has a resting 50% exit (E5), and that
+            # order holds the position's entire closing quantity. Submitting a
+            # second closing order was rejected by the broker every time -
+            # "insufficient qty available for order (requested: 1, available:
+            # 0)" - so the trailing exit (E102/E109) fired six times today and
+            # closed nothing, while recording CLOSE FAILED. The fix is to
+            # RE-PRICE the resting exit to a marketable limit via order replace:
+            # one atomic operation, the exit is never absent, no qty conflict.
+            # Only when no resting exit exists does it fall back to submitting.
+            try:
+                _working = list(feed.open_orders())
+            except Exception:
+                _working = []
+            def _resting_exit(short_sym):
+                for _o in _working:
+                    _ls = _o.get("legs") or [_o]
+                    if any(str(_l.get("position_intent", "")).endswith("_to_close")
+                           and _l.get("symbol") == short_sym for _l in _ls):
+                        return _o
+                return None
+            # E118: a structure with NO resting exit is healed here, every
+            # cycle. The entry path places the 50% exit one second after the
+            # opening order (E5); when the open has not filled yet the broker
+            # infers buy_to_open on the close legs and refuses it - "position
+            # intent mismatch" - which is what happened to the QCOM 175/180
+            # call spread at 12:55 ET on 3 Sep: 12 contracts filled, exit
+            # recorded FAILED, and nothing ever tried again. Every entry runs
+            # that race; the 12:50 entries won it by 0.4 s. Whether the exit
+            # was refused, expired, or cancelled by hand, the invariant is
+            # the same: a live credit structure always has a *_to_close order
+            # working. Records what it placed, or that it could not.
+            for _m in live:
+                if _resting_exit(_m.symbol) is not None:
+                    continue
+                for (_u, _r, _e), _v in legs.items():
+                    if "short" not in _v or _v["short"][3] != _m.symbol:
+                        continue
+                    _lsym = _v.get("long", (0, 0, 0.0, None))[3]
+                    _rec = {"action": "exit_healed", "symbol": _m.symbol,
+                            "qty": _m.qty, "entry_credit": round(_m.entry_credit, 2),
+                            "reason": "E118: no resting *_to_close order found"}
+                    if not _lsym:
+                        _rec["result"] = "REFUSED — no long leg, will not rest a naked close"
+                    else:
+                        _ex = place_exit([execute.Leg(_m.symbol, "sell", 1),
+                                          execute.Leg(_lsym, "buy", 1)],
+                                         _m.qty, _m.entry_credit,
+                                         ledger=ledger, dry_run=dry_run)
+                        _rec["limit_price"] = _ex.get("limit_price")
+                        _rec["result"] = _ex.get("result")
+                    ledger.record_raw(_rec)
+                    break
             def _closer(sym, qty, _legs=legs):
                 for (u, r, e), v in _legs.items():
                     if "short" not in v or v["short"][3] != sym:
@@ -261,10 +313,26 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                         raise RuntimeError("no long leg - refusing a naked close")
                     limit = round(max(v["short"][2] - v.get("long", (0, 0, 0.0, None))[2]
                                       + 0.05, 0.05), 2)
+                    _rest = _resting_exit(ssym)
+                    if _rest and _rest.get("id"):
+                        rec = {"action": "replace_exit", "symbol": ssym, "qty": qty,
+                               "order_id": _rest["id"], "old_limit": _rest.get("limit_price"),
+                               "new_limit": limit, "dry_run": dry_run,
+                               "context": {"strategy": "E116 trail re-prices the resting exit"}}
+                        if dry_run:
+                            rec["result"] = "DRY_RUN — not replaced"
+                        else:
+                            execute.preflight()
+                            _resp = execute._run(["order", "replace", "--order-id", _rest["id"],
+                                                  "--limit-price", f"{limit:.2f}"])
+                            rec["result"] = "REPLACED"
+                            rec["new_order_id"] = _resp.get("id")
+                        ledger.record_raw(rec)
+                        return rec
                     return execute.submit(
                         [execute.Leg(ssym, "sell", 1), execute.Leg(lsym, "buy", 1)],
                         qty, limit, dry_run=dry_run, close=True,
-                        context={"strategy": "E78 exit sweep"})
+                        context={"strategy": "E78 exit sweep (no resting exit found)"})
                 raise RuntimeError(f"no paired legs found for {sym}")
             swept = manage(live, ledger=ledger, dry_run=dry_run, closer=_closer)
             _update_peaks(live)         # E102: raise the high-water marks
@@ -712,9 +780,18 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
             continue
 
         for side, lo, hi in (("put", 0.80, 1.02), ("call", 0.98, 1.20)):
-            if (symbol, side) in held:
-                refused.append((symbol, side, "already_held"))
-                continue
+            # E106: `already_held` used to fire on (underlying, side) - one
+            # spread per side per underlying, ever. On the last session it
+            # blocked SPY, DIA, QQQ and IWM (the four most tradeable names, all
+            # holding a 09-08 structure) from any 09-11 or 09-18 spread, and
+            # left the book at 28% of the cap. A second spread at a DIFFERENT
+            # expiry is a different structure; the $30k hard cap and the joint
+            # CVaR signal already bound the concentration. The check now keys
+            # on the structure and runs AFTER the expiry is chosen, below.
+            # Same-expiry duplicates are still refused - see the held_exp check
+            # after choose_expiry() below. The old (underlying, side) test is
+            # gone, not conditioned: a check that fires "only when frozen"
+            # would be a trap for the next reader.
             allowed, why = gate_permission(perm, side)
             # E57: DEMONSTRATION_MODE may proceed through DEFENSIVE - a
             # directional caution - because size is capped at one contract.
@@ -730,7 +807,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                 refused.append((symbol, side, f"permission:{perm.state}"))
                 continue
             klo, khi = round(px*lo, 2), round(px*hi, 2)
-            picked = choose_expiry(feed, symbol, side, gte, lte, klo, khi)
+            # E106: hand the picker the expiries this (symbol, side) already
+            # holds - OCC YYMMDD -> YYYY-MM-DD - so it moves to the next date.
+            _skip = {f"20{e[:2]}-{e[2:4]}-{e[4:6]}"
+                     for (u, r, e) in book.get("held_exp", set())
+                     if u == symbol and r == side}
+            picked = choose_expiry(feed, symbol, side, gte, lte, klo, khi,
+                                   skip_expiries=_skip)
             if not picked:
                 # E88: a bare `continue` here could not distinguish "no expiry
                 # is liquid enough" - a real, expected outcome - from "the
@@ -753,6 +836,13 @@ def run(feed, ledger, *, equity: float, today: date, dry_run: bool = True,
                     refused.append((symbol, side, "no_liquid_expiry"))
                 continue
             expiry_str, oi = picked
+            # E106: refuse a duplicate of a structure already in the book or
+            # working at the broker. Expiry is YYYY-MM-DD here and YYMMDD in
+            # the OCC symbol; normalise before comparing.
+            _exp6 = expiry_str.replace("-", "")[2:]
+            if (symbol, side, _exp6) in book.get("held_exp", set()):
+                refused.append((symbol, side, "already_held"))
+                continue
             # One expiry per query - the endpoint pages by expiry then strike.
             chain = feed.option_chain(symbol, option_type=side,
                                       expiry_gte=expiry_str, expiry_lte=expiry_str,
@@ -927,12 +1017,47 @@ if __name__ == "__main__":
                         "error": f"{type(_ae).__name__}: {str(_ae)[:120]}",
                         "consequence": "board shows account unavailable"})
     r = out["regime"]
+    # E105: real scoreboard inputs. Unrealised is the broker's own mark on the
+    # open legs; realised is what the account has actually banked relative to
+    # the start, net of that. Rows pair each short leg with its long by
+    # (underlying, right, expiry) - the same grouping the exit sweep uses.
+    _t_unreal, _t_real, _t_rows = 0.0, 0.0, []
+    try:
+        from deltax.reconcile import parse_occ as _p_occ
+        _plist = list(feed.positions())
+        _t_unreal = sum(float(p.get("unrealized_pl") or 0) for p in _plist)
+        _t_real = (eq - 100_000.0) - _t_unreal if eq is not None else 0.0
+        _grp = {}
+        for p in _plist:
+            o = _p_occ(p.get("symbol", ""))
+            if not o:
+                continue
+            q = float(p.get("qty") or 0)
+            _grp.setdefault((o["underlying"], o["right"], o["expiry"]), {})[
+                "short" if q < 0 else "long"] = (abs(q), abs(float(p.get("avg_entry_price") or 0)),
+                                                abs(float(p.get("current_price") or 0)), o["strike"])
+        for (u, rt, ex_), v in sorted(_grp.items()):
+            sh, lg = v.get("short"), v.get("long")
+            if not sh or not lg:
+                continue
+            credit = sh[1] - lg[1]
+            cur = sh[2] - lg[2]
+            _t_rows.append({"symbol": u, "side": rt, "short": sh[3], "long": lg[3],
+                            "credit": credit, "current": cur,
+                            "captured": ((credit - cur) / credit) if credit > 0 else None})
+    except Exception:
+        pass                                # terminal only; never take the run down
     events = [("open", sym, f"OPENED {side} · {ct} ct · credit ${cr*100*ct:,.0f} → {res}")
               for sym, side, ct, cr, ml, res in out["traded"]]
     events += [("exit", sym, f"EXIT RESTING at {lim:.2f} (50% of credit) · fills unattended")
                for sym, side, lim in out.get("exits", []) if lim]
     print(report.render(
         equity=eq, cash=csh, market_open=True,
-        unrealized=0.0, realized=0.0,
-        positions=[], events=events, refused=out["refused"],
+        # E105: these were hard-coded 0.0 and [], so the terminal printed
+        # "realized +0.00 / unrealized +0.00 / no open positions" over a
+        # 12-leg book with -$1,212 realised on the SMH close. Same shape as
+        # E78 and E89: a report that does not describe what happened. Both
+        # figures now come from the broker; the rows are the paired book.
+        unrealized=_t_unreal, realized=_t_real,
+        positions=_t_rows, events=events, refused=out["refused"],
         regime=f"{r.weak_count}/3 weak", permission=out.get("permission", "—")))

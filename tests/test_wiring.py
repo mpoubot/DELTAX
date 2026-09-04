@@ -289,5 +289,93 @@ check("E102 the peak store is anchored to the repo, not the CWD",
       "PEAKS_PATH = _os.path.join(" in open(os.path.join(
           os.path.dirname(__file__), "..", "deltax", "manage.py")).read())
 
+print("\n── E104: a spread is closed through the paired path, never leg by leg ──")
+# close-smh.sh cancelled SMH's resting exits, then ran
+# `alpaca position close --symbol <option>` four times. Each returned code 0 -
+# the CLI's own success envelope - and created NO broker order. SMH went from
+# covered to naked while the log read as success, and the 540 put bled to
+# -$1,450 before it was caught. The only correct close in this system is
+# execute.submit(close=True), which builds a real multi-leg order with
+# *_to_close intents. This scan makes the leg-by-leg pattern a test failure.
+import glob as _glob, re as _re
+_bin = os.path.join(os.path.dirname(__file__), "..", "bin")
+_offenders = []
+for _f in sorted(_glob.glob(os.path.join(_bin, "*.sh"))):
+    _src = open(_f).read()
+    # a retired script is allowed to carry the pattern in its preserved body,
+    # but only if it is disabled at the top and says so
+    _retired = _re.search(r"^exit \d+\s+#\s*RETIRED", _src, _re.M) is not None
+    if _re.search(r"alpaca\s+position\s+close\s+--symbol", _src) and not _retired:
+        _offenders.append(os.path.basename(_f))
+check("E104 no live script closes an option position leg by leg",
+      _offenders == [], str(_offenders))
+check("E104 close-smh.sh is retired and refuses to run",
+      _re.search(r"^exit 3\s+#\s*RETIRED", open(os.path.join(_bin, "close-smh.sh")).read(), _re.M)
+      is not None)
+# and the correct path must still exist and still flip intents
+from deltax.execute import build_close_args as _bca, Leg as _Leg
+_args = _bca([_Leg("SMH260918P00540000", "sell", 1), _Leg("SMH260918P00530000", "buy", 1)], 5, 5.10)
+_legs = __import__("json").loads(_args[_args.index("--legs") + 1])
+check("E104 the paired close stamps buy_to_close on the short leg",
+      any(l["position_intent"] == "buy_to_close" for l in _legs), str(_legs))
+check("E104 and sell_to_close on the long leg",
+      any(l["position_intent"] == "sell_to_close" for l in _legs))
+check("E104 and it is a single multi-leg order, not four singles",
+      "mleg" in _args and _args[_args.index("--qty") + 1] == "5")
+
+print("\n── E106: the entry check keys on the structure ──")
+check("E106 run.py tests (symbol, side, expiry) against held_exp",
+      '(symbol, side, _exp6) in book.get("held_exp"' in _run_src)
+check("E106 it normalises YYYY-MM-DD to the OCC YYMMDD before comparing",
+      '_exp6 = expiry_str.replace("-", "")[2:]' in _run_src)
+check("E106 the old (symbol, side) in held check is GONE",
+      "if (symbol, side) in held" not in _run_src)
+check("E106 and it runs AFTER choose_expiry so the expiry is known",
+      _run_src.index("picked = choose_expiry(") < _run_src.index("(symbol, side, _exp6) in book.get"))
+
+print("\n── E116: the trail re-prices the resting exit, it does not compete with it ──")
+# Every structure carries a resting 50% GTC exit from entry (E5), and that
+# order holds the position's whole closing quantity. The trailing exit
+# submitted a SECOND closing order and the broker rejected it every time:
+# "insufficient qty available for order (requested: 1, available: 0)". Six
+# CLOSE FAILED records on 3 Sep, zero closes. The closer must find the
+# working exit on the short leg and replace its limit with a marketable one.
+check("E116 the closer looks for a resting exit on the short leg",
+      "def _resting_exit(short_sym)" in _run_src)
+check("E116 it matches on *_to_close intent, not on any order",
+      'endswith("_to_close")' in _run_src.split("def _resting_exit")[1][:400])
+check("E116 it uses order replace, not a second submit",
+      '["order", "replace", "--order-id"' in _run_src)
+check("E116 replace carries the marketable limit",
+      '"--limit-price", f"{limit:.2f}"' in _run_src)
+check("E116 preflight runs before a live replace",
+      "execute.preflight()" in _run_src.split("def _closer")[1].split("return execute.submit")[0])
+check("E116 dry run records without replacing",
+      'rec["result"] = "DRY_RUN — not replaced"' in _run_src)
+check("E116 the replace is recorded to the ledger with both limits",
+      '"old_limit": _rest.get("limit_price")' in _run_src and '"new_limit": limit' in _run_src)
+check("E116 submit remains the fallback when no exit is resting",
+      "E78 exit sweep (no resting exit found)" in _run_src)
+
+print("\n── E118: a live structure with no resting exit is healed every cycle ──")
+# The entry path rests the 50% exit one second after the opening order. When
+# the open has not filled yet the broker infers buy_to_open on the close legs
+# and refuses it ("position intent mismatch"). QCOM 175/180 call, 12:55 ET on
+# 3 Sep: 12 contracts filled, exit FAILED, nothing retried. Every entry runs
+# that race. The sweep must place the missing exit, and only the missing one.
+_e118 = _run_src.split("# E118:")[1].split("def _closer")[0] if "# E118:" in _run_src else ""
+check("E118 the healer exists and runs before the closer is defined", bool(_e118))
+check("E118 it skips a structure that already has a resting exit",
+      "if _resting_exit(_m.symbol) is not None:" in _e118 and "continue" in _e118)
+check("E118 it places through place_exit with the ORIGINAL entry legs (sell short, buy long)",
+      'execute.Leg(_m.symbol, "sell", 1)' in _e118 and 'execute.Leg(_lsym, "buy", 1)' in _e118)
+check("E118 it refuses to rest a naked close when the long leg is missing",
+      "will not rest a naked close" in _e118)
+check("E118 it records what it did, including a refusal",
+      '"action": "exit_healed"' in _e118 and 'ledger.record_raw(_rec)' in _e118)
+check("E118 it honours dry_run", "dry_run=dry_run" in _e118)
+check("E118 it runs after the resting-exit lookup is defined",
+      _run_src.index("def _resting_exit") < _run_src.index("# E118:"))
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)

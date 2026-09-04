@@ -137,7 +137,7 @@ d = evaluate(
 check("OTM credit spread now TRADES", d.decision == Decision.TRADE, d.failed_gate or "")
 check("credit_fraction gate ran", any(g.gate == "credit_fraction" for g in d.gates))
 check("reward_risk gate NOT applied to credit", not any(g.gate == "reward_risk" for g in d.gates))
-# Thin credit rejected. It must clear MIN_CREDIT ($0.75) so that
+# Thin credit rejected. It must clear MIN_CREDIT ($0.25 since E113) so that
 # credit_fraction is the gate that actually fires: $10 wide at δ0.30 has a
 # measured floor of 0.85 x 0.150 x 10 = $1.275, so $1.00 passes the flat floor
 # and fails the market-relative one.
@@ -258,6 +258,12 @@ print("\n── E57: demonstration mode (a capped, explicit override of R5) ─�
 import deltax.gates as _G
 from deltax.gates import demo_cap, demo_permits, DEMO_MAX_CONTRACTS
 
+# E111: DEMONSTRATION_MODE is now False in production. These tests describe
+# what demo mode DOES, so they set it ON for their own block and hand it back -
+# a test that inherits today's operational posture tells you nothing about the
+# code (the same lesson as test_execute and the freeze state).
+_demo_was = _G.DEMONSTRATION_MODE
+_G.DEMONSTRATION_MODE = True
 check("E57 cap reduces an oversized position", demo_cap(47) == DEMO_MAX_CONTRACTS,
       f"47 -> {demo_cap(47)}")
 check("E57 cap never RAISES size",
@@ -269,6 +275,8 @@ check("E57 proceeds through a directional caution", demo_permits("DEFENSIVE"))
 check("E57 NEVER proceeds through NO_NEW_POSITIONS",
       not demo_permits("NO_NEW_POSITIONS"))
 check("E57 NEVER proceeds through HALT", not demo_permits("HALT"))
+_G.DEMONSTRATION_MODE = _demo_was
+check("E57 demo flag handed back", _G.DEMONSTRATION_MODE is _demo_was)
 
 # Mutation: with the mode off, the cap must go inert and the overrides stop.
 # A control that behaves identically switched off was never doing anything.
@@ -397,13 +405,16 @@ check("E97 a fresh unfrozen state is honoured",
 # E98 POLARITY. `frozen` is the inverse of `unfreeze`; transposing them wrote
 # frozen=False on a FAILING signal set and authorised new entries - a fail-open
 # in the one place that must fail closed.
-_bad = _fz.evaluate_signals(equity=99_000.0, committed=29_000.0,
+# E111 raised the headroom and CVaR thresholds, so the old fixture (committed
+# 29k of a 30k cap) no longer fails anything. Breach the equity floor instead -
+# it is the one signal no risk-appetite setting relaxes.
+_bad = _fz.evaluate_signals(equity=96_000.0, committed=10_000.0,
                             portfolio_cap=30_000.0, unparsed=[], equities=[],
                             sweep_failed=[], engine_expected_pnl=100.0,
                             engine_score=-100.0)
 check("E98 a failing signal set does NOT unfreeze", _bad["unfreeze"] is False,
       str(_bad["failed"]))
-check("E98 and it names which signal failed", "risk_headroom" in _bad["failed"],
+check("E98 and it names which signal failed", "equity_floor" in _bad["failed"],
       str(_bad["failed"]))
 _good = _fz.evaluate_signals(equity=99_000.0, committed=10_000.0,
                              portfolio_cap=30_000.0, unparsed=[], equities=[],

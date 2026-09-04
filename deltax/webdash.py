@@ -672,6 +672,12 @@ def build(account=None, positions=None, error=None, history=None) -> str:
     # reads direction before reading digits.
     START = 100_000.0
     pnl = (float(eq) - START) if eq not in (None, "") else None
+    # E107: the block said "LOSS TODAY" over a figure measured from the $100k
+    # START. Alpaca's own "Today" is measured from yesterday's close
+    # (last_equity), so the two dashboards disagreed by exactly one day of
+    # history and the word "TODAY" was the lie. Both baselines now shown.
+    _last = float(account.get("last_equity") or 0) if account else 0.0
+    _day = (float(eq) - _last) if (eq not in (None, "") and _last) else None
     pnl_cls = "" if pnl is None else ("pos" if pnl >= 0 else "neg")
     pnl_val = "unavailable" if pnl is None else f"{pnl:+,.2f}"
     pnl_pct = "" if pnl is None else f"{pnl/START*100:+.2f}% of $100,000 start"
@@ -1176,10 +1182,14 @@ td.bar span{{display:block;height:6px;background:linear-gradient(90deg,var(--bl)
 <div class="pnl">
   <div><span class="pnl-k">ACCOUNT VALUE</span>
     <span class="pnl-v">{money(eq)}</span></div>
-  <div><span class="pnl-k">{"PROFIT" if (pnl or 0) >= 0 else "LOSS"} TODAY</span>
+  <div><span class="pnl-k">TODAY</span>
+    <span class="pnl-d {"up" if (_day or 0) >= 0 else "down"}">{("&mdash;" if _day is None else f"{_day:+,.2f}")}<span
+      class="pnl-p">{("&mdash;" if _day is None or not _last else f"{_day/_last*100:+.2f}%")}</span></span>
+    <span class="pnl-n">vs yesterday&rsquo;s close &middot; matches Alpaca&rsquo;s &ldquo;Today&rdquo;</span></div>
+  <div><span class="pnl-k">{"PROFIT" if (pnl or 0) >= 0 else "LOSS"} SINCE START</span>
     <span class="pnl-d {"up" if (pnl or 0) >= 0 else "down"}">{pnl_val}<span
       class="pnl-p">{"&mdash;" if pnl is None else f"{pnl/START*100:+.2f}%"}</span></span>
-    <span class="pnl-n">against the $100,000 start &middot; paper account</span></div>
+    <span class="pnl-n">vs the $100,000 start &middot; the contest number</span></div>
   <div class="mkt {"on" if _mkt_open else ""}"><span class="mkt-dot"></span>
     <span class="mkt-s">MARKET {_mkt_s}</span>
     <span class="mkt-d">{_mkt_d}</span></div>

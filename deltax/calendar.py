@@ -65,6 +65,11 @@ EARNINGS: dict = {
 # retrieved" - which is correct behaviour for a stock and nonsense for a fund
 # (E32). An ETF absent here silently removes itself from the tradeable universe.
 NO_EARNINGS = {
+    # E114 (3 Sep): leveraged / inverse / vol ETFs. TQQQ was refused as
+    # `earnings` on the first cycle it entered the universe: not in this set,
+    # so it fell through to an SEC lookup that an ETF can never satisfy, and
+    # the gate failed closed. Correct behaviour for an unknown; wrong list.
+    "TQQQ", "SQQQ", "SPXL", "SPXS", "UVXY", "SVXY", "SOXL", "SOXS",
     # broad market
     "SPY", "QQQ", "IWM", "DIA", "VOO", "VTI", "IVV", "RSP", "MDY",
     # sectors

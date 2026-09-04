@@ -156,15 +156,22 @@ check("E102 the reason states peak, current and give-back",
 # same position, peak only 30% => give-back is 0 points, hold
 check("E102 no give-back means hold",
       _m(2.00, 1.40, peak=0.30).reason(BEFORE_DEADLINE) is None)
-# a 10-point give-back is inside the 9-15% round-trip cost band - hold
-check("E102 a give-back smaller than the friction band holds",
-      _m(2.00, 1.60, peak=0.30).reason(BEFORE_DEADLINE) is None,
+# E109: a 10-point give-back now EXITS (arm 15, give-back 10); a 5-point one
+# is still inside the friction band and holds
+check("E109 a 10-point give-back from a 30% peak exits",
+      "trailing exit" in (_m(2.00, 1.60, peak=0.30).reason(BEFORE_DEADLINE) or ""),
       str(_m(2.00, 1.60, peak=0.30).reason(BEFORE_DEADLINE)))
+check("E109 a 5-point give-back still holds (inside friction)",
+      _m(2.00, 1.50, peak=0.30).reason(BEFORE_DEADLINE) is None,
+      str(_m(2.00, 1.50, peak=0.30).reason(BEFORE_DEADLINE)))
 # never armed below the arm threshold, however large the retrace
-check("E102 an unarmed position (peak 20%) never trails",
-      _m(2.00, 2.00, peak=0.20).reason(BEFORE_DEADLINE) is None)
-check("E102 arm threshold is 25%", abs(TRAIL_ARM_AT - 0.25) < 1e-9)
-check("E102 give-back threshold is 15 points", abs(TRAIL_GIVE_BACK - 0.15) < 1e-9)
+check("E109 an unarmed position (peak 12%) never trails",
+      _m(2.00, 2.00, peak=0.12).reason(BEFORE_DEADLINE) is None)
+check("E109 arm threshold is 15%", abs(TRAIL_ARM_AT - 0.15) < 1e-9)
+check("E109 give-back threshold is 10 points", abs(TRAIL_GIVE_BACK - 0.10) < 1e-9)
+# the give-back must never sit inside the measured 9-15% round-trip band
+check("E109 give-back is not below the friction floor (9 points)",
+      TRAIL_GIVE_BACK >= 0.09, "a trail inside the bid/ask band fires on noise")
 # ranking: the fixed target and the deadline both outrank the trail
 check("E102 the 50% target still wins when both would fire",
       "target hit" in (_m(2.00, 0.90, peak=0.95).reason(BEFORE_DEADLINE) or ""))

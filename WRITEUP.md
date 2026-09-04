@@ -63,12 +63,19 @@ gate, and SMH is out of the universe.
 record shows the full picture, not the first failure. Every gate **fails closed**:
 unreadable data is a refusal, never a skip.
 
-Defined risk · position size (2% of equity) · portfolio risk (30% cap) · liquidity
+Defined risk · position size (5% of equity) · portfolio risk (60% cap) · liquidity
 (500 OI floor, ≤5% of a strike's open interest) · spread quality and round-trip
 friction (≤35% of credit) · minimum credit · credit fraction against a measured
 market surface · **variance premium (IV/RV ≥ 1.10)** · DTE band · time-stop
 coherence · contest window · earnings blackout · quote sanity · listing freshness
 · halt and corporate action.
+
+The earnings blackout is a file, not a live call: SEC 8-K history is resolved
+once in pre-market and the loop reads it in microseconds. A single name with no
+usable history, or absent from the file, is refused. When the SEC lookup is
+unavailable, a name can only enter through a hand-verified date with its source
+recorded (`state/earnings-manual.json`); an entry with no source, no parseable
+date, or a date inside the trade's horizon is written as blocked, never dropped.
 
 Above them sit an entry freeze driven by eight live signals, a per-cycle single-
 instance lock, and a deadline flatten. **Closing orders bypass every stand-down** —
@@ -77,10 +84,10 @@ safety.
 
 **Exits are the strategy, not an afterthought.** A GTC buy-to-close at 50% of
 credit rests from the moment of entry, so it fills whether or not the agent is
-alive. A trailing take-profit arms at 25% captured and exits on a 15-point
-give-back — loose on purpose, because our measured round-trip is 9–15% of credit
-and a tight trail would fire on quote noise. Everything flattens at 10:00 ET on
-judging day.
+alive. A trailing take-profit arms at 15% captured and exits on a 10-point
+give-back, floored above our measured 9% round-trip so it cannot fire on quote
+noise; when it fires it re-prices the resting exit rather than racing it.
+Everything flattens at 10:00 ET on judging day.
 
 ---
 

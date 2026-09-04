@@ -81,6 +81,7 @@ def reconcile(positions: list, orders: Optional[list] = None) -> dict:
     wrong in when the number gates further risk.
     """
     held, committed, unparsed, equities = set(), 0.0, [], []
+    held_exp: set = set()       # E106: (underlying, right, expiry) - per structure
     structs: dict = {}          # E79: (underlying, right, expiry) -> legs
     for p in positions or []:
         sym = p.get("symbol", "")
@@ -116,6 +117,7 @@ def reconcile(positions: list, orders: Optional[list] = None) -> dict:
             unparsed.append(sym)
             continue
         held.add((occ["underlying"], occ["right"]))
+        held_exp.add((occ["underlying"], occ["right"], occ["expiry"]))
         try:
             qty = float(p.get("qty") or 0)
             entry = abs(float(p.get("avg_entry_price") or 0))
@@ -160,8 +162,17 @@ def reconcile(positions: list, orders: Optional[list] = None) -> dict:
     held |= pend["held"]
     unparsed += pend["unparsed"]
     equities += pend.get("equities") or []
-    return {"held": held, "committed": committed, "unparsed": unparsed,
-            "equities": equities,
+    # E106: pending opens also count against their expiry, so two cycles cannot
+    # race the same structure into the book (the E36 window, one key wider).
+    for o in orders or []:
+        for leg in (o.get("legs") or [o]):
+            if str(leg.get("position_intent", "")).endswith("_to_close"):
+                continue
+            occ = parse_occ(leg.get("symbol", ""))
+            if occ:
+                held_exp.add((occ["underlying"], occ["right"], occ["expiry"]))
+    return {"held": held, "held_exp": held_exp, "committed": committed,
+            "unparsed": unparsed, "equities": equities,
             "count": len(positions or []), "pending": len(pend["held"]),
             "pending_orders": pend["count"]}
 

@@ -79,7 +79,8 @@ DEFAULT_WIDTH = {
                  # the same band as the index names rather than scaling with
                  # share price - a 5-wide spread on a $35 ETF is not a spread.
                  "EEM": 2.0, "HYG": 2.0, "FXI": 1.0, "XLU": 2.0, "SLV": 2.0,
-                 "AAPL": 5.0,}
+                 "AAPL": 5.0, "ORCL": 2.5, "JPM": 5.0,
+                 "RSP": 5.0, "XLI": 5.0, "XLU": 1.0, "TQQQ": 2.0, "VXX": 1.0,}
 
 # Income-book candidates beyond the three regime benchmarks. All ETFs, so no
 # earnings risk, and all verified to carry strikes clearing the OI floor in the
@@ -141,7 +142,37 @@ SECTOR_SLEEVES = ["XLE", "XOP", "XLK", "SMH", "SOXX", "XLF", "KRE",
 # above the floor, no earnings until late October. AVGO scored 90% and is
 # deliberately NOT added: it reported after today's close, so tomorrow it is a
 # repricing event with the same 10-17% excursion band that ruled out SNOW.
-INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL"]
+# E110 (3 Sep 10:50). Broad scan of 30 names, live: ORCL carried the richest
+# variance premium on the board (IV/RV 1.83, 89% tradeability, 46 highs / 14
+# lows) and JPM the highest tradeability (92%, IV/RV 1.67). Both added.
+#
+# ORCL reports fiscal Q1 around 9-12 Sep. The earnings gate refuses any expiry
+# that crosses it - 09-11 and 09-18 - and permits 09-08. That is the gate's
+# job, not this list's: adding ORCL here lets the pipeline evaluate it; the
+# gate decides. After SNOW, an expiry across an earnings print is not a trade.
+#
+# Every single name here (AAPL, ORCL, JPM) is REFUSED until DELTAX_SEC_UA is
+# set: the earnings lookup fails without it, and the gate fails closed on an
+# unknown date. That is correct behaviour and it is the operator's line to set.
+# E112 (3 Sep 11:40). Forty-ETF scan, live. ETFs carry no earnings lookup, so
+# anything clearing here is tradeable THIS cycle without DELTAX_SEC_UA. Five
+# cleared every gate at tradeability >= 70 and IV/RV >= 1.10:
+#   RSP  1.58   XLI 1.52 (31 liquid strikes)   VXX 1.53   TQQQ 1.31   XLU 1.22
+# VXX and TQQQ pass the pricing gates and are added on that basis; both carry
+# realised-vol behaviour the IV/RV ratio understates (VXX can gap 30% in an
+# hour, TQQQ is 3x). The variance-premium and defined-risk gates price each
+# candidate on its own merits every cycle, and the joint-CVaR brake bounds the
+# concentration against the existing index-put book. That is the control; the
+# list only says where to look.
+INCOME_UNIVERSE = ["DIA", "SPY", "QQQ", "IWM", "FXI", "HYG", "EEM", "AAPL", "ORCL", "JPM",
+                   "RSP", "XLI", "XLU", "TQQQ", "VXX",
+                   # E117 (3 Sep 12:03 ET): top of a 35-name single-name scan with
+                   # the E115 screener - UNH 87% IV/RV 1.50, QCOM 79% 1.25, C 76%
+                   # 1.25; all three cleared every pricing gate at production
+                   # prices. Their earnings dates are hand-verified in
+                   # state/earnings-manual.json (blocklist --manual), the only
+                   # way a single name can pass without DELTAX_SEC_UA.
+                   "UNH", "QCOM", "C"]
 
 
 @dataclass
@@ -485,7 +516,8 @@ def directional_bias(side: str, structure: str = "credit") -> tuple:
 
 
 def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
-                  strike_lo: float, strike_hi: float) -> Optional[tuple]:
+                  strike_lo: float, strike_hi: float,
+                  skip_expiries=None) -> Optional[tuple]:
     """Pick the NEAREST expiry in the band that is liquid enough to trade.
 
     The chain endpoint pages by expiry-then-strike, so a multi-expiry request
@@ -513,7 +545,14 @@ def choose_expiry(feed, symbol: str, side: str, gte: str, lte: str,
     for c in contracts:
         by_exp.setdefault(c["expiration_date"], {})[c["symbol"]] = _as_int(
             c.get("open_interest"), LAST_UNREADABLE_OI)
+    skip = set(skip_expiries or ())
     for exp in sorted(by_exp):                      # ascending date = nearest first
+        # E106: a structure already held or working on this expiry is refused
+        # downstream anyway, so do not stop here - try the NEXT expiry. Without
+        # this the nearest date always won, was always the held one, and the
+        # four most tradeable names were locked at one spread per side.
+        if exp in skip:
+            continue
         oi = by_exp[exp]
         liquid = sum(1 for v in oi.values() if v >= MIN_OPEN_INTEREST)
         if liquid < MIN_LIQUID_STRIKES:
