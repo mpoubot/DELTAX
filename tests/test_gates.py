@@ -487,6 +487,55 @@ check("E99 a missing engine reading fails closed",
                            sweep_failed=[], engine_expected_pnl=None,
                            engine_score=None)["unfreeze"] is False)
 
+print("\n── E119: the deadline rolls, so time-anchored controls keep working ──")
+# The contest deadline passed and every control anchored to it died silently.
+# `time_to_work` measured hours to a fixed Fri 4 Sep 10:00 and sat at -60h, so
+# entries could never unfreeze; `past_contest_deadline` was permanently True,
+# so the sweep tried to flatten every cycle and never evaluated a target or a
+# trail again. The agent reported a healthy freeze over a stopped clock.
+from datetime import datetime as _dtm
+from deltax.gates import next_flatten as _nf, _et as _ETZ, gate_contest_window as _gcw
+from deltax.manage import past_contest_deadline as _pcd
+_ET = _ETZ()
+
+def _at(d, h, mi=0):
+    return _dtm(2026, 9, d, h, mi, tzinfo=_ET)
+
+check("E119 next_flatten always lands on a Friday at 10:00 ET",
+      all(_nf(_at(d, 12)).astimezone(_ET).weekday() == 4
+          and _nf(_at(d, 12)).astimezone(_ET).hour == 10
+          for d in (7, 8, 9, 10, 11, 12, 13, 14)))
+check("E119 it is always in the future, never a passed date",
+      all(_nf(_at(d, h)) > _at(d, h)
+          for d in (7, 9, 11, 13) for h in (9, 10, 11, 15, 23)))
+check("E119 it rolls to the next week once the flatten hour arrives",
+      _nf(_at(11, 9)).astimezone(_ET).day == 11
+      and _nf(_at(11, 10)).astimezone(_ET).day == 18)
+
+# the exact regression: hours_to_flatten was -60 and could never recover
+import deltax.freeze as _fzz
+_mon = _fzz.evaluate_signals(
+    equity=99_000.0, committed=1_000.0, portfolio_cap=30_000.0, unparsed=[],
+    equities=[], sweep_failed=[], engine_expected_pnl=50.0,
+    engine_score=-100.0, now=_at(7, 9))
+check("E119 time_to_work passes on a Monday instead of sitting at -60h",
+      _mon["signals"]["time_to_work"]["pass"], _mon["signals"]["time_to_work"]["detail"])
+check("E119 and still refuses an hour before the flatten",
+      _fzz.evaluate_signals(
+          equity=99_000.0, committed=1_000.0, portfolio_cap=30_000.0,
+          unparsed=[], equities=[], sweep_failed=[], engine_expected_pnl=50.0,
+          engine_score=-100.0, now=_at(11, 9))["signals"]["time_to_work"]["pass"] is False)
+
+check("E119 the flatten window is Friday 10:00 to the close, and only then",
+      _pcd(_at(11, 10)) and _pcd(_at(11, 15))
+      and not _pcd(_at(11, 9)) and not _pcd(_at(11, 16))
+      and not _pcd(_at(10, 12)) and not _pcd(_at(14, 12)))
+check("E119 a Monday long after the contest is NOT past the deadline",
+      _pcd(_at(28, 12)) is False)
+check("E119 the expiry horizon moves with the anchor, not with 4 Sep",
+      _gcw(date(2026, 10, 2)).passed and not _gcw(date(2026, 10, 9)).passed)
+
+
 print(f"\n{'='*52}\n  {passed} passed, {failed} failed\n{'='*52}")
 sys.exit(1 if failed else 0)
 

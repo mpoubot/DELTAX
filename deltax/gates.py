@@ -9,7 +9,7 @@ See STRATEGY.md and research/options/golden-rules.md for provenance.
 """
 
 from dataclasses import dataclass, field, asdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 import json
 
@@ -223,7 +223,48 @@ def gate_portfolio_risk(new_max_loss: float, open_max_loss: float, equity: float
     )
 
 
-CONTEST_CLOSE = date(2026, 9, 4)
+CONTEST_CLOSE = date(2026, 9, 4)     # the hackathon deadline, kept for the record
+
+# E119: the contest deadline passed and every time-anchored control died with
+# it. `time_to_work` measured hours to a fixed Fri 4 Sep 10:00 and went
+# permanently negative (-60h by Sunday), so entries could never unfreeze again;
+# `past_contest_deadline` went permanently True, so the sweep tried to flatten
+# the book every cycle and never evaluated a profit target or a trail again.
+# Neither failed loudly - the agent just sat frozen, closing, forever.
+#
+# The deadline now ROLLS: the same Friday 10:00 ET flatten, next occurrence.
+# Every threshold is unchanged (6h to work, 21 DTE, all fifteen gates); only
+# the anchor moves, which is what lets a weekly strategy keep running weekly.
+FLATTEN_WEEKDAY  = 4      # Friday
+FLATTEN_HOUR_ET  = 10     # 10:00 ET, unchanged from the contest
+
+
+def _et():
+    """America/New_York, falling back to a fixed -4 if tzdata is unavailable.
+
+    Worth the fallback: this now runs indefinitely, and a fixed offset silently
+    becomes wrong the day DST ends.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo("America/New_York")
+    except Exception:
+        return timezone(timedelta(hours=-4))
+
+
+def next_flatten(now=None) -> datetime:
+    """The next Friday 10:00 ET flatten, at or after `now`.
+
+    One source of truth: gates, the freeze signals and the exit sweep all
+    anchor here, so the book can never disagree with itself about when it is
+    supposed to be flat.
+    """
+    ET = _et()
+    now = (now or datetime.now(timezone.utc)).astimezone(ET)
+    days = (FLATTEN_WEEKDAY - now.weekday()) % 7
+    cand = (now + timedelta(days=days)).replace(
+        hour=FLATTEN_HOUR_ET, minute=0, second=0, microsecond=0)
+    return cand if cand > now else cand + timedelta(days=7)
 
 
 # E42: every structure the contest window permits tests negative over 26 weeks.
@@ -356,12 +397,17 @@ def gate_contest_window(expiry: date) -> GateResult:
     little to show anything by Friday, so MAX_DTE remains the outer limit and
     is what actually constrains this now.
     """
-    horizon = CONTEST_CLOSE + timedelta(days=MAX_DTE)
+    # E119: anchored to the NEXT flatten, not the dead contest date. Pinned to
+    # 4 Sep the horizon stopped moving while the calendar did, so the tradeable
+    # band shrank every day and would have closed entirely on 25 Sep - the
+    # agent refusing every expiry in existence, for a deadline three weeks gone.
+    anchor = next_flatten().date()
+    horizon = anchor + timedelta(days=MAX_DTE)
     ok = expiry <= horizon
-    past = expiry > CONTEST_CLOSE
-    note = (f"expiry {expiry} vs contest close {CONTEST_CLOSE}")
+    past = expiry > anchor
+    note = (f"expiry {expiry} vs flatten {anchor}")
     if ok and past:
-        note += " - past judging, marked to market (partial decay counts)"
+        note += " - past the flatten, marked to market (partial decay counts)"
     elif not ok:
         note += f" - beyond the {MAX_DTE}-day horizon, too little decay to show"
     return GateResult("contest_window", ok, note)

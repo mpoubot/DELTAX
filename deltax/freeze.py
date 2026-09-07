@@ -47,7 +47,11 @@ MAX_COMMITTED_FRACTION = 1.00   # E111: 0.80 -> 1.00. Use the whole cap before p
 MIN_HOURS_TO_FLATTEN   = 6.0    # a new position needs time to decay before 10:00
 MIN_EQUITY             = 97_000.0   # do not add risk while bleeding
 MAX_CVAR_FRACTION      = 0.12   # E111: 0.05 -> 0.12. Joint 5% tail may reach 12% of equity
-CONTEST_FLATTEN = datetime(2026, 9, 4, 10, 0, tzinfo=ET)
+# E119: was a fixed datetime(2026, 9, 4, 10, 0). Once that passed, hours_left
+# went permanently negative and `time_to_work` could never pass again - entries
+# frozen forever, with the board reporting a healthy freeze rather than a dead
+# clock. Now resolved per evaluation from the one rolling definition in gates.
+from deltax.gates import next_flatten as _next_flatten
 
 DEFAULT_FROZEN_REASON = (
     "E96: new entries frozen - 4.7:1 risk/reward needs an 82.4% win rate vs "
@@ -119,7 +123,7 @@ def evaluate_signals(*, equity: float, committed: float, portfolio_cap: float,
     Returns {"unfreeze": bool, "signals": {name: {"pass":, "detail":}}}.
     """
     now = now or _now()
-    hours_left = (CONTEST_FLATTEN - now).total_seconds() / 3600.0
+    hours_left = (_next_flatten(now) - now).total_seconds() / 3600.0
     sig = {}
 
     sig["book_legible"] = {
