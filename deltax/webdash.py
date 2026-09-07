@@ -117,128 +117,229 @@ def _tz_times():
         return {"us": "", "lv": "", "dk": "", "date": ""}
 
 
-def _equity_chart(history=None):
-    """Equity through the contest window, with the finish line marked.
+def _fetch_history(feed):
+    """Equity history at several resolutions, for the range toggle.
 
-    Form: change-over-time, one series -> a line. One series needs no legend;
-    the heading names it. Everything else on the plot is a REFERENCE mark, not a
-    second series, so each carries a label and a shape and never relies on
-    colour alone.
+    One call per range rather than one call resampled: Alpaca returns a
+    different baseline and a different intraday-reporting rule per period, so
+    deriving 1D from the 1M series would silently misstate the intraday line.
 
-    The window is fixed to the contest - Mon 31 Aug through the Fri 4 Sep close -
-    rather than to the data, so the run is read against its deadline instead of
-    against whatever happened to be fetched. The empty right-hand side IS the
-    information: it is the time still left.
+    A zero in the equity array is NOT $0 - it is a timestamp from before the
+    account existed. Alpaca pads the head of every series with them. Treating
+    them as data drew the line from zero on every chart, so they are dropped
+    here rather than plotted.
 
-    Contrast was computed against the #050B0B panel, not eyeballed: the line at
-    12.2:1, the finish line at 10.4:1, the $100k baseline at 4.6:1.
-
-    Returns '' on any failure. A chart is decoration; it must never take the
-    board down.
+    Any range that fails or comes back too short is simply absent from the
+    result; the toggle then renders that button disabled instead of an empty
+    chart.
     """
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-    ET = _tz(_td(hours=-4))
+    out = {}
+    for key, period, tf in (("1D", "1D", "5Min"), ("1W", "1W", "1H"),
+                            ("1M", "1M", "1D"), ("ALL", "1A", "1D")):
+        try:
+            d = feed._run(["account", "portfolio", "--period", period,
+                           "--timeframe", tf])
+            ts = [int(t) for t in (d.get("timestamp") or [])]
+            eq = [float(v) for v in (d.get("equity") or [])]
+            pts = [[t, round(v, 2)] for t, v in zip(ts, eq) if v and v > 0]
+            if len(pts) >= 2:
+                out[key] = pts
+        except Exception:
+            continue
+    return out
+
+
+def _equity_chart(series=None):
+    """Equity over a selectable range - 1D / 1W / 1M / ALL.
+
+    Was locked to the contest window (31 Aug - 4 Sep) and hardcoded its own
+    finish line. That window has closed, and a board that can only ever draw
+    one fixed week stops being a live instrument the day the week ends. The
+    range is now chosen by the reader and the series come from the broker, so
+    the chart keeps working for as long as the account does.
+
+    Drawn client-side from embedded data: switching range redraws instantly
+    with no round trip, and the hover scrub reads the real point under the
+    cursor rather than an interpolation.
+
+    Kept from the old chart: the dashed $100,000 baseline (the contest number
+    is measured against it, so it stays on every range), the teal/red split on
+    whether the range gained or lost, and the filled area under the line.
+
+    Returns '' when no range has usable data. A chart is decoration; it must
+    never take the board down.
+    """
+    import json as _json
     try:
-        ts = [int(t) for t in (history or {}).get("timestamp") or []]
-        eq = [float(v) for v in (history or {}).get("equity") or []]
-        pts = [(t, v) for t, v in zip(ts, eq) if v > 0]
-        if len(pts) < 2:
+        series = {k: v for k, v in (series or {}).items() if len(v or []) >= 2}
+        if not series:
             return ""
     except Exception:
         return ""
 
-    START = _dt(2026, 8, 31, 9, 30, tzinfo=ET)      # contest day one
-    END   = _dt(2026, 9, 4, 16, 0, tzinfo=ET)       # Friday close - the finish line
-    JUDGE = _dt(2026, 9, 4, 11, 0, tzinfo=ET)       # submission
-    FIRST = _dt(2026, 9, 2, 10, 10, tzinfo=ET)      # first fill, from the broker
-    BASE  = 100_000.0
-
-    W, H = 1000.0, 168.0
-    PL, PR, PT, PB = 52.0, 92.0, 16.0, 22.0
-    span = (END - START).total_seconds()
-    x_of = lambda d: PL + (max((d - START).total_seconds(), 0) / span) * (W - PL - PR)
-
-    vals = [v for _, v in pts] + [BASE]
-    lo, hi = min(vals), max(vals)
-    pad = max((hi - lo) * 0.35, 120.0)
-    lo, hi = lo - pad, hi + pad
-    y_of = lambda v: PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB)
-
-    def _d(t):
-        return _dt.fromtimestamp(t, ET)
-
-    xs = [(x_of(_d(t)), y_of(v), _d(t), v) for t, v in pts]
-    xs = [p for p in xs if p[0] >= PL - 1]
-    if len(xs) < 2:
+    order = [k for k in ("1D", "1W", "1M", "ALL") if k in series]
+    if not order:
         return ""
-    line = " ".join(f"{'M' if i == 0 else 'L'}{x:.1f},{y:.1f}"
-                    for i, (x, y, _, _) in enumerate(xs))
-    base_y = y_of(BASE)
-    area = (f"M{xs[0][0]:.1f},{base_y:.1f} "
-            + " ".join(f"L{x:.1f},{y:.1f}" for x, y, _, _ in xs)
-            + f" L{xs[-1][0]:.1f},{base_y:.1f} Z")
+    initial = "1W" if "1W" in order else order[-1]
+    btns = "".join(
+        '<button class="eqc-b%s" data-r="%s">%s</button>'
+        % (" on" if k == initial else "", k, k) for k in order)
 
-    last_v = xs[-1][3]
-    last_x, last_y = xs[-1][0], xs[-1][1]
-    up = last_v >= BASE
-    stroke = "#3FE0DA" if up else "#FF8A8A"
-    pnl = (last_v - BASE) / BASE * 100
-
-    # day gridlines
-    grid = []
-    for i in range(5):
-        d = START + _td(days=i)
-        gx = x_of(d.replace(hour=9, minute=30))
-        grid.append(
-            f'<line x1="{gx:.1f}" y1="{PT}" x2="{gx:.1f}" y2="{H-PB}" '
-            f'stroke="#12302E" stroke-width="1"/>'
-            f'<text x="{gx:.1f}" y="{H-8}" fill="#5B807D" font-size="8.5" '
-            f'letter-spacing="1.4">{d:%a %d}</text>')
-
-    idle_x0, idle_x1 = x_of(START), x_of(FIRST)
-    jx, ex = x_of(JUDGE), x_of(END)
-
-    return f"""<div class="eqc">
-<div class="eqc-hd">EQUITY &middot; CONTEST WINDOW
-  <b class="{'ok' if up else 'bad'}">{last_v:,.0f} &nbsp;{pnl:+.2f}%</b></div>
-<svg viewBox="0 0 {W:.0f} {H:.0f}" preserveAspectRatio="none" class="eqc-svg"
-     role="img" aria-label="Account equity from 31 August to the 4 September close.
-     No positions were opened until 2 September at 10:10 ET. Currently
-     {last_v:,.0f} dollars, {pnl:+.2f} percent against the 100,000 start.">
-  <defs>
-    <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="{stroke}" stop-opacity=".26"/>
-      <stop offset="100%" stop-color="{stroke}" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  {''.join(grid)}
-  <rect x="{idle_x0:.1f}" y="{PT}" width="{max(idle_x1-idle_x0,0):.1f}"
-        height="{H-PT-PB:.1f}" fill="#5B807D" fill-opacity=".07"/>
-  <text x="{(idle_x0+idle_x1)/2:.1f}" y="{PT+13}" fill="#5B807D" font-size="8.5"
-        text-anchor="middle" letter-spacing="1.6">NO POSITIONS OPENED</text>
-  <line x1="{PL}" y1="{base_y:.1f}" x2="{W-PR}" y2="{base_y:.1f}"
-        stroke="#5B807D" stroke-width="1" stroke-dasharray="3 4"/>
-  <text x="{PL-6}" y="{base_y+3:.1f}" fill="#5B807D" font-size="8.5"
+    return ("""<div class="eqc" id="eqc">
+<div class="eqc-hd">
+  <span>EQUITY <b class="eqc-rl">""" + initial + """</b></span>
+  <b id="eqc-v">&mdash;</b>
+</div>
+<div class="eqc-sub"><span id="eqc-when">&nbsp;</span>
+  <span id="eqc-base">&nbsp;</span></div>
+<svg viewBox="0 0 1000 168" preserveAspectRatio="none" class="eqc-svg"
+     id="eqc-svg" role="img"
+     aria-label="Account equity over a selectable time range, against the
+     100,000 dollar starting balance.">
+  <defs><linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
+    <stop id="eqf0" offset="0%" stop-opacity=".26"/>
+    <stop id="eqf1" offset="100%" stop-opacity="0"/>
+  </linearGradient></defs>
+  <g id="eqc-grid"></g>
+  <line id="eqc-baseline" stroke="#5B807D" stroke-width="1"
+        stroke-dasharray="3 4"/>
+  <text id="eqc-baselbl" fill="#5B807D" font-size="8.5"
         text-anchor="end">100k</text>
-  <path d="{area}" fill="url(#eqfill)"/>
-  <path d="{line}" fill="none" stroke="{stroke}" stroke-width="2"
-        stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="{x_of(FIRST):.1f}" cy="{y_of(BASE):.1f}" r="3.5" fill="#050B0B"
-          stroke="{stroke}" stroke-width="2"/>
-  <text x="{x_of(FIRST)+7:.1f}" y="{y_of(BASE)-7:.1f}" fill="#5B807D"
-        font-size="8.5" letter-spacing="1.2">FIRST TRADE 10:10</text>
-  <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="4" fill="{stroke}"/>
-  <circle cx="{last_x:.1f}" cy="{last_y:.1f}" r="8" fill="{stroke}"
-          fill-opacity=".18"/>
-  <line x1="{jx:.1f}" y1="{PT}" x2="{jx:.1f}" y2="{H-PB}" stroke="#E8B42B"
-        stroke-width="1" stroke-dasharray="2 3" opacity=".75"/>
-  <line x1="{ex:.1f}" y1="{PT}" x2="{ex:.1f}" y2="{H-PB}" stroke="#E8B42B"
-        stroke-width="2"/>
-  <text x="{ex-6:.1f}" y="{PT+11}" fill="#E8B42B" font-size="9"
-        text-anchor="end" letter-spacing="1.6">FINISH &middot; FRI CLOSE</text>
-  <text x="{jx-6:.1f}" y="{H-PB-6:.1f}" fill="#E8B42B" font-size="8"
-        text-anchor="end" opacity=".85" letter-spacing="1.2">JUDGING 11:00</text>
-</svg></div>"""
+  <path id="eqc-area" fill="url(#eqfill)"/>
+  <path id="eqc-line" fill="none" stroke-width="2" stroke-linejoin="round"
+        stroke-linecap="round"/>
+  <line id="eqc-cross" stroke="#5B807D" stroke-width="1" opacity="0"/>
+  <circle id="eqc-dot" r="4"/>
+  <circle id="eqc-halo" r="8" fill-opacity=".18"/>
+</svg>
+<div class="eqc-rs">""" + btns + """</div>
+</div>
+<script>
+(function(){
+  var D = """ + _json.dumps(series, separators=(",", ":")) + """;
+  var BASE = 100000, W = 1000, H = 168,
+      PL = 52, PR = 22, PT = 16, PB = 22;
+  var UP = "#3FE0DA", DN = "#FF8A8A", MUTE = "#5B807D";
+  var svg = document.getElementById("eqc-svg");
+  var cur = '""" + initial + """';
+
+  function money(n){
+    return "$" + n.toLocaleString("en-US",{minimumFractionDigits:0,
+                                           maximumFractionDigits:0});
+  }
+  function stamp(ts, range){
+    var d = new Date(ts*1000);
+    var o = (range === "1D")
+      ? {hour:"numeric", minute:"2-digit", timeZone:"America/New_York"}
+      : {month:"short", day:"numeric", timeZone:"America/New_York"};
+    return d.toLocaleString("en-US", o);
+  }
+
+  function draw(range, hoverIdx){
+    var pts = D[range]; if(!pts || pts.length < 2) return;
+    var vals = pts.map(function(p){return p[1];}).concat([BASE]);
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var pad = Math.max((hi-lo)*0.35, 120); lo -= pad; hi += pad;
+    var n = pts.length;
+    var X = function(i){ return PL + (i/(n-1))*(W-PL-PR); };
+    var Y = function(v){ return PT + (1-(v-lo)/(hi-lo))*(H-PT-PB); };
+
+    var first = pts[0][1], last = pts[n-1][1];
+    var gain = last - first;
+    var col = gain >= 0 ? UP : DN;
+
+    var dpath = "", apath = "M" + X(0).toFixed(1) + "," + Y(BASE).toFixed(1);
+    for(var i=0;i<n;i++){
+      var x = X(i).toFixed(1), y = Y(pts[i][1]).toFixed(1);
+      dpath += (i?"L":"M") + x + "," + y;
+      apath += "L" + x + "," + y;
+    }
+    apath += "L" + X(n-1).toFixed(1) + "," + Y(BASE).toFixed(1) + "Z";
+
+    document.getElementById("eqc-line").setAttribute("d", dpath);
+    document.getElementById("eqc-line").setAttribute("stroke", col);
+    document.getElementById("eqc-area").setAttribute("d", apath);
+    document.getElementById("eqf0").setAttribute("stop-color", col);
+    document.getElementById("eqf1").setAttribute("stop-color", col);
+
+    var by = Y(BASE).toFixed(1);
+    var bl = document.getElementById("eqc-baseline");
+    bl.setAttribute("x1", PL); bl.setAttribute("x2", W-PR);
+    bl.setAttribute("y1", by); bl.setAttribute("y2", by);
+    var blb = document.getElementById("eqc-baselbl");
+    blb.setAttribute("x", PL-6); blb.setAttribute("y", (+by)+3);
+
+    // vertical gridlines: one per day boundary, or per 2h on 1D
+    var g = "";
+    var prev = null;
+    for(var j=0;j<n;j++){
+      var d = new Date(pts[j][0]*1000);
+      var key = (range === "1D") ? d.getUTCHours() : d.getUTCDate();
+      if(prev !== null && key !== prev){
+        var gx = X(j).toFixed(1);
+        g += '<line x1="'+gx+'" y1="'+PT+'" x2="'+gx+'" y2="'+(H-PB)+
+             '" stroke="#12302E" stroke-width="1"/>';
+      }
+      prev = key;
+    }
+    document.getElementById("eqc-grid").innerHTML = g;
+
+    var idx = (hoverIdx === undefined || hoverIdx === null) ? n-1 : hoverIdx;
+    var hv = pts[idx][1];
+    var dot = document.getElementById("eqc-dot");
+    var halo = document.getElementById("eqc-halo");
+    [dot, halo].forEach(function(el){
+      el.setAttribute("cx", X(idx).toFixed(1));
+      el.setAttribute("cy", Y(hv).toFixed(1));
+      el.setAttribute("fill", col);
+    });
+    var cross = document.getElementById("eqc-cross");
+    cross.setAttribute("x1", X(idx).toFixed(1));
+    cross.setAttribute("x2", X(idx).toFixed(1));
+    cross.setAttribute("y1", PT); cross.setAttribute("y2", H-PB);
+    cross.setAttribute("opacity", hoverIdx == null ? 0 : 0.5);
+
+    var chg = hv - first, pct = first ? (chg/first*100) : 0;
+    var vEl = document.getElementById("eqc-v");
+    vEl.textContent = money(hv) + "   " +
+      (chg>=0?"+":"\u2212") + money(Math.abs(chg)).slice(1) +
+      " (" + (chg>=0?"+":"\u2212") + Math.abs(pct).toFixed(2) + "%)";
+    vEl.className = chg >= 0 ? "ok" : "bad";
+    document.getElementById("eqc-when").textContent =
+      stamp(pts[idx][0], range) + " ET";
+    var vs = hv - BASE;
+    document.getElementById("eqc-base").textContent =
+      (vs>=0?"+":"\u2212") + money(Math.abs(vs)).slice(1) +
+      " vs the $100,000 start";
+  }
+
+  svg.addEventListener("mousemove", function(ev){
+    var pts = D[cur]; if(!pts) return;
+    var r = svg.getBoundingClientRect();
+    var fx = (ev.clientX - r.left) / r.width * W;
+    var t = (fx - PL) / (W - PL - PR);
+    var i = Math.round(t * (pts.length-1));
+    if(i < 0) i = 0; if(i > pts.length-1) i = pts.length-1;
+    draw(cur, i);
+  });
+  svg.addEventListener("mouseleave", function(){ draw(cur, null); });
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll("#eqc .eqc-rs button"), function(b){
+      b.addEventListener("click", function(){
+        cur = b.getAttribute("data-r");
+        Array.prototype.forEach.call(
+          document.querySelectorAll("#eqc .eqc-rs button"), function(o){
+            o.className = "eqc-b" + (o === b ? " on" : "");
+          });
+        document.querySelector("#eqc .eqc-rl").textContent = cur;
+        draw(cur, null);
+      });
+    });
+
+  draw(cur, null);
+})();
+</script>""")
 
 
 def _market_status():
@@ -967,7 +1068,10 @@ refusal is enforced in code at the order boundary, not by convention.</div>
 
 
     _tz = _tz_times()
-    return f"""<title>DELTAX — Autonomous Options Agent</title>
+    return f"""<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DELTAX — Autonomous Options Agent</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 .mkt{{display:inline-flex;align-items:baseline;gap:7px;border:1px solid var(--line);
@@ -998,7 +1102,14 @@ margin:0 0 14px}}
 color:var(--dim2);font-size:9.5px;letter-spacing:.2em;margin-bottom:6px}}
 .eqc-hd b{{font-size:14px;letter-spacing:.02em;font-variant-numeric:tabular-nums}}
 .eqc-hd b.ok{{color:var(--bl)}}.eqc-hd b.bad{{color:#FF8A8A}}
-.eqc-svg{{width:100%;height:168px;display:block}}
+.eqc-svg{{width:100%;height:168px;display:block;cursor:crosshair}}
+.eqc-sub{{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.08em;color:#5B807D;margin:-2px 0 2px;font-variant-numeric:tabular-nums}}
+.eqc-rl{{color:#5B807D;font-size:9.5px;letter-spacing:.14em}}
+.eqc-rs{{display:flex;gap:6px;padding:4px 0 6px}}
+.eqc-b{{background:transparent;border:1px solid var(--line);color:#5B807D;font:inherit;font-size:9.5px;letter-spacing:.14em;padding:3px 10px;cursor:pointer}}
+.eqc-b:hover{{color:var(--bl);border-color:var(--bl)}}
+.eqc-b:focus-visible{{outline:2px solid var(--bl);outline-offset:1px}}
+.eqc-b.on{{color:#050B0B;background:var(--bl);border-color:var(--bl)}}
 .mission{{background:linear-gradient(160deg,rgba(10,186,181,.06),transparent 62%),
 var(--panel);border:1px solid var(--line);padding:16px 18px;margin:0 0 16px;
 position:relative;box-shadow:0 0 26px rgba(10,186,181,.07) inset}}
@@ -1456,8 +1567,7 @@ def main():
         # Portfolio history for the equity chart. Its own try: a chart is
         # decoration and must never cost us the board.
         try:
-            history = f._run(["account", "portfolio", "--period", "1W",
-                              "--timeframe", "1H"])
+            history = _fetch_history(f)
         except Exception:
             history = None
     except Exception as e:

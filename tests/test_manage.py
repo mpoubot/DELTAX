@@ -86,7 +86,15 @@ ET = timezone(timedelta(hours=-4))
 _before = datetime(2026, 9, 4,  9, 59, tzinfo=ET)
 _at     = datetime(2026, 9, 4, 10,  0, tzinfo=ET)
 BEFORE_DEADLINE = datetime(2026, 9, 3, 12, 0, tzinfo=ET)
-_after  = datetime(2026, 9, 5,  9,  0, tzinfo=ET)
+# E119: this was `datetime(2026, 9, 5, 9, 0)` asserted True - "the day after is
+# past the deadline". That assertion was correct for a one-week contest and
+# became the bug the moment the contest ended: past_contest_deadline() latched
+# True forever, so Managed.reason() answered "CONTEST DEADLINE" on every cycle
+# and the 50% target and the trailing stop were never evaluated again. The
+# flatten is now a weekly WINDOW, so the invariant to pin is that it fires on
+# Friday and RELEASES afterwards - not that it swallows every later date.
+_after  = datetime(2026, 9, 11, 10, 0, tzinfo=ET)   # the following Friday
+_carry  = datetime(2026, 9,  5,  9,  0, tzinfo=ET)  # Saturday: book carries
 check("E91 the judging date is pinned to Fri 4 Sep 2026",
       str(CONTEST_CLOSE) == "2026-09-04", str(CONTEST_CLOSE))
 check("E91 the flatten hour is pinned to 10:00 ET",
@@ -95,8 +103,10 @@ check("E91 before the cutoff hour it is not the deadline",
       past_contest_deadline(_before) is False, str(_before))
 check("E91 at the cutoff hour it IS the deadline",
       past_contest_deadline(_at) is True, str(_at))
-check("E91 the day after is past the deadline",
+check("E91 the NEXT Friday flatten is a deadline again",
       past_contest_deadline(_after) is True, str(_after))
+check("E119 but the Saturday after is not - the book carries to next week",
+      past_contest_deadline(_carry) is False, str(_carry))
 
 # reason() must fire on it - and must OUTRANK profit, because a position that
 # has not reached target by judging never will: there is no time left.

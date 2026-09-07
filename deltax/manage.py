@@ -67,17 +67,32 @@ TIME_STOP_DTE = 1              # gamma zone — close regardless of profit
 # is marked at whatever it happens to be worth, mid-decay. A position whose
 # profit arrives after that date cannot pay us, so every position closes before
 # it regardless of P&L (E37).
-CONTEST_CLOSE = date(2026, 9, 4)
+CONTEST_CLOSE = date(2026, 9, 4)    # the hackathon deadline, kept for the record
 CONTEST_CLOSE_HOUR_ET = 10          # 10:00 ET, an hour before submission
+FLATTEN_WEEKDAY_ET = 4              # E119: Friday, rolling
+MARKET_CLOSE_HOUR_ET = 16           # the flatten window ends at the bell
 
 
 def past_contest_deadline(now: datetime | None = None) -> bool:
-    """True once the book must be flat for judging."""
-    et = timezone(timedelta(hours=-4))
+    """True inside the weekly flatten window - Friday 10:00 ET to the close.
+
+    E119: this compared against a fixed 4 Sep and returned True for every
+    moment after it. Once the contest ended, `Managed.reason()` answered
+    "CONTEST DEADLINE" for every position on every cycle, so the sweep tried
+    to flatten the whole book continuously and the 50% target and the trailing
+    stop were never evaluated again. The agent looked busy and had in fact
+    stopped running its strategy.
+
+    Now it is a weekly window, from the rolling Friday 10:00 flatten to that
+    day's 16:00 close. Outside it the normal exit rules apply, which is what
+    lets the book carry positions week to week instead of dying on one date.
+    """
+    from deltax.gates import next_flatten, _et
+    et = _et()
     now = (now or datetime.now(et)).astimezone(et)
-    if now.date() > CONTEST_CLOSE:
-        return True
-    return now.date() == CONTEST_CLOSE and now.hour >= CONTEST_CLOSE_HOUR_ET
+    if now.weekday() != FLATTEN_WEEKDAY_ET:
+        return False
+    return CONTEST_CLOSE_HOUR_ET <= now.hour < MARKET_CLOSE_HOUR_ET
 
 
 @dataclass
